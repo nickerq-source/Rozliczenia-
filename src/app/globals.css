@@ -1,0 +1,170 @@
+@import "tailwindcss";
+
+/* ── Design system PapiTrans ─────────────────────────────────────────────── */
+:root {
+  /* Paleta dopasowana do tła: ciemna zieleń dżungli + bursztyn zachodu słońca */
+  --bg: #0b100d;
+  --surface: #121a15;
+  --surface2: #17221b;
+  --border: #28392f;
+  --amber: #f5a524;
+  --amber-dk: #1a1206;
+  --text: #e8edea;
+  --text-dim: #8fa096;
+  --green-bg: #16321c;
+  --red-bg: #3a1212;
+  --sat-bg: #1e3a24;
+  --sun-bg: #3a3508;
+  --input-bg: #080d0a;
+  --emerald: #2e8b62;
+
+  --background: var(--bg);
+  --foreground: var(--text);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-inter);
+  --font-mono: var(--font-geist-mono);
+
+  /* Paleta dostępna jako klasy Tailwind: bg-surface, border-line, text-dim itd. */
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface2: var(--surface2);
+  --color-line: var(--border);
+  --color-amber-brand: var(--amber);
+  --color-amber-ink: var(--amber-dk);
+  --color-dim: var(--text-dim);
+  --color-ink: var(--text);
+  --color-green-soft: var(--green-bg);
+  --color-red-soft: var(--red-bg);
+  --color-sat: var(--sat-bg);
+  --color-sun: var(--sun-bg);
+  --color-input: var(--input-bg);
+}
+
+html {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+h1, h2, h3, h4 {
+  font-weight: 700;
+}
+
+/* ── Pola formularzy ─────────────────────────────────────────────────────── */
+input, select, textarea {
+  transition: border-color 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
+}
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--amber);
+  box-shadow: 0 0 0 3px rgba(245, 165, 36, 0.2);
+}
+
+/* Schowaj strzałki w polach number */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+/* Ciemny kalendarz w input[type=date] */
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.6);
+}
+
+/* Scrollbar dla przełącznika miesięcy */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Wyraźny suwak dla historii zmian */
+.historia-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent, #f5a524) transparent;
+}
+.historia-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+.historia-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.historia-scroll::-webkit-scrollbar-thumb {
+  background: var(--accent, #f5a524);
+  border-radius: 9999px;
+  opacity: 0.7;
+}
+
+/* ── Animacje ────────────────────────────────────────────────────────────── */
+
+/* Fade-in modala (150 ms) */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.animate-fade-in {
+  animation: fadeIn 150ms ease-out;
+}
+
+/* Shimmer dla skeleton loading */
+@keyframes shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+.skeleton {
+  border-radius: 12px;
+  background: linear-gradient(90deg, #2a2f38 25%, #353b46 50%, #2a2f38 75%);
+  background-size: 800px 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+
+/* Pill statusu zapisu — wjazd z góry */
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-slide-down {
+  animation: slideDown 200ms ease-out;
+}
+
+/* ── Logo „PapiTrans" — szmaragdowe litery jak na grafice tła ───────────── */
+.logo-gem {
+  font-family: Georgia, "Times New Roman", serif;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+  background: linear-gradient(
+    180deg,
+    #c8f0d8 0%,
+    #5fc28b 22%,
+    #1d7a4e 45%,
+    #0c3d27 68%,
+    #1a6a45 88%,
+    #5fc28b 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.9)) drop-shadow(0 2px 3px rgba(0, 0, 0, 0.6));
+}
+
+.logo-subtitle {
+  font-family: Georgia, "Times New Roman", serif;
+  color: var(--emerald);
+  letter-spacing: 0.08em;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}

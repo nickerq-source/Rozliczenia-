@@ -1,0 +1,316 @@
+"use client";
+
+// Główny widok workspace — łączy header, zakładki miesięcy i zawartość
+
+import { useState, useEffect } from "react";
+import { useWorkspace } from "@/hooks/useWorkspace";
+import { AppHeader } from "./AppHeader";
+import { TabName } from "./TabSwitch";
+import { PodsumowanieTab } from "./tabs/PodsumowanieTab";
+import { ZarobekTab } from "./tabs/ZarobekTab";
+import { KosztyTab } from "./tabs/KosztyTab";
+import { RaportTab } from "./tabs/RaportTab";
+import { HistoriaTab } from "./tabs/HistoriaTab";
+import { UserNameModal } from "./UserNameModal";
+import { MiesiącId } from "@/lib/types";
+import { domyslneDaneMiesiaca } from "@/lib/business-logic";
+import { getUserName, setUserName } from "@/lib/push";
+import { logChange } from "@/lib/audit";
+import { IconLock, IconLockOpen } from "./ui/icons";
+import { POLSKIE_MIESIACE, MIESIACE_ZAKRESU } from "@/lib/dates";
+
+// Tło z obrazu + ciemna nakładka; karty leżą nad nakładką
+function Background() {
+  return (
+    <>
+      <div
+        className="fixed inset-0 z-0"
+        style={{
+          backgroundImage: "url('/papitrans-bg.jpg')",
+          backgroundSize: "cover",
+          backgroundPosition: "center top",
+          backgroundAttachment: "fixed",
+          // Podbij kolory, żeby tło nie było szare pod nakładką
+          filter: "saturate(1.35) contrast(1.08)",
+        }}
+        aria-hidden
+      />
+      <div
+        className="fixed inset-0 z-0"
+        style={{ background: "rgba(7, 12, 9, 0.78)" }}
+        aria-hidden
+      />
+    </>
+  );
+}
+
+// Skeleton cards podczas ładowania danych
+function LoadingSkeleton() {
+  return (
+    <div className="space-y-4">
+      <div className="skeleton h-10 w-full" />
+      <div className="skeleton h-64 w-full !rounded-2xl" />
+      <div className="grid grid-cols-2 gap-3">
+        <div className="skeleton h-24 !rounded-2xl" />
+        <div className="skeleton h-24 !rounded-2xl" />
+      </div>
+    </div>
+  );
+}
+
+function FooterGraphic() {
+  return (
+    <div className="mt-10 mb-6 select-none pointer-events-none" aria-hidden>
+      <svg viewBox="0 0 480 90" xmlns="http://www.w3.org/2000/svg" className="w-full opacity-20">
+        {/* Droga */}
+        <rect x="0" y="62" width="480" height="6" rx="3" fill="#52525b" />
+        {/* Przerywana linia środkowa */}
+        <rect x="20"  y="64" width="30" height="2" rx="1" fill="#a1a1aa" />
+        <rect x="80"  y="64" width="30" height="2" rx="1" fill="#a1a1aa" />
+        <rect x="140" y="64" width="30" height="2" rx="1" fill="#a1a1aa" />
+        <rect x="200" y="64" width="30" height="2" rx="1" fill="#a1a1aa" />
+        <rect x="260" y="64" width="30" height="2" rx="1" fill="#a1a1aa" />
+        <rect x="320" y="64" width="30" height="2" rx="1" fill="#a1a1aa" />
+        <rect x="380" y="64" width="30" height="2" rx="1" fill="#a1a1aa" />
+        <rect x="440" y="64" width="30" height="2" rx="1" fill="#a1a1aa" />
+
+        {/* Ciężarówka — kabina */}
+        <rect x="60" y="36" width="28" height="26" rx="4" fill="#f5a524" />
+        {/* Szyba */}
+        <rect x="63" y="39" width="22" height="12" rx="2" fill="#1c1917" />
+        {/* Reflektor */}
+        <rect x="84" y="56" width="6" height="4" rx="1" fill="#fde68a" />
+        {/* Naczepa */}
+        <rect x="88" y="40" width="80" height="22" rx="3" fill="#3f3f46" />
+        {/* Koła kabiny */}
+        <circle cx="72"  cy="65" r="5" fill="#27272a" />
+        <circle cx="72"  cy="65" r="2" fill="#52525b" />
+        {/* Koła naczepy */}
+        <circle cx="102" cy="65" r="5" fill="#27272a" />
+        <circle cx="102" cy="65" r="2" fill="#52525b" />
+        <circle cx="118" cy="65" r="5" fill="#27272a" />
+        <circle cx="118" cy="65" r="2" fill="#52525b" />
+        <circle cx="156" cy="65" r="5" fill="#27272a" />
+        <circle cx="156" cy="65" r="2" fill="#52525b" />
+
+        {/* Pakiety na naczepie */}
+        <rect x="100" y="43" width="16" height="12" rx="2" fill="#f5a524" opacity="0.4" />
+        <rect x="120" y="44" width="20" height="11" rx="2" fill="#f5a524" opacity="0.3" />
+        <rect x="143" y="45" width="14" height="10" rx="2" fill="#f5a524" opacity="0.35" />
+
+        {/* Budynek / magazyn po lewej */}
+        <rect x="0" y="30" width="44" height="32" rx="2" fill="#3f3f46" />
+        <rect x="0" y="24" width="44" height="8"  rx="2" fill="#52525b" />
+        <rect x="6" y="38" width="10" height="14" rx="1" fill="#1c1917" />
+        <rect x="20" y="38" width="10" height="14" rx="1" fill="#1c1917" />
+        <rect x="34" y="40" width="8" height="12"  rx="1" fill="#f5a524" opacity="0.3" />
+
+        {/* Drzewa po prawej */}
+        <rect x="290" y="42" width="4"  height="20" rx="1" fill="#3f3f46" />
+        <ellipse cx="292" cy="38" rx="10" ry="9" fill="#3f3f46" />
+        <rect x="320" y="46" width="4"  height="16" rx="1" fill="#3f3f46" />
+        <ellipse cx="322" cy="42" rx="8"  ry="7" fill="#3f3f46" />
+
+        {/* Budynek po prawej */}
+        <rect x="370" y="26" width="50" height="36" rx="2" fill="#3f3f46" />
+        <rect x="370" y="20" width="50" height="8"  rx="2" fill="#52525b" />
+        <rect x="376" y="34" width="10" height="10" rx="1" fill="#1c1917" />
+        <rect x="390" y="34" width="10" height="10" rx="1" fill="#f5a524" opacity="0.25" />
+        <rect x="404" y="34" width="10" height="10" rx="1" fill="#1c1917" />
+        <rect x="384" y="46" width="12" height="16" rx="1" fill="#1c1917" />
+
+        {/* Chmurki */}
+        <ellipse cx="240" cy="12" rx="28" ry="8"  fill="#3f3f46" />
+        <ellipse cx="218" cy="15" rx="16" ry="6"  fill="#3f3f46" />
+        <ellipse cx="262" cy="15" rx="16" ry="6"  fill="#3f3f46" />
+        <ellipse cx="350" cy="8"  rx="20" ry="6"  fill="#3f3f46" />
+        <ellipse cx="332" cy="11" rx="12" ry="5"  fill="#3f3f46" />
+        <ellipse cx="368" cy="11" rx="12" ry="5"  fill="#3f3f46" />
+      </svg>
+
+      <p className="text-center text-xs text-dim/50 mt-1 tracking-widest uppercase font-medium">
+        PapiTrans · Flota 2026
+      </p>
+    </div>
+  );
+}
+
+interface Props {
+  token: string;
+  // Z profilu Supabase Auth — gdy podane, pomijamy modal pytania o imię
+  initialUserName?: string;
+  isAdmin?: boolean;
+}
+
+export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props) {
+  const { data, loading, saveStatus, updateMiesiac, updateNotatki } = useWorkspace(token);
+  const [aktywnyMiesiac, setAktywnyMiesiac] = useState<MiesiącId>(6);
+  const [aktywnaZakladka, setAktywnaZakladka] = useState<TabName>("podsumowanie");
+  const [focusZgloszenie, setFocusZgloszenie] = useState<string | null>(null);
+
+  // Deep-link z powiadomienia: /admin?miesiac=6&zakladka=koszty&zgloszenie=ID
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const m = Number(params.get("miesiac"));
+    const z = params.get("zakladka");
+    const zgl = params.get("zgloszenie");
+    if (MIESIACE_ZAKRESU.includes(m as (typeof MIESIACE_ZAKRESU)[number])) {
+      setAktywnyMiesiac(m as MiesiącId);
+    }
+    if (z === "podsumowanie" || z === "zarobek" || z === "koszty" || z === "raport" || z === "historia") {
+      setAktywnaZakladka(z as TabName);
+    }
+    if (zgl) setFocusZgloszenie(zgl);
+    // Wyczyść query, żeby odświeżenie nie wracało do deep-linku
+    if (m || z || zgl) {
+      window.history.replaceState(null, "", window.location.pathname);
+    }
+  }, []);
+
+  // Imię: z profilu auth, fallback do localStorage (legacy)
+  const [userName, setUserNameState] = useState<string | null>(initialUserName ?? null);
+  useEffect(() => {
+    if (initialUserName) {
+      setUserName(initialUserName); // synchronizuj localStorage dla push/notatek
+      setUserNameState(initialUserName);
+    } else {
+      setUserNameState(getUserName());
+    }
+  }, [initialUserName]);
+
+  function handleSaveUserName(name: string) {
+    setUserName(name);
+    setUserNameState(name);
+  }
+
+  const daneMiesiaca = data.miesiace[aktywnyMiesiac] ?? domyslneDaneMiesiaca(aktywnyMiesiac);
+  const monthLocked = !!daneMiesiaca.zamkniety?.locked;
+  const lockedMonths = MIESIACE_ZAKRESU.filter(
+    (m) => !!data.miesiace[m as MiesiącId]?.zamkniety?.locked
+  ) as number[];
+
+  function handleUpdateMiesiac(updater: (prev: typeof daneMiesiaca) => typeof daneMiesiaca) {
+    // Zamknięty miesiąc = readonly (dodatkowo inputy blokuje <fieldset disabled>)
+    if (monthLocked) return;
+    updateMiesiac(aktywnyMiesiac, updater);
+  }
+
+  function toggleMonthLock() {
+    const nazwa = POLSKIE_MIESIACE[aktywnyMiesiac];
+    if (monthLocked) {
+      if (!window.confirm(`Odblokować miesiąc ${nazwa} 2026?`)) return;
+    } else {
+      if (!window.confirm(`Zamknąć miesiąc ${nazwa} 2026? Wszystkie pola staną się tylko do odczytu.`)) return;
+    }
+    const newLocked = !monthLocked;
+    updateMiesiac(aktywnyMiesiac, (prev) => ({
+      ...prev,
+      zamkniety: {
+        locked: newLocked,
+        lockedBy: userName ?? "",
+        lockedAt: new Date().toISOString(),
+      },
+    }));
+    logChange({
+      workspaceId: token,
+      userName: userName ?? "",
+      action: newLocked ? "miesiac_zamkniety" : "miesiac_odblokowany",
+      entity: "month",
+      entityId: String(aktywnyMiesiac),
+      description: `${userName} ${newLocked ? "zamknął" : "odblokował"} miesiąc ${nazwa} 2026`,
+    });
+  }
+
+  return (
+    <div className="min-h-screen text-ink">
+      <Background />
+
+      <div className="relative z-[1]">
+        <AppHeader
+          saveStatus={saveStatus}
+          aktywnyMiesiac={aktywnyMiesiac}
+          onMiesiacChange={setAktywnyMiesiac}
+          aktywnaZakladka={aktywnaZakladka}
+          onZakladkaChange={setAktywnaZakladka}
+          userName={userName ?? ""}
+          showHistoria={isAdmin}
+          lockedMonths={lockedMonths}
+        />
+
+        {/* Jednorazowy modal imienia (userName === "" po odczycie localStorage) */}
+        {userName === "" && <UserNameModal onSave={handleSaveUserName} />}
+
+        <main className="max-w-[480px] mx-auto px-3 sm:px-6 py-4 space-y-4 pb-0">
+          {loading ? (
+            <LoadingSkeleton />
+          ) : (
+            <>
+              {/* Baner zamkniętego miesiąca */}
+              {monthLocked && aktywnaZakladka !== "raport" && aktywnaZakladka !== "historia" && (
+                <div className="flex items-center gap-2 rounded-xl bg-surface2 border border-line px-4 py-2.5 text-sm text-dim">
+                  <IconLock size={15} className="text-amber-brand" />
+                  Miesiąc {POLSKIE_MIESIACE[aktywnyMiesiac]} 2026 jest zamknięty — tylko do odczytu.
+                </div>
+              )}
+
+              {/* fieldset disabled = wszystkie pola i przyciski readonly */}
+              <fieldset disabled={monthLocked} className={monthLocked ? "opacity-80" : undefined}>
+                <div className="space-y-4">
+                  {aktywnaZakladka === "podsumowanie" && (
+                    <PodsumowanieTab
+                      miesiac={aktywnyMiesiac}
+                      dane={daneMiesiaca}
+                      token={token}
+                      userName={userName ?? ""}
+                      notatki={data.notatki ?? []}
+                      onUpdateNotatki={updateNotatki}
+                      onUpdate={handleUpdateMiesiac}
+                      isAdmin={isAdmin}
+                    />
+                  )}
+                  {aktywnaZakladka === "zarobek" && (
+                    <ZarobekTab
+                      miesiac={aktywnyMiesiac}
+                      dane={daneMiesiaca}
+                      onUpdate={handleUpdateMiesiac}
+                      token={token}
+                      userName={userName ?? ""}
+                    />
+                  )}
+                  {aktywnaZakladka === "koszty" && (
+                    <KosztyTab
+                      miesiac={aktywnyMiesiac}
+                      dane={daneMiesiaca}
+                      onUpdate={handleUpdateMiesiac}
+                      token={token}
+                      userName={userName ?? ""}
+                      focusZgloszenieId={focusZgloszenie}
+                    />
+                  )}
+                </div>
+              </fieldset>
+
+              {aktywnaZakladka === "raport" && <RaportTab data={data} />}
+              {aktywnaZakladka === "historia" && isAdmin && <HistoriaTab token={token} />}
+
+              {/* Zamknięcie / odblokowanie miesiąca (poza fieldsetem) */}
+              {isAdmin && aktywnaZakladka !== "raport" && aktywnaZakladka !== "historia" && (
+                <button
+                  onClick={toggleMonthLock}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 min-h-[44px] rounded-xl border border-line text-sm text-dim hover:text-ink hover:border-dim transition-all duration-150"
+                >
+                  {monthLocked ? <IconLockOpen size={15} /> : <IconLock size={15} />}
+                  {monthLocked
+                    ? `Odblokuj miesiąc ${POLSKIE_MIESIACE[aktywnyMiesiac]}`
+                    : `Zamknij miesiąc ${POLSKIE_MIESIACE[aktywnyMiesiac]}`}
+                </button>
+              )}
+            </>
+          )}
+
+          <FooterGraphic />
+        </main>
+      </div>
+    </div>
+  );
+}

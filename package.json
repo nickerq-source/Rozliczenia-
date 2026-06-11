@@ -1,0 +1,36 @@
+{
+  "name": "rozliczenia",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.12.0",
+    "@supabase/supabase-js": "^2.108.1",
+    "next": "^15.3.4",
+    "pdf-parse": "^2.4.5",
+    "pdfjs-dist": "^3.11.174",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "uuid": "^14.0.0",
+    "web-push": "^3.6.7"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.3.5",
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/pdf-parse": "^1.1.5",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@types/uuid": "^10.0.0",
+    "@types/web-push": "^3.6.4",
+    "eslint": "^9",
+    "eslint-config-next": "^15.3.4",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
