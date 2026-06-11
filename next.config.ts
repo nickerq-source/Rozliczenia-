@@ -10,6 +10,8 @@ const nextConfig: NextConfig = {
     "/api/import-invoice": [
       "./node_modules/pdfjs-dist/cmaps/**",
       "./node_modules/pdfjs-dist/standard_fonts/**",
+      // Worker ładowany dynamicznie — nft go nie śledzi; wymuś jego wdrożenie
+      "./node_modules/pdfjs-dist/legacy/build/pdf.worker.js",
     ],
   },
   webpack: (config) => {

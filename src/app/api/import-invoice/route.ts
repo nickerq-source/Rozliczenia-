@@ -31,6 +31,20 @@ async function extractTextFromPDF(buffer: Buffer): Promise<string> {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const pdfjsLib = require("pdfjs-dist/legacy/build/pdf.js");
 
+  // Wskaż pdfjs plik workera bezwzględną ścieżką — na Vercel relatywne
+  // require("./pdf.worker.js") zawodzi (worker nie leży obok pdf.js w bundlu).
+  const workerPath = path.join(
+    process.cwd(),
+    "node_modules",
+    "pdfjs-dist",
+    "legacy",
+    "build",
+    "pdf.worker.js"
+  );
+  if (fs.existsSync(workerPath)) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = workerPath;
+  }
+
   const loadingTask = pdfjsLib.getDocument({
     data: new Uint8Array(buffer),
     ...pdfjsDataDirs(), // standardFontDataUrl/cMapUrl gdy katalogi dostępne
