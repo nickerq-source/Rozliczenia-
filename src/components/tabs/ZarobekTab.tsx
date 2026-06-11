@@ -142,7 +142,7 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
       const json = await res.json();
 
       if (!res.ok) {
-        const detail = json._devMessage ? `\n\n[dev] ${json._devMessage}` : "";
+        const detail = json._reason ? `\n\nSzczegóły: ${json._reason}` : "";
         alert(`Błąd importu: ${json.error ?? "Nieznany błąd"}${detail}`);
         return;
       }
@@ -212,6 +212,7 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
       author: userName,
       eventType: "faktura",
       body: `${userName} dodał fakturę: ${formatZlCaly(filtered.brutto)} (tydzień ${targetIdx + 1})`,
+      url: `/admin?miesiac=${miesiac}&zakladka=zarobek`,
     });
 
     setModal(null);
@@ -308,6 +309,7 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
       oldValue: { status: stary },
       newValue: { status },
       description: `${userName} zmienił status faktury (tydzień ${idx + 1}) na ${STATUSY.find((s) => s.id === status)?.label}`,
+      url: `/admin?miesiac=${miesiac}&zakladka=zarobek`,
     });
   }
 

@@ -61,6 +61,10 @@ export function PowiadomieniaPanel({ token }: Props) {
   const [busy, setBusy] = useState(false);
   const [history, setHistory] = useState<NotificationRow[]>([]);
   const [rozwiniete, setRozwiniete] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [realtimeStatus, setRealtimeStatus] = useState<"off" | "connecting" | "on" | "error">(
+    "off"
+  );
 
   useEffect(() => {
     if (supported) isPushActive().then(setActive);
@@ -69,11 +73,16 @@ export function PowiadomieniaPanel({ token }: Props) {
   const loadHistory = useCallback(async () => {
     try {
       const res = await fetch(`/api/notifications/${token}`);
-      if (!res.ok) return;
+      if (!res.ok) {
+        const text = await res.text();
+        setLoadError(text || `Błąd pobierania powiadomień (${res.status})`);
+        return;
+      }
       const json = await res.json();
       setHistory(json.notifications ?? []);
-    } catch {
-      // Brak Supabase / sesji — pusta historia
+      setLoadError(null);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "Błąd pobierania powiadomień");
     }
   }, [token]);
 
@@ -83,6 +92,7 @@ export function PowiadomieniaPanel({ token }: Props) {
   useEffect(() => {
     try {
       const supabase = getBrowserSupabase();
+      setRealtimeStatus("connecting");
       const channel = supabase
         .channel("notifications")
         .on(
@@ -95,12 +105,19 @@ export function PowiadomieniaPanel({ token }: Props) {
           },
           (payload) => {
             setHistory((prev) => [payload.new as NotificationRow, ...prev].slice(0, 50));
+            setLoadError(null);
           }
         )
-        .subscribe();
+        .subscribe((status) => {
+          if (status === "SUBSCRIBED") setRealtimeStatus("on");
+          if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+            setRealtimeStatus("error");
+          }
+        });
       return () => { supabase.removeChannel(channel); };
-    } catch {
-      // brak konfiguracji — bez realtime
+    } catch (error) {
+      setRealtimeStatus("error");
+      setLoadError(error instanceof Error ? error.message : "Błąd realtime powiadomień");
     }
   }, [token]);
 
@@ -154,6 +171,7 @@ export function PowiadomieniaPanel({ token }: Props) {
   }
 
   const unread = history.filter((n) => !n.read).length;
+  const latest = history[0];
 
   return (
     <Card>
@@ -203,19 +221,61 @@ export function PowiadomieniaPanel({ token }: Props) {
         )}
       </div>
 
+      {!rozwiniete && (
+        <div className="mt-2 flex items-center justify-between gap-2 text-[11px]">
+          <span
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-full px-2 py-1",
+              loadError
+                ? "bg-red-soft text-red-200"
+                : active
+                  ? "bg-green-soft text-green-300"
+                  : "bg-surface2 text-dim"
+            )}
+          >
+            {loadError ? (
+              <>
+                <IconAlertTriangle size={12} />
+                Błąd panelu
+              </>
+            ) : active ? (
+              <>
+                <IconCheck size={12} />
+                Push aktywny
+              </>
+            ) : (
+              <>
+                <IconBellOff size={12} />
+                Push wyłączony
+              </>
+            )}
+          </span>
+          <button
+            type="button"
+            onClick={() => setRozwiniete(true)}
+            className="text-dim/70 hover:text-amber-brand transition-colors"
+          >
+            {history.length > 0 ? `${history.length} w historii` : "Rozwiń panel"}
+          </button>
+        </div>
+      )}
+
       {/* Podgląd najnowszego, gdy zwinięte i jest co pokazać */}
-      {!rozwiniete && history.length > 0 && (
+      {!rozwiniete && latest && (
         <button
           type="button"
           onClick={() =>
-            history[0].url ? window.location.assign(history[0].url) : setRozwiniete(true)
+            latest.url ? window.location.assign(latest.url) : setRozwiniete(true)
           }
           className="mt-2 w-full text-left flex items-start gap-2 rounded-lg bg-surface2 px-3 py-2 hover:bg-surface transition-colors"
         >
-          <span className="shrink-0 text-amber-brand mt-0.5">{eventIcon(history[0].action)}</span>
+          <span className="shrink-0 text-amber-brand mt-0.5">{eventIcon(latest.action)}</span>
           <div className="min-w-0 flex-1">
-            <p className="text-xs text-ink leading-snug truncate">{history[0].description}</p>
-            <p className="text-[11px] text-dim/60 mt-0.5">{relativeTime(history[0].created_at)}</p>
+            <p className="text-xs text-ink leading-snug truncate">{latest.description}</p>
+            <p className="text-[11px] text-dim/60 mt-0.5">
+              {relativeTime(latest.created_at)}
+              {latest.url && <span className="text-amber-brand"> · kliknij, aby otworzyć</span>}
+            </p>
           </div>
         </button>
       )}
@@ -237,6 +297,22 @@ export function PowiadomieniaPanel({ token }: Props) {
           ) : (
             <p className="text-xs text-dim mb-3">
               Kliknij przełącznik, żeby otrzymywać powiadomienia na ten telefon.
+            </p>
+          )}
+
+          {loadError && (
+            <div className="mb-3 flex items-start gap-2 rounded-lg bg-red-soft border border-red-500/30 px-3 py-2 text-xs text-red-100">
+              <IconAlertTriangle size={14} className="mt-0.5 shrink-0" />
+              <div>
+                <p className="font-semibold">Nie udało się pobrać powiadomień.</p>
+                <p className="mt-0.5 text-red-100/70 break-words">{loadError}</p>
+              </div>
+            </div>
+          )}
+
+          {realtimeStatus === "error" && !loadError && (
+            <p className="mb-3 text-[11px] text-dim">
+              Historia działa, ale odświeżanie na żywo jest chwilowo niedostępne.
             </p>
           )}
 

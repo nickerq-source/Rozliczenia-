@@ -116,7 +116,7 @@ export async function POST(req: NextRequest) {
     const url = `/admin?miesiac=${miesiac}&zakladka=koszty&zgloszenie=${encodeURIComponent(wpis.id)}`;
 
     try {
-      await admin.from("audit_log").insert({
+      const { error: auditErr } = await admin.from("audit_log").insert({
         workspace_id: profile.workspace_id,
         user_id: profile.id,
         user_name: profile.name,
@@ -127,8 +127,11 @@ export async function POST(req: NextRequest) {
         new_value: { kolka: wpis.kolkaProponowane ?? null, uwaga: wpis.uwaga ?? null },
         description: opis,
       });
+      if (auditErr) {
+        throw new Error(`audit_log: ${auditErr.message}`);
+      }
 
-      await admin.from("notifications_log").insert({
+      const { error: notificationErr } = await admin.from("notifications_log").insert({
         workspace_id: profile.workspace_id,
         user_name: profile.name,
         action: "zgloszenie_dnia",
@@ -136,6 +139,9 @@ export async function POST(req: NextRequest) {
         url,
         read: false,
       });
+      if (notificationErr) {
+        throw new Error(`notifications_log: ${notificationErr.message}`);
+      }
 
       const wp = getWebPush();
       if (wp) {
@@ -164,7 +170,8 @@ export async function POST(req: NextRequest) {
           );
         }
       }
-    } catch {
+    } catch (e) {
+      console.error("[driver/verify] notification error", e);
       // Powiadomienie nieobowiązkowe — zgłoszenie i tak zapisane
     }
   }

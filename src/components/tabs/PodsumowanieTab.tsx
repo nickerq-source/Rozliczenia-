@@ -100,6 +100,7 @@ export function PodsumowanieTab({
       entity: "payroll",
       entityId: String(miesiac),
       description: `${userName} oznaczył wypłatę kierowcy ${nazwa} 2026 (${formatZlCaly(wynik.wynagrodzeniePracownika)}) jako wypłaconą`,
+      url: `/admin?miesiac=${miesiac}&zakladka=podsumowanie`,
     });
   }
 

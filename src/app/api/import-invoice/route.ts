@@ -3,17 +3,41 @@
 // Używa pdfjs-dist legacy build (Node.js, bez edge runtime).
 
 import { NextRequest, NextResponse } from "next/server";
+import path from "path";
 import { parseInvoicePDF } from "@/lib/invoice";
 import { KIEROWCA, TYP_TRANSPORTU } from "@/lib/config";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
+// Katalogi danych pdfjs (czcionki standardowe + cmapy CID). Bez nich parser
+// rzuca błąd na fakturach z osadzonymi czcionkami CID. Ścieżki rozwiązywane
+// z pakietu, by działały też w środowisku serverless Vercel (Linux).
+function pdfjsDataDirs() {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const pkg = require.resolve("pdfjs-dist/package.json");
+  const root = path.dirname(pkg);
+  return {
+    standardFontDataUrl: path.join(root, "standard_fonts") + path.sep,
+    cMapUrl: path.join(root, "cmaps") + path.sep,
+  };
+}
+
 async function extractTextFromPDF(buffer: Buffer): Promise<string> {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const pdfjsLib = require("pdfjs-dist/legacy/build/pdf.js");
 
-  const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(buffer) });
+  const { standardFontDataUrl, cMapUrl } = pdfjsDataDirs();
+  const loadingTask = pdfjsLib.getDocument({
+    data: new Uint8Array(buffer),
+    standardFontDataUrl,
+    cMapUrl,
+    cMapPacked: true,
+    useSystemFonts: false, // nie próbuj sięgać po czcionki systemowe (brak na serverless)
+    disableFontFace: true, // ekstrakcja tekstu nie potrzebuje renderu czcionek
+    isEvalSupported: false,
+    verbosity: 0, // wycisz ostrzeżenia DOMMatrix/fontów
+  });
   const pdf = await loadingTask.promise;
 
   const pageTexts: string[] = [];
@@ -81,7 +105,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         error: "Błąd parsowania PDF — upewnij się, że plik nie jest zaszyfrowany",
-        ...(isDev ? { _devMessage: e?.message, _devStack: e?.stack } : {}),
+        // Krótki powód widoczny też na produkcji (wewnętrzna apka) — ułatwia diagnozę
+        _reason: e?.message ?? "nieznany błąd",
+        ...(isDev ? { _devStack: e?.stack } : {}),
       },
       { status: 422 }
     );

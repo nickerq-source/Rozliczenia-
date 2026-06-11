@@ -86,6 +86,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, focusZglos
       author: userName,
       eventType: "koszt",
       body: `${userName} dodał koszt: ${nazwa} ${formatZlCaly(koszt)}`,
+      url: `/admin?miesiac=${miesiac}&zakladka=koszty`,
     });
   }
 
@@ -134,6 +135,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, focusZglos
       description: `${userName} ${przyjmij ? "przyjął" : "odrzucił"} zgłoszenie kierowcy z dnia ${nrD}.${String(miesiac).padStart(2, "0")}${
         przyjmij && z.kolkaProponowane !== undefined ? ` (kółka → ${z.kolkaProponowane})` : ""
       }`,
+      url: `/admin?miesiac=${miesiac}&zakladka=koszty&zgloszenie=${encodeURIComponent(z.id)}`,
     });
   }
 

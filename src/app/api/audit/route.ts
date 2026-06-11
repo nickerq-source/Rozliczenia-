@@ -28,6 +28,7 @@ export async function POST(req: NextRequest) {
     action?: string;
     entity?: string;
     entityId?: string;
+    url?: string;
     oldValue?: unknown;
     newValue?: unknown;
     description?: string;
@@ -39,6 +40,7 @@ export async function POST(req: NextRequest) {
   }
 
   const { action = "zmiana", entity = "workspace", entityId, oldValue, newValue } = body;
+  const url = body.url ?? "/dashboard";
   const description = body.description ?? "";
   if (!description) {
     return NextResponse.json({ error: "Brak description" }, { status: 400 });
@@ -50,7 +52,7 @@ export async function POST(req: NextRequest) {
   try {
     const admin = getAdminSupabase();
 
-    await admin.from("audit_log").insert({
+    const { error: auditError } = await admin.from("audit_log").insert({
       workspace_id: workspaceId,
       user_id: profile.id,
       user_name: userName,
@@ -61,14 +63,21 @@ export async function POST(req: NextRequest) {
       new_value: newValue ?? null,
       description,
     });
+    if (auditError) {
+      throw new Error(`audit_log: ${auditError.message}`);
+    }
 
-    await admin.from("notifications_log").insert({
+    const { error: notificationError } = await admin.from("notifications_log").insert({
       workspace_id: workspaceId,
       user_name: userName,
       action,
       description,
+      url,
       read: false,
     });
+    if (notificationError) {
+      throw new Error(`notifications_log: ${notificationError.message}`);
+    }
 
     // Push do subskrybentów workspace (poza autorem)
     const wp = getWebPush();
@@ -82,7 +91,7 @@ export async function POST(req: NextRequest) {
         const payload = JSON.stringify({
           title: "PapiTrans",
           body: description,
-          url: "/dashboard",
+          url,
         });
 
         await Promise.all(

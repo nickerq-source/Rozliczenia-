@@ -9,6 +9,7 @@ export interface AuditParams {
   action: string; // np. "faktura_zapisana", "miesiac_zamkniety"
   entity: string; // np. "invoice", "note", "month"
   entityId?: string;
+  url?: string;
   oldValue?: unknown;
   newValue?: unknown;
   description: string; // tekst widoczny w powiadomieniach i historii

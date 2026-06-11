@@ -218,6 +218,7 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
       entity: "month",
       entityId: String(aktywnyMiesiac),
       description: `${userName} ${newLocked ? "zamknął" : "odblokował"} miesiąc ${nazwa} 2026`,
+      url: `/admin?miesiac=${aktywnyMiesiac}&zakladka=podsumowanie`,
     });
   }
 

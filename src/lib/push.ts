@@ -104,6 +104,7 @@ export function sendPushEvent(opts: {
   author: string;
   eventType: PushEventType;
   body: string;
+  url?: string;
 }) {
   logChange({
     workspaceId: opts.token,
@@ -111,5 +112,6 @@ export function sendPushEvent(opts: {
     action: opts.eventType,
     entity: opts.eventType,
     description: opts.body,
+    url: opts.url,
   });
 }
