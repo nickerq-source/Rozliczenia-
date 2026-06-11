@@ -3,7 +3,6 @@ import { getSessionProfile } from "@/lib/supabase-server";
 import { getAdminSupabase } from "@/lib/supabase-admin";
 import { getWebPush } from "@/lib/webpush";
 import { parseNum } from "@/lib/business-logic";
-import { POLSKIE_MIESIACE } from "@/lib/dates";
 import { DaneMiesiaca, MiesiącId, WorkspaceData, ZgloszenieDnia } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -108,7 +107,6 @@ export async function POST(req: NextRequest) {
 
   // Zgłoszenie błędu → powiadomienie + push do adminów
   if (akcja === "zglos") {
-    const nazwaM = POLSKIE_MIESIACE[miesiac];
     const dzienNr = dzien.slice(8);
     const propozycja =
       wpis.kolkaProponowane !== undefined
