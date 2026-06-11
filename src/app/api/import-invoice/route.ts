@@ -3,6 +3,7 @@
 // Używa pdfjs-dist legacy build (Node.js, bez edge runtime).
 
 import { NextRequest, NextResponse } from "next/server";
+import fs from "fs";
 import path from "path";
 import { parseInvoicePDF } from "@/lib/invoice";
 import { KIEROWCA, TYP_TRANSPORTU } from "@/lib/config";
@@ -11,27 +12,28 @@ export const runtime = "nodejs";
 export const maxDuration = 30;
 
 // Katalogi danych pdfjs (czcionki standardowe + cmapy CID). Bez nich parser
-// rzuca błąd na fakturach z osadzonymi czcionkami CID. Ścieżki rozwiązywane
-// z pakietu, by działały też w środowisku serverless Vercel (Linux).
-function pdfjsDataDirs() {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const pkg = require.resolve("pdfjs-dist/package.json");
-  const root = path.dirname(pkg);
-  return {
-    standardFontDataUrl: path.join(root, "standard_fonts") + path.sep,
-    cMapUrl: path.join(root, "cmaps") + path.sep,
-  };
+// potrafi paść na fakturach z osadzonymi czcionkami CID.
+// UWAGA: NIE używać require.resolve — w bundlu webpacka zwraca numeryczne ID
+// modułu (np. 15754), nie ścieżkę → path.dirname rzuca błąd na Vercel.
+// Ścieżkę budujemy z process.cwd(); katalogi wdraża outputFileTracingIncludes.
+function pdfjsDataDirs(): { standardFontDataUrl?: string; cMapUrl?: string } {
+  const root = path.join(process.cwd(), "node_modules", "pdfjs-dist");
+  const standardFontDataUrl = path.join(root, "standard_fonts") + path.sep;
+  const cMapUrl = path.join(root, "cmaps") + path.sep;
+  if (fs.existsSync(standardFontDataUrl) && fs.existsSync(cMapUrl)) {
+    return { standardFontDataUrl, cMapUrl };
+  }
+  // Brak katalogów — pdfjs tylko ostrzeże; ekstrakcja tekstu i tak zadziała
+  return {};
 }
 
 async function extractTextFromPDF(buffer: Buffer): Promise<string> {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const pdfjsLib = require("pdfjs-dist/legacy/build/pdf.js");
 
-  const { standardFontDataUrl, cMapUrl } = pdfjsDataDirs();
   const loadingTask = pdfjsLib.getDocument({
     data: new Uint8Array(buffer),
-    standardFontDataUrl,
-    cMapUrl,
+    ...pdfjsDataDirs(), // standardFontDataUrl/cMapUrl gdy katalogi dostępne
     cMapPacked: true,
     useSystemFonts: false, // nie próbuj sięgać po czcionki systemowe (brak na serverless)
     disableFontFace: true, // ekstrakcja tekstu nie potrzebuje renderu czcionek
