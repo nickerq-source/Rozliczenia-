@@ -4,7 +4,7 @@
 // Zapis: próbuje Supabase API, fallback do localStorage
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { WorkspaceData, DaneMiesiaca, MiesiącId, Notatka } from "@/lib/types";
+import { WorkspaceData, DaneMiesiaca, MiesiącId, Notatka, UstawieniaPodatkowe } from "@/lib/types";
 import { domyslneDaneMiesiaca } from "@/lib/business-logic";
 import { MIESIACE_ZAKRESU } from "@/lib/dates";
 
@@ -51,6 +51,7 @@ function mergeWithDefaults(remote: WorkspaceData): WorkspaceData {
     }
   }
   merged.notatki = remote.notatki ?? [];
+  merged.ustawienia = remote.ustawienia ?? {};
   return merged;
 }
 
@@ -142,5 +143,16 @@ export function useWorkspace(token: string) {
     []
   );
 
-  return { data, loading, saveStatus, updateMiesiac, updateNotatki };
+  /** Aktualizuj ustawienia podatkowe workspace */
+  const updateUstawienia = useCallback(
+    (patch: Partial<UstawieniaPodatkowe>) => {
+      setData((prev) => ({
+        ...prev,
+        ustawienia: { ...(prev.ustawienia ?? {}), ...patch },
+      }));
+    },
+    []
+  );
+
+  return { data, loading, saveStatus, updateMiesiac, updateNotatki, updateUstawienia };
 }

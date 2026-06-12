@@ -9,6 +9,8 @@ import { POLSKIE_MIESIACE } from "@/lib/dates";
 import { Card } from "../ui/Card";
 import { NotatkiPanel } from "../panels/NotatkiPanel";
 import { PowiadomieniaPanel } from "../panels/PowiadomieniaPanel";
+import { PodatkiCard } from "../PodatkiCard";
+import { PodatkiMiesiaca } from "@/lib/tax";
 import { logChange } from "@/lib/audit";
 import {
   IconTrendingUp,
@@ -53,6 +55,9 @@ interface PodsumowanieProps {
   onUpdateNotatki: (updater: (prev: Notatka[]) => Notatka[]) => void;
   onUpdate?: (updater: (prev: DaneMiesiaca) => DaneMiesiaca) => void;
   isAdmin?: boolean;
+  // Szacunek podatkowy miesiąca (tylko admin)
+  podatki?: PodatkiMiesiaca;
+  taxForm?: "skala" | "liniowy";
 }
 
 export function PodsumowanieTab({
@@ -64,6 +69,8 @@ export function PodsumowanieTab({
   onUpdateNotatki,
   onUpdate,
   isAdmin = false,
+  podatki,
+  taxForm = "skala",
 }: PodsumowanieProps) {
   const wynik = useMemo(() => obliczWynikMiesiaca(miesiac, dane), [miesiac, dane]);
   const zyskDodatni = wynik.zysk >= 0;
@@ -189,6 +196,9 @@ export function PodsumowanieTab({
           </div>
         </Card>
       )}
+
+      {/* Podatki — szacunek (tylko admin) */}
+      {isAdmin && podatki && <PodatkiCard p={podatki} taxForm={taxForm} />}
 
       {/* Notatki + Powiadomienia: 2 kolumny na desktop, stack na mobile */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">

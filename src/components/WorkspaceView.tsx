@@ -11,6 +11,8 @@ import { ZarobekTab } from "./tabs/ZarobekTab";
 import { KosztyTab } from "./tabs/KosztyTab";
 import { RaportTab } from "./tabs/RaportTab";
 import { HistoriaTab } from "./tabs/HistoriaTab";
+import { UstawieniaTab } from "./tabs/UstawieniaTab";
+import { getUstawienia, podatkiMiesiaca } from "@/lib/tax";
 import { UserNameModal } from "./UserNameModal";
 import { MiesiącId } from "@/lib/types";
 import { domyslneDaneMiesiaca } from "@/lib/business-logic";
@@ -143,7 +145,7 @@ interface Props {
 }
 
 export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props) {
-  const { data, loading, saveStatus, updateMiesiac, updateNotatki } = useWorkspace(token);
+  const { data, loading, saveStatus, updateMiesiac, updateNotatki, updateUstawienia } = useWorkspace(token);
   const [aktywnyMiesiac, setAktywnyMiesiac] = useState<MiesiącId>(6);
   const [aktywnaZakladka, setAktywnaZakladka] = useState<TabName>("podsumowanie");
   const [focusZgloszenie, setFocusZgloszenie] = useState<string | null>(null);
@@ -157,7 +159,7 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
     if (MIESIACE_ZAKRESU.includes(m as (typeof MIESIACE_ZAKRESU)[number])) {
       setAktywnyMiesiac(m as MiesiącId);
     }
-    if (z === "podsumowanie" || z === "zarobek" || z === "koszty" || z === "raport" || z === "historia") {
+    if (z === "podsumowanie" || z === "zarobek" || z === "koszty" || z === "raport" || z === "historia" || z === "ustawienia") {
       setAktywnaZakladka(z as TabName);
     }
     if (zgl) setFocusZgloszenie(zgl);
@@ -184,6 +186,8 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
   }
 
   const daneMiesiaca = data.miesiace[aktywnyMiesiac] ?? domyslneDaneMiesiaca(aktywnyMiesiac);
+  const ustawienia = getUstawienia(data);
+  const podatki = isAdmin ? podatkiMiesiaca(data, aktywnyMiesiac) : undefined;
   const monthLocked = !!daneMiesiaca.zamkniety?.locked;
   const lockedMonths = MIESIACE_ZAKRESU.filter(
     (m) => !!data.miesiace[m as MiesiącId]?.zamkniety?.locked
@@ -247,7 +251,7 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
           ) : (
             <>
               {/* Baner zamkniętego miesiąca */}
-              {monthLocked && aktywnaZakladka !== "raport" && aktywnaZakladka !== "historia" && (
+              {monthLocked && aktywnaZakladka !== "raport" && aktywnaZakladka !== "historia" && aktywnaZakladka !== "ustawienia" && (
                 <div className="flex items-center gap-2 rounded-xl bg-surface2 border border-line px-4 py-2.5 text-sm text-dim">
                   <IconLock size={15} className="text-amber-brand" />
                   Miesiąc {POLSKIE_MIESIACE[aktywnyMiesiac]} 2026 jest zamknięty — tylko do odczytu.
@@ -267,6 +271,8 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
                       onUpdateNotatki={updateNotatki}
                       onUpdate={handleUpdateMiesiac}
                       isAdmin={isAdmin}
+                      podatki={podatki}
+                      taxForm={ustawienia.taxForm}
                     />
                   )}
                   {aktywnaZakladka === "zarobek" && (
@@ -285,6 +291,7 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
                       onUpdate={handleUpdateMiesiac}
                       token={token}
                       userName={userName ?? ""}
+                      ustawienia={ustawienia}
                       focusZgloszenieId={focusZgloszenie}
                     />
                   )}
@@ -293,9 +300,17 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
 
               {aktywnaZakladka === "raport" && <RaportTab data={data} />}
               {aktywnaZakladka === "historia" && isAdmin && <HistoriaTab token={token} />}
+              {aktywnaZakladka === "ustawienia" && isAdmin && (
+                <UstawieniaTab
+                  ustawienia={ustawienia}
+                  onUpdate={updateUstawienia}
+                  token={token}
+                  userName={userName ?? ""}
+                />
+              )}
 
               {/* Zamknięcie / odblokowanie miesiąca (poza fieldsetem) */}
-              {isAdmin && aktywnaZakladka !== "raport" && aktywnaZakladka !== "historia" && (
+              {isAdmin && aktywnaZakladka !== "raport" && aktywnaZakladka !== "historia" && aktywnaZakladka !== "ustawienia" && (
                 <button
                   onClick={toggleMonthLock}
                   className="w-full flex items-center justify-center gap-2 py-2.5 min-h-[44px] rounded-xl border border-line text-sm text-dim hover:text-ink hover:border-dim transition-all duration-150"

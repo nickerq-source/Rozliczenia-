@@ -34,6 +34,9 @@ export interface FakturaWeek {
   customRange?: { od: string; do: string } | null; // ISO "YYYY-MM-DD"
   status?: InvoiceStatus; // domyślnie do_wystawienia
   issueDate?: string; // ISO "YYYY-MM-DD"; termin płatności = +21 dni
+  // VAT sprzedaży: tryb kwoty i stawka — domyślne z ustawień (netto, 23%)
+  amountMode?: "netto" | "brutto";
+  vatRate?: number; // np. 0.23
 }
 
 /** Status wypłaty kierowcy za miesiąc */
@@ -56,13 +59,55 @@ export interface DzienKierowcy {
   szkolenie: number; // tylko czerwiec, w zł (0 lub 150)
 }
 
-export interface WpisTankowania {
+// ─── KATEGORIE I VAT KOSZTÓW ─────────────────────────────────────────────────
+
+/** Kategorie kosztów (wartość w bazie — etykiety UI w tax.ts) */
+export type KategoriaKosztu =
+  | "serwis"
+  | "czesci"
+  | "paliwo_adblue"
+  | "parking"
+  | "myjnia"
+  | "oplaty"
+  | "ksiegowosc"
+  | "ubezpieczenie"
+  | "telefon_aplikacje"
+  | "internet"
+  | "wyposazenie"
+  | "art_spozywcze"
+  | "inne";
+
+/** Stawka VAT: liczba jako string lub zwolniony/nie podlega */
+export type VatRate = "0" | "0.05" | "0.08" | "0.23" | "zw" | "np";
+
+/** Skąd pochodzi kategoria/VAT: ręcznie, z reguły keyword, z AI */
+export type ZrodloKategorii = "manual" | "rule" | "ai";
+
+/** Pola podatkowe kosztu (domyślnie: koszt z faktury, brutto, VAT 23%) */
+export interface KosztVatInfo {
+  hasInvoice?: boolean; // domyślnie true
+  invoiceNumber?: string;
+  supplierName?: string;
+  supplierNip?: string;
+  amountMode?: "netto" | "brutto"; // domyślnie brutto
+  vatRate?: VatRate; // domyślnie "0.23"
+  vatDeductible?: boolean; // domyślnie true
+  vatDeductionPercent?: number; // 0 | 50 | 100, domyślnie 100
+  taxNote?: string;
+  kategoria?: KategoriaKosztu; // domyślnie "inne"
+  kategoriaZrodlo?: ZrodloKategorii; // domyślnie "manual"
+  kategoriaConfidence?: number; // 0–1 (tylko AI)
+  kategoriaPotwierdzona?: boolean; // admin zatwierdził wynik AI
+  vatZrodlo?: ZrodloKategorii; // domyślnie "rule"
+}
+
+export interface WpisTankowania extends KosztVatInfo {
   id: string;
   data: string;
   koszt: number;
 }
 
-export interface WpisInnegoKosztu {
+export interface WpisInnegoKosztu extends KosztVatInfo {
   id: string;
   data: string;
   nazwa: string;
@@ -109,9 +154,38 @@ export interface Notatka {
   miesiac: number;
 }
 
+/** Ustawienia podatkowe workspace (przechowywane w workspaces.data) */
+export interface UstawieniaPodatkowe {
+  // Koszty (domyślne wartości nowych kosztów)
+  defaultCostAmountMode: "netto" | "brutto"; // brutto
+  defaultCostVatRate: VatRate; // "0.23"
+  defaultCostHasInvoice: boolean; // true
+  defaultCostVatDeductible: boolean; // true
+  defaultCostVatDeductionPercent: number; // 100
+  // Paliwo
+  fuelVatDeductionPercent: number; // 100 lub 50
+  // Sprzedaż
+  invoiceAmountMode: "netto" | "brutto"; // netto
+  defaultSalesVatRate: number; // 0.23
+  // Podatek dochodowy
+  taxForm: "skala" | "liniowy";
+  taxFreeAmount: number; // 30000
+  firstTaxThreshold: number; // 120000
+  firstTaxRate: number; // 0.12
+  secondTaxRate: number; // 0.32
+  taxReducingAmount: number; // 3600
+  linearTaxRate: number; // 0.19
+  // Zdrowotna
+  healthRateSkala: number; // 0.09
+  healthRateLiniowy: number; // 0.049
+  healthMinMonthly: number; // 0
+  healthMinEnabled: boolean; // true
+}
+
 export interface WorkspaceData {
   miesiace: Partial<Record<MiesiącId, DaneMiesiaca>>;
   notatki?: Notatka[];
+  ustawienia?: Partial<UstawieniaPodatkowe>;
 }
 
 export interface WorkspaceState {

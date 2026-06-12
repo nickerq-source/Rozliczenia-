@@ -23,7 +23,9 @@ import {
   IconCalendar,
   IconPackage,
   IconMoneybag,
+  IconAlertTriangle,
 } from "../ui/icons";
+import { podatkiRoku, kosztyWgKategorii, getUstawienia } from "@/lib/tax";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -70,6 +72,31 @@ function StatPill({ icon, label, value }: { icon: ReactNode; label: string; valu
 
 export function RaportTab({ data }: Props) {
   const [najlepszePierwsze, setNajlepszePierwsze] = useState(true);
+
+  // Podatki narastająco + koszty wg kategorii (cały rok)
+  const podatki = useMemo(() => podatkiRoku(data), [data]);
+  const kategorie = useMemo(() => kosztyWgKategorii(data), [data]);
+  const ustawienia = useMemo(() => getUstawienia(data), [data]);
+  const podatkiSuma = useMemo(() => {
+    const aktywne = podatki.filter(
+      (p) => p.sprzedazNetto > 0 || p.kosztyPodatkowe > 0
+    );
+    return {
+      sprzedazNetto: aktywne.reduce((s, p) => s + p.sprzedazNetto, 0),
+      vatNalezny: aktywne.reduce((s, p) => s + p.vatNalezny, 0),
+      kosztyNetto: aktywne.reduce((s, p) => s + p.kosztyNetto, 0),
+      vatNaliczony: aktywne.reduce((s, p) => s + p.vatNaliczony, 0),
+      vatDoZaplaty: aktywne.reduce((s, p) => s + p.vatDoZaplaty, 0),
+      kosztyPodatkowe: aktywne.reduce((s, p) => s + p.kosztyPodatkowe, 0),
+      pit: aktywne.reduce((s, p) => s + p.pitMiesiac, 0),
+      zdrowotna: aktywne.reduce((s, p) => s + p.zdrowotna, 0),
+      zyskPo: aktywne.reduce((s, p) => s + p.zyskPoPodatkach, 0),
+      cashflow: aktywne.reduce((s, p) => s + p.cashflowPoPodatkach, 0),
+      dochodYtd: podatki[podatki.length - 1]?.dochodYtd ?? 0,
+      pitYtd: podatki[podatki.length - 1]?.pitYtd ?? 0,
+      aktywneMiesiace: aktywne,
+    };
+  }, [podatki]);
 
   const raport = useMemo(() => {
     let przychod = 0, wynagrodzenie = 0, paliwo = 0, inne = 0, leasing = 0;
@@ -207,6 +234,123 @@ export function RaportTab({ data }: Props) {
           value={String(raport.kolkaTotal)}
         />
       </div>
+
+      {/* ── SEKCJA: PODATKI — SZACUNEK ───────────────────────────────────── */}
+      <Card>
+        <div className="flex items-center gap-2 mb-1">
+          <IconMoneybag size={18} className="text-amber-brand" />
+          <h3 className="text-sm font-bold uppercase tracking-wider text-dim">
+            Podatki — szacunek (rok)
+          </h3>
+        </div>
+        <p className="text-[11px] text-dim/60 mb-3">
+          Forma opodatkowania: <b className="text-ink">{ustawienia.taxForm === "skala" ? "skala (12/32%)" : "liniowy (19%)"}</b>.
+          Szacunek pomocniczy — ostateczne rozliczenie potwierdza księgowa.
+        </p>
+
+        <p className="text-xs font-bold uppercase tracking-wider text-amber-brand mb-1">VAT</p>
+        <Row label="Sprzedaż netto" value={podatkiSuma.sprzedazNetto} />
+        <Row label="VAT należny" value={podatkiSuma.vatNalezny} />
+        <Row label="Koszty netto" value={podatkiSuma.kosztyNetto} />
+        <Row label="VAT naliczony (do odliczenia)" value={podatkiSuma.vatNaliczony} />
+        <Row
+          label={podatkiSuma.vatDoZaplaty >= 0 ? "VAT do zapłaty" : "Nadwyżka VAT"}
+          value={Math.abs(podatkiSuma.vatDoZaplaty)}
+        />
+
+        <p className="text-xs font-bold uppercase tracking-wider text-amber-brand mb-1 mt-4">PIT</p>
+        <Row label="Przychód netto" value={podatkiSuma.sprzedazNetto} />
+        <Row label="Koszty podatkowe" value={podatkiSuma.kosztyPodatkowe} />
+        <Row
+          label={podatkiSuma.dochodYtd >= 0 ? "Dochód narastająco" : "Strata narastająco"}
+          value={Math.abs(podatkiSuma.dochodYtd)}
+        />
+        <Row label="PIT narastająco" value={podatkiSuma.pitYtd} />
+        <Row label="Suma zaliczek PIT" value={podatkiSuma.pit} />
+
+        <p className="text-xs font-bold uppercase tracking-wider text-amber-brand mb-1 mt-4">Zdrowotna</p>
+        <Row label="Suma składek" value={podatkiSuma.zdrowotna} />
+
+        <p className="text-xs font-bold uppercase tracking-wider text-amber-brand mb-1 mt-4">Zysk</p>
+        <Row label="Przed podatkami" value={raport.zysk} />
+        <Row label="Po PIT i zdrowotnej" value={podatkiSuma.zyskPo} />
+        <Row label="Cashflow po podatkach" value={podatkiSuma.cashflow} />
+
+        {/* Tabela miesięczna */}
+        {podatkiSuma.aktywneMiesiace.length > 0 && (
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full text-[11px] tabular-nums">
+              <thead>
+                <tr className="text-dim text-left border-b border-line">
+                  <th className="py-1 pr-2 font-medium">Mies.</th>
+                  <th className="py-1 pr-2 font-medium text-right">Dochód</th>
+                  <th className="py-1 pr-2 font-medium text-right">VAT</th>
+                  <th className="py-1 pr-2 font-medium text-right">PIT</th>
+                  <th className="py-1 font-medium text-right">Zdrow.</th>
+                </tr>
+              </thead>
+              <tbody>
+                {podatkiSuma.aktywneMiesiace.map((p) => (
+                  <tr key={p.miesiac} className="border-b border-line/50 last:border-0">
+                    <td className="py-1 pr-2 text-dim">{POLSKIE_MIESIACE[p.miesiac].slice(0, 3)}</td>
+                    <td className={cn("py-1 pr-2 text-right", p.dochod < 0 ? "text-red-300" : "text-ink")}>
+                      {formatZl(p.dochod)}
+                    </td>
+                    <td className={cn("py-1 pr-2 text-right", p.vatDoZaplaty < 0 ? "text-green-300" : "text-ink")}>
+                      {formatZl(p.vatDoZaplaty)}
+                    </td>
+                    <td className="py-1 pr-2 text-right text-ink">{formatZl(p.pitMiesiac)}</td>
+                    <td className="py-1 text-right text-ink">{formatZl(p.zdrowotna)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      {/* ── SEKCJA: KOSZTY WEDŁUG KATEGORII ──────────────────────────────── */}
+      {kategorie.kategorie.length > 0 && (
+        <Card>
+          <div className="flex items-center gap-2 mb-3">
+            <IconPackage size={18} className="text-amber-brand" />
+            <h3 className="text-sm font-bold uppercase tracking-wider text-dim">
+              Koszty według kategorii
+            </h3>
+          </div>
+          <div className="space-y-1">
+            {kategorie.kategorie.map((k, i) => {
+              const max = kategorie.kategorie[0]?.suma || 1;
+              return (
+                <div key={k.kategoria} className="flex items-center gap-2">
+                  <span className="w-32 shrink-0 text-xs text-ink truncate">
+                    {i === 0 && "🏆 "}
+                    {k.label}
+                    {(k.kategoria === "inne" || k.kategoria === "art_spozywcze") && (
+                      <IconAlertTriangle size={10} className="inline ml-1 text-amber-brand" />
+                    )}
+                  </span>
+                  <div className="flex-1 h-4 bg-surface2 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-amber-brand/70 rounded-full"
+                      style={{ width: `${(k.suma / max) * 100}%`, minWidth: 4 }}
+                    />
+                  </div>
+                  <span className="w-24 shrink-0 text-right text-xs text-ink tabular-nums">
+                    {formatZl(k.suma)}
+                  </span>
+                  <span className="w-8 shrink-0 text-right text-[10px] text-dim tabular-nums">
+                    ×{k.liczba}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          <p className="text-[10px] text-dim/60 mt-3">
+            Skategoryzowano przez: reguły {kategorie.zrodla.rule} · AI {kategorie.zrodla.ai} · ręcznie {kategorie.zrodla.manual}
+          </p>
+        </Card>
+      )}
 
       {/* ── SEKCJA 2: RANKING FAKTUR ────────────────────────────────────── */}
       <Card>

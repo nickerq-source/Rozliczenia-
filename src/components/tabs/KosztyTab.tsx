@@ -2,9 +2,25 @@
 
 // Zakładka Koszty — sekcje: Dni kierowcy, Tankowanie, Inne koszty, Leasing
 
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
-import { DaneMiesiaca, MiesiącId, WpisTankowania, WpisInnegoKosztu, ZgloszenieDnia } from "@/lib/types";
+import {
+  DaneMiesiaca,
+  KategoriaKosztu,
+  KosztVatInfo,
+  MiesiącId,
+  UstawieniaPodatkowe,
+  WpisTankowania,
+  WpisInnegoKosztu,
+  ZgloszenieDnia,
+} from "@/lib/types";
+import { kategoriaLabel, domyslnyVatKategorii } from "@/lib/tax";
+import {
+  KategoriaBadge,
+  KosztSzczegolyPanel,
+  SzczegolyToggle,
+  vatRateLabel,
+} from "../KosztSzczegoly";
 import {
   obliczWynagrodzenie,
   obliczKosztPaliwa,
@@ -42,6 +58,7 @@ interface Props {
   onUpdate: (updater: (prev: DaneMiesiaca) => DaneMiesiaca) => void;
   token: string;
   userName: string;
+  ustawienia: UstawieniaPodatkowe;
   // Id zgłoszenia z deep-linku powiadomienia — podświetlamy dzień
   focusZgloszenieId?: string | null;
 }
@@ -77,17 +94,178 @@ function DatePill({
   );
 }
 
-export function KosztyTab({ miesiac, dane, onUpdate, token, userName, focusZgloszenieId }: Props) {
-  // Powiadom o dodanym koszcie po wyjściu z pola kwoty
-  function pushKoszt(nazwa: string, koszt: number) {
+export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia, focusZgloszenieId }: Props) {
+  // Rozwinięte panele szczegółów VAT (klucz: id wpisu)
+  const [rozwiniete, setRozwiniete] = useState<Record<string, boolean>>({});
+  const [autoBusyId, setAutoBusyId] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  function showToast(msg: string) {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
+  }
+
+  function toggleSzczegoly(id: string) {
+    setRozwiniete((prev) => ({ ...prev, [id]: !prev[id] }));
+  }
+
+  // Powiadom o dodanym koszcie po wyjściu z pola kwoty (z kategorią i VAT)
+  function pushKoszt(nazwa: string, koszt: number, wpis?: KosztVatInfo) {
     if (koszt <= 0) return;
+    const kategoria = kategoriaLabel(wpis?.kategoria);
+    const vat = vatRateLabel(wpis?.vatRate ?? ustawienia.defaultCostVatRate);
     sendPushEvent({
       token,
       author: userName,
       eventType: "koszt",
-      body: `${userName} dodał koszt: ${nazwa} ${formatZlCaly(koszt)}`,
+      body: `${userName} dodał koszt: ${nazwa} ${formatZlCaly(koszt)} — kategoria: ${kategoria}, VAT ${vat}`,
       url: `/admin?miesiac=${miesiac}&zakladka=koszty`,
     });
+  }
+
+  // ─── AUTO-KATEGORYZACJA (reguły → AI) ───────────────────────────────────────
+
+  async function autoKategoryzuj(
+    id: string,
+    nazwa: string,
+    koszt: number,
+    data: string,
+    typ: "tankowanie" | "inne",
+    wymus = false
+  ) {
+    if (!nazwa.trim()) return;
+    // Ręcznie ustawionej kategorii nie nadpisujemy automatycznie (sekcja 6),
+    // chyba że admin kliknął "Auto-kategoria/VAT" (wymus).
+    const lista = typ === "tankowanie" ? dane.tankowanie : dane.inneKoszty;
+    const wpis = lista.find((w) => w.id === id);
+    if (!wpis) return;
+    if (!wymus && wpis.kategoriaZrodlo === "manual") return;
+
+    setAutoBusyId(id);
+    try {
+      const res = await fetch("/api/categorize-cost", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: nazwa, amount: koszt, date: data || undefined }),
+      });
+      if (!res.ok) return;
+      const w = await res.json();
+      if (!w?.category) return;
+
+      const zrodlo = w.source === "rule" ? "rule" : w.source === "ai" ? "ai" : "rule";
+      const kategoria = w.category as KategoriaKosztu;
+      // VAT: reguła → domyślne kategorii; AI → wynik AI
+      const vat =
+        w.source === "ai"
+          ? {
+              vatRate: w.vat_rate,
+              vatDeductible: w.vat_deductible,
+              vatDeductionPercent: w.vat_deduction_percent,
+              amountMode: w.amount_mode,
+            }
+          : domyslnyVatKategorii(kategoria, ustawienia);
+
+      const patch: Partial<KosztVatInfo> = {
+        kategoria,
+        kategoriaZrodlo: zrodlo,
+        kategoriaConfidence: w.source === "ai" ? w.confidence : undefined,
+        kategoriaPotwierdzona: w.source === "ai" ? false : undefined,
+        vatZrodlo: zrodlo,
+        ...vat,
+      };
+      if (typ === "tankowanie") updateTankowanie(id, patch);
+      else updateInny(id, patch);
+
+      logChange({
+        workspaceId: token,
+        userName,
+        action: "kategoria_auto",
+        entity: "cost",
+        entityId: id,
+        newValue: { kategoria, zrodlo, confidence: w.confidence },
+        description:
+          w.source === "ai"
+            ? `System przypisał kategorię kosztu ${nazwa}: ${kategoriaLabel(kategoria)} (AI, confidence ${Number(w.confidence).toFixed(2)})`
+            : `System przypisał kategorię kosztu ${nazwa}: ${kategoriaLabel(kategoria)} (reguła)`,
+      });
+    } catch {
+      // AI niedostępne — koszt zostaje w 'inne', bez crasha
+    } finally {
+      setAutoBusyId(null);
+    }
+  }
+
+  function zmienKategorie(
+    id: string,
+    nazwa: string,
+    stara: KategoriaKosztu | undefined,
+    nowa: KategoriaKosztu,
+    typ: "tankowanie" | "inne"
+  ) {
+    const defVat = domyslnyVatKategorii(nowa, ustawienia);
+    const patch: Partial<KosztVatInfo> = {
+      kategoria: nowa,
+      kategoriaZrodlo: "manual",
+      kategoriaPotwierdzona: undefined,
+      kategoriaConfidence: undefined,
+      ...defVat,
+    };
+    if (typ === "tankowanie") updateTankowanie(id, patch);
+    else updateInny(id, patch);
+    logChange({
+      workspaceId: token,
+      userName,
+      action: "kategoria_zmieniona",
+      entity: "cost",
+      entityId: id,
+      oldValue: { kategoria: stara ?? "inne" },
+      newValue: { kategoria: nowa },
+      description: `${userName} zmienił kategorię kosztu ${nazwa}: ${kategoriaLabel(stara)} → ${kategoriaLabel(nowa)}`,
+    });
+  }
+
+  function zatwierdzAI(id: string, nazwa: string, typ: "tankowanie" | "inne") {
+    const patch: Partial<KosztVatInfo> = { kategoriaPotwierdzona: true };
+    if (typ === "tankowanie") updateTankowanie(id, patch);
+    else updateInny(id, patch);
+    logChange({
+      workspaceId: token,
+      userName,
+      action: "kategoria_ai_potwierdzona",
+      entity: "cost",
+      entityId: id,
+      description: `${userName} potwierdził kategorię AI dla kosztu ${nazwa}`,
+    });
+  }
+
+  // Audit ręcznej zmiany pól VAT (z panelu szczegółów)
+  function logVatPatch(nazwa: string, id: string, patch: Partial<KosztVatInfo>, stary?: KosztVatInfo) {
+    if (patch.vatRate !== undefined && stary) {
+      logChange({
+        workspaceId: token,
+        userName,
+        action: "vat_zmieniony",
+        entity: "cost",
+        entityId: id,
+        oldValue: { vatRate: stary.vatRate ?? "0.23" },
+        newValue: { vatRate: patch.vatRate },
+        description: `${userName} zmienił VAT kosztu ${nazwa}: ${vatRateLabel(stary.vatRate ?? "0.23")} → ${vatRateLabel(patch.vatRate)}`,
+      });
+    } else if (
+      patch.vatDeductible !== undefined ||
+      patch.vatDeductionPercent !== undefined ||
+      patch.amountMode !== undefined
+    ) {
+      logChange({
+        workspaceId: token,
+        userName,
+        action: "vat_zmieniony",
+        entity: "cost",
+        entityId: id,
+        newValue: patch as Record<string, unknown>,
+        description: `${userName} zmienił ustawienia VAT kosztu ${nazwa}`,
+      });
+    }
   }
 
   const allDays = getDniMiesiaca(miesiac);
@@ -186,11 +364,41 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, focusZglos
     }));
   }
 
-  function removeTankowanie(id: string) {
-    onUpdate((prev) => ({
-      ...prev,
-      tankowanie: prev.tankowanie.filter((t) => t.id !== id),
-    }));
+  // Usuwanie z potwierdzeniem (sekcja 15): confirm → usuń → audit + powiadomienie + toast
+  function usunKoszt(
+    id: string,
+    nazwa: string,
+    koszt: number,
+    data: string,
+    typ: "tankowanie" | "inne"
+  ) {
+    const dataTxt = data || "(bez daty)";
+    const ok = window.confirm(
+      `Usunąć koszt?\n\nCzy na pewno chcesz usunąć koszt: ${nazwa} — ${formatZlCaly(koszt)} z dnia ${dataTxt}? Tej operacji nie można cofnąć.\n\n[OK = Usuń koszt / Anuluj]`
+    );
+    if (!ok) return;
+
+    if (typ === "tankowanie") {
+      onUpdate((prev) => ({
+        ...prev,
+        tankowanie: prev.tankowanie.filter((t) => t.id !== id),
+      }));
+    } else {
+      onUpdate((prev) => ({
+        ...prev,
+        inneKoszty: prev.inneKoszty.filter((k) => k.id !== id),
+      }));
+    }
+    logChange({
+      workspaceId: token,
+      userName,
+      action: "koszt_usuniety",
+      entity: "cost",
+      entityId: id,
+      oldValue: { nazwa, koszt, data },
+      description: `${userName} usunął koszt: ${nazwa} ${formatZlCaly(koszt)}${data ? ` z dnia ${data}` : ""}`,
+    });
+    showToast("Koszt usunięty");
   }
 
   // ─── INNE KOSZTY ─────────────────────────────────────────────────────────────
@@ -209,13 +417,6 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, focusZglos
     onUpdate((prev) => ({
       ...prev,
       inneKoszty: prev.inneKoszty.map((k) => (k.id === id ? { ...k, ...patch } : k)),
-    }));
-  }
-
-  function removeInny(id: string) {
-    onUpdate((prev) => ({
-      ...prev,
-      inneKoszty: prev.inneKoszty.filter((k) => k.id !== id),
     }));
   }
 
@@ -430,26 +631,43 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, focusZglos
         <CardTitle>Tankowanie</CardTitle>
         <div className="space-y-2">
           {dane.tankowanie.map((t) => (
-            <div key={t.id} className="flex gap-2 items-center">
-              <DatePill
-                value={t.data}
-                onChange={(v) => updateTankowanie(t.id, { data: v })}
-              />
-              <div className="flex-1">
-                <NumInput
-                  value={t.koszt}
-                  onChange={(v) => updateTankowanie(t.id, { koszt: v })}
-                  onBlur={() => pushKoszt("paliwo", t.koszt)}
-                  placeholder="0"
+            <div key={t.id}>
+              <div className="flex gap-2 items-center">
+                <DatePill
+                  value={t.data}
+                  onChange={(v) => updateTankowanie(t.id, { data: v })}
                 />
+                <div className="flex-1">
+                  <NumInput
+                    value={t.koszt}
+                    onChange={(v) => updateTankowanie(t.id, { koszt: v })}
+                    onBlur={() => pushKoszt("paliwo", t.koszt, { ...t, kategoria: t.kategoria ?? "paliwo_adblue" })}
+                    placeholder="0"
+                  />
+                </div>
+                <SzczegolyToggle
+                  open={!!rozwiniete[t.id]}
+                  onToggle={() => toggleSzczegoly(t.id)}
+                />
+                <button
+                  onClick={() => usunKoszt(t.id, "paliwo", t.koszt, t.data, "tankowanie")}
+                  className="shrink-0 p-2 min-h-[40px] rounded-lg text-red-400 hover:bg-red-soft transition-all duration-150"
+                  title="Usuń"
+                >
+                  <IconX size={16} />
+                </button>
               </div>
-              <button
-                onClick={() => removeTankowanie(t.id)}
-                className="shrink-0 p-2 min-h-[40px] rounded-lg text-red-400 hover:bg-red-soft transition-all duration-150"
-                title="Usuń"
-              >
-                <IconX size={16} />
-              </button>
+              {rozwiniete[t.id] && (
+                <KosztSzczegolyPanel
+                  wpis={t}
+                  ustawienia={ustawienia}
+                  domyslnaKategoria="paliwo_adblue"
+                  onPatch={(patch) => {
+                    updateTankowanie(t.id, patch);
+                    logVatPatch("paliwo", t.id, patch, t);
+                  }}
+                />
+              )}
             </div>
           ))}
         </div>
@@ -473,33 +691,62 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, focusZglos
         <CardTitle>Inne koszty</CardTitle>
         <div className="space-y-2">
           {dane.inneKoszty.map((k) => (
-            <div key={k.id} className="flex gap-2 items-center flex-wrap sm:flex-nowrap">
-              <DatePill
-                value={k.data}
-                onChange={(v) => updateInny(k.id, { data: v })}
-              />
-              <input
-                type="text"
-                value={k.nazwa}
-                onChange={(e) => updateInny(k.id, { nazwa: e.target.value })}
-                placeholder="Opis…"
-                className="flex-1 min-w-32 bg-input border border-line rounded-[10px] px-3 py-2 text-[15px] text-ink placeholder:text-dim/50"
-              />
-              <div className="w-28">
-                <NumInput
-                  value={k.koszt}
-                  onChange={(v) => updateInny(k.id, { koszt: v })}
-                  onBlur={() => pushKoszt(k.nazwa || "inny", k.koszt)}
-                  placeholder="0"
+            <div key={k.id} className="rounded-xl border border-line/60 p-2 space-y-1.5">
+              <div className="flex gap-2 items-center flex-wrap sm:flex-nowrap">
+                <DatePill
+                  value={k.data}
+                  onChange={(v) => updateInny(k.id, { data: v })}
                 />
+                <input
+                  type="text"
+                  value={k.nazwa}
+                  onChange={(e) => updateInny(k.id, { nazwa: e.target.value })}
+                  onBlur={() => autoKategoryzuj(k.id, k.nazwa, k.koszt, k.data, "inne")}
+                  placeholder="Opis…"
+                  className="flex-1 min-w-32 bg-input border border-line rounded-[10px] px-3 py-2 text-[15px] text-ink placeholder:text-dim/50"
+                />
+                <div className="w-28">
+                  <NumInput
+                    value={k.koszt}
+                    onChange={(v) => updateInny(k.id, { koszt: v })}
+                    onBlur={() => pushKoszt(k.nazwa || "inny", k.koszt, k)}
+                    placeholder="0"
+                  />
+                </div>
+                <SzczegolyToggle
+                  open={!!rozwiniete[k.id]}
+                  onToggle={() => toggleSzczegoly(k.id)}
+                />
+                <button
+                  onClick={() => usunKoszt(k.id, k.nazwa || "inny", k.koszt, k.data, "inne")}
+                  className="shrink-0 p-2 min-h-[40px] rounded-lg text-red-400 hover:bg-red-soft transition-all duration-150"
+                  title="Usuń"
+                >
+                  <IconX size={16} />
+                </button>
               </div>
-              <button
-                onClick={() => removeInny(k.id)}
-                className="shrink-0 p-2 min-h-[40px] rounded-lg text-red-400 hover:bg-red-soft transition-all duration-150"
-                title="Usuń"
-              >
-                <IconX size={16} />
-              </button>
+
+              {/* Kategoria + ostrzeżenia + zatwierdzanie AI */}
+              <KategoriaBadge
+                wpis={k}
+                onZmienKategorie={(nowa) =>
+                  zmienKategorie(k.id, k.nazwa || "inny", k.kategoria, nowa, "inne")
+                }
+                onZatwierdzAI={() => zatwierdzAI(k.id, k.nazwa || "inny", "inne")}
+              />
+
+              {rozwiniete[k.id] && (
+                <KosztSzczegolyPanel
+                  wpis={k}
+                  ustawienia={ustawienia}
+                  onPatch={(patch) => {
+                    updateInny(k.id, patch);
+                    logVatPatch(k.nazwa || "inny", k.id, patch, k);
+                  }}
+                  onAuto={() => autoKategoryzuj(k.id, k.nazwa, k.koszt, k.data, "inne", true)}
+                  autoBusy={autoBusyId === k.id}
+                />
+              )}
             </div>
           ))}
         </div>
@@ -541,6 +788,19 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, focusZglos
           </div>
         </div>
       </Card>
+
+      {/* Info o domyślnym traktowaniu kosztów */}
+      <p className="text-[11px] text-dim/60 text-center px-4">
+        Domyślnie wszystkie koszty w aplikacji traktowane są jako koszty z faktury
+        (brutto, VAT 23%, odliczany). Szczegóły i wyjątki zmienisz przyciskiem „VAT” przy koszcie.
+      </p>
+
+      {/* Toast */}
+      {toast && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-xl bg-surface border border-green-500/40 text-green-300 text-sm font-medium shadow-2xl animate-fade-in">
+          {toast}
+        </div>
+      )}
     </div>
   );
 }
