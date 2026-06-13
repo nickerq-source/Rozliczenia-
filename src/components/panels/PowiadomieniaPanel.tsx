@@ -236,6 +236,19 @@ export function PowiadomieniaPanel({ token, userName }: Props) {
           />
         </button>
 
+        {supported && active && (
+          <button
+            type="button"
+            onClick={sendTestPush}
+            disabled={testBusy}
+            className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full border border-amber-brand/50 text-amber-brand text-[11px] font-bold hover:bg-amber-brand/10 disabled:opacity-50"
+            title="Wyślij testowe powiadomienie na to urządzenie"
+          >
+            <IconBell size={12} />
+            {testBusy ? "..." : "Test"}
+          </button>
+        )}
+
         {supported && (
           <button
             onClick={toggle}
