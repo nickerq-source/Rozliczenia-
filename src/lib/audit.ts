@@ -1,7 +1,7 @@
 "use client";
 
 // Audit log klienta — każda zmiana trafia do /api/audit (fire-and-forget):
-// audit_log + notifications_log + push do adminów workspace (poza autorem)
+// audit_log + notifications_log + push do subskrybentów workspace
 
 export interface AuditParams {
   workspaceId: string;

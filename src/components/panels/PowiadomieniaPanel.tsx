@@ -55,10 +55,11 @@ function eventIcon(action: string) {
   return <IconBell size={14} />;
 }
 
-export function PowiadomieniaPanel({ token }: Props) {
+export function PowiadomieniaPanel({ token, userName }: Props) {
   const supported = pushSupported();
   const [active, setActive] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [testBusy, setTestBusy] = useState(false);
   const [history, setHistory] = useState<NotificationRow[]>([]);
   const [rozwiniete, setRozwiniete] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -162,6 +163,40 @@ export function PowiadomieniaPanel({ token }: Props) {
       setHistory([]);
     } catch {
       // ignoruj
+    }
+  }
+
+  async function sendTestPush() {
+    if (testBusy) return;
+    setTestBusy(true);
+    try {
+      const res = await fetch("/api/audit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "test_push",
+          entity: "notification",
+          description: `${userName} wysłał test powiadomień PapiTrans`,
+          url: "/admin?zakladka=podsumowanie",
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(json.error ?? `Błąd testu push (${res.status})`);
+      }
+      await loadHistory();
+      const push = json.push;
+      alert(
+        push
+          ? `Test zapisany. Subskrypcje: ${push.subscriptions}, wysłano: ${push.sent}, błędy: ${push.failed}.`
+          : "Test zapisany. Jeśli push nie przyszedł, włącz powiadomienia ponownie na telefonie."
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Błąd testu push";
+      setLoadError(message);
+      alert(message);
+    } finally {
+      setTestBusy(false);
     }
   }
 
@@ -290,10 +325,21 @@ export function PowiadomieniaPanel({ token }: Props) {
               Powiadomienia push niedostępne w tej przeglądarce.
             </p>
           ) : active ? (
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green-soft border border-green-500/40 text-green-300 text-xs font-medium mb-3">
-              <IconCheck size={13} />
-              Aktywne na tym urządzeniu
-            </span>
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-green-soft border border-green-500/40 text-green-300 text-xs font-medium">
+                <IconCheck size={13} />
+                Aktywne na tym urządzeniu
+              </span>
+              <button
+                type="button"
+                onClick={sendTestPush}
+                disabled={testBusy}
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-amber-brand/50 text-amber-brand text-xs font-bold hover:bg-amber-brand/10 disabled:opacity-50"
+              >
+                <IconBell size={13} />
+                {testBusy ? "Wysyłam…" : "Test push"}
+              </button>
+            </div>
           ) : (
             <p className="text-xs text-dim mb-3">
               Kliknij przełącznik, żeby otrzymywać powiadomienia na ten telefon.

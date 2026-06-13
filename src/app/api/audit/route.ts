@@ -11,11 +11,19 @@ interface SubRow {
   subscription: object;
 }
 
+interface PushResult {
+  configured: boolean;
+  subscriptions: number;
+  sent: number;
+  failed: number;
+  removed: number;
+}
+
 /**
  * Centralny zapis zmiany:
  * 1. audit_log (pełna historia)
  * 2. notifications_log (panel powiadomień)
- * 3. Web Push do subskrybentów workspace poza autorem
+ * 3. Web Push do subskrybentów workspace, także autora zmiany
  * Autoryzacja: wymagana sesja; workspace brany z profilu (nie z body).
  */
 export async function POST(req: NextRequest) {
@@ -51,6 +59,13 @@ export async function POST(req: NextRequest) {
 
   try {
     const admin = getAdminSupabase();
+    const push: PushResult = {
+      configured: false,
+      subscriptions: 0,
+      sent: 0,
+      failed: 0,
+      removed: 0,
+    };
 
     const { error: auditError } = await admin.from("audit_log").insert({
       workspace_id: workspaceId,
@@ -92,15 +107,18 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Push do subskrybentów workspace (poza autorem)
+    // Push do subskrybentów workspace, także autora. Dzięki temu można od razu
+    // testować powiadomienia na własnym telefonie po dodaniu kosztu/faktury.
     const wp = getWebPush();
     if (wp) {
+      push.configured = true;
       const { data: subs } = await admin
         .from("push_subscriptions")
         .select("id, user_name, subscription")
         .eq("workspace_id", workspaceId);
 
       if (subs?.length) {
+        push.subscriptions = subs.length;
         const payload = JSON.stringify({
           title: "PapiTrans",
           body: description,
@@ -109,16 +127,18 @@ export async function POST(req: NextRequest) {
 
         await Promise.all(
           (subs as SubRow[]).map(async (s) => {
-            if (s.user_name === userName) return;
             try {
               await wp.sendNotification(
                 s.subscription as Parameters<typeof wp.sendNotification>[0],
                 payload
               );
+              push.sent += 1;
             } catch (e: unknown) {
+              push.failed += 1;
               const status = (e as { statusCode?: number })?.statusCode;
               if (status === 404 || status === 410) {
                 await admin.from("push_subscriptions").delete().eq("id", s.id);
+                push.removed += 1;
               }
             }
           })
@@ -126,7 +146,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({ ok: true, push });
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Błąd serwera" },
