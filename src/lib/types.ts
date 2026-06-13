@@ -83,9 +83,9 @@ export type VatRate = "0" | "0.05" | "0.08" | "0.23" | "zw" | "np";
 /** Skąd pochodzi kategoria/VAT: ręcznie, z reguły keyword, z AI */
 export type ZrodloKategorii = "manual" | "rule" | "ai";
 
-/** Pola podatkowe kosztu (domyślnie: koszt z faktury, brutto, VAT 23%) */
+/** Pola podatkowe kosztu (domyślnie: rozliczany podatkowo, brutto, VAT 23%) */
 export interface KosztVatInfo {
-  hasInvoice?: boolean; // domyślnie true
+  hasInvoice?: boolean; // czy koszt wchodzi do VAT i kosztów podatkowych; domyślnie true
   invoiceNumber?: string;
   supplierName?: string;
   supplierNip?: string;

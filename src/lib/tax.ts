@@ -102,7 +102,7 @@ export interface RozbicieVat {
   vat: number;
   vatDoOdliczenia: number;
   brutto: number;
-  kosztPit: number; // netto + nieodliczalna część VAT
+  kosztPit: number; // koszt podatkowy do podatku dochodowego
 }
 
 function round2(n: number): number {
@@ -115,8 +115,8 @@ export function vatRateToNumber(rate: VatRate): number {
 }
 
 /**
- * Rozbija kwotę kosztu na netto / VAT / VAT do odliczenia / brutto / koszt PIT.
- * Reguły (sekcja 8): zw|np → brutto=netto=kwota; vatDeductible=false → koszt PIT = brutto.
+ * Rozbija kwotę kosztu na netto / VAT / VAT do odliczenia / brutto / koszt podatkowy.
+ * Reguły (sekcja 8): zw|np → brutto=netto=kwota; vatDeductible=false → koszt podatkowy = brutto.
  */
 export function rozbijKoszt(
   kwota: number,
@@ -157,6 +157,19 @@ export function rozbijWpis(
   domyslnaKategoria: KategoriaKosztu = "inne"
 ): RozbicieVat & { kategoria: KategoriaKosztu } {
   const kategoria = wpis.kategoria ?? domyslnaKategoria;
+  const rozliczPodatkowo = wpis.hasInvoice ?? ustawienia.defaultCostHasInvoice;
+  if (!rozliczPodatkowo) {
+    const brutto = round2(parseNum(wpis.koszt));
+    return {
+      netto: 0,
+      vat: 0,
+      vatDoOdliczenia: 0,
+      brutto,
+      kosztPit: 0,
+      kategoria,
+    };
+  }
+
   const defVat = domyslnyVatKategorii(kategoria, ustawienia);
   return {
     ...rozbijKoszt(

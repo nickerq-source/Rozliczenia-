@@ -140,7 +140,7 @@ export function KosztSzczegolyPanel({
   const vatDeductible = wpis.vatDeductible ?? defVat.vatDeductible;
   const vatPercent = wpis.vatDeductionPercent ?? defVat.vatDeductionPercent;
   const amountMode = wpis.amountMode ?? ustawienia.defaultCostAmountMode;
-  const hasInvoice = wpis.hasInvoice ?? ustawienia.defaultCostHasInvoice;
+  const rozliczPodatkowo = wpis.hasInvoice ?? ustawienia.defaultCostHasInvoice;
 
   const r = rozbijWpis(wpis, ustawienia, domyslnaKategoria);
 
@@ -155,12 +155,17 @@ export function KosztSzczegolyPanel({
         <label className="flex items-center gap-1.5 col-span-2 sm:col-span-3 text-dim">
           <input
             type="checkbox"
-            checked={hasInvoice}
+            checked={rozliczPodatkowo}
             onChange={(e) => onPatch({ hasInvoice: e.target.checked })}
             className="accent-[#f5a524]"
           />
-          Koszt z faktury
+          Rozlicz podatkowo
         </label>
+        {!rozliczPodatkowo && (
+          <p className="col-span-2 sm:col-span-3 rounded-lg border border-amber-brand/35 bg-amber-brand/10 px-3 py-2 text-[11px] leading-relaxed text-amber-brand">
+            Ten wydatek zostaje w kosztach operacyjnych, ale nie obniża VAT ani podatku dochodowego.
+          </p>
+        )}
         <input
           type="text"
           value={wpis.invoiceNumber ?? ""}
@@ -255,6 +260,7 @@ export function KosztSzczegolyPanel({
           ? `, confidence ${wpis.kategoriaConfidence.toFixed(2)}`
           : ""}
         ) · VAT: {zrodloLabel(wpis.vatZrodlo ?? "rule")}
+        {!rozliczPodatkowo ? " · nierozliczane podatkowo" : ""}
         {wpis.taxNote ? ` · ${wpis.taxNote}` : ""}
       </p>
     </div>

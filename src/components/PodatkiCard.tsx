@@ -84,7 +84,7 @@ export function PodatkiCard({
       <Wiersz
         label="Koszty podatkowe"
         value={p.kosztyPodatkowe}
-        note="netto kosztów + nieodliczony VAT + wynagrodzenie + leasing"
+        note="tylko koszty z włączonym rozliczeniem podatkowym + wynagrodzenie + leasing"
       />
       {strata ? (
         <Wiersz label="Strata podatkowa" value={-p.dochod} klasa="text-red-300" bold />

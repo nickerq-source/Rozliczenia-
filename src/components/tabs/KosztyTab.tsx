@@ -95,6 +95,35 @@ function DatePill({
   );
 }
 
+function RozliczeniePodatkoweButton({
+  checked,
+  onClick,
+}: {
+  checked: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-bold transition-colors",
+        checked
+          ? "border-green-500/45 bg-green-soft text-green-300 hover:bg-green-500/20"
+          : "border-amber-brand/45 bg-amber-brand/10 text-amber-brand hover:bg-amber-brand/20"
+      )}
+      title={
+        checked
+          ? "Koszt wchodzi do VAT i podatku dochodowego"
+          : "Koszt zostaje w wyniku, ale bez VAT i podatku dochodowego"
+      }
+    >
+      {checked ? <IconCheck size={11} /> : <IconAlertTriangle size={11} />}
+      {checked ? "Rozlicz podatkowo" : "Bez odliczeń"}
+    </button>
+  );
+}
+
 export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia, focusZgloszenieId }: Props) {
   // Rozwinięte panele szczegółów VAT (klucz: id wpisu)
   const [rozwiniete, setRozwiniete] = useState<Record<string, boolean>>({});
@@ -270,7 +299,18 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
 
   // Audit ręcznej zmiany pól VAT (z panelu szczegółów)
   function logVatPatch(nazwa: string, id: string, patch: Partial<KosztVatInfo>, stary?: KosztVatInfo) {
-    if (patch.vatRate !== undefined && stary) {
+    if (patch.hasInvoice !== undefined) {
+      logChange({
+        workspaceId: token,
+        userName,
+        action: "koszt_podatkowy_zmieniony",
+        entity: "cost",
+        entityId: id,
+        oldValue: stary?.hasInvoice !== undefined ? { hasInvoice: stary.hasInvoice } : undefined,
+        newValue: { hasInvoice: patch.hasInvoice },
+        description: `${userName} ${patch.hasInvoice ? "włączył" : "wyłączył"} rozliczenie podatkowe kosztu ${nazwa}`,
+      });
+    } else if (patch.vatRate !== undefined && stary) {
       logChange({
         workspaceId: token,
         userName,
@@ -296,6 +336,10 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
         description: `${userName} zmienił ustawienia VAT kosztu ${nazwa}`,
       });
     }
+  }
+
+  function czyRozliczanyPodatkowo(wpis: KosztVatInfo) {
+    return wpis.hasInvoice ?? ustawienia.defaultCostHasInvoice;
   }
 
   // ─── AUTO-BACKFILL KATEGORII ────────────────────────────────────────────────
@@ -751,6 +795,16 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
                   <IconX size={16} />
                 </button>
               </div>
+              <div className="mt-1.5">
+                <RozliczeniePodatkoweButton
+                  checked={czyRozliczanyPodatkowo(t)}
+                  onClick={() => {
+                    const patch = { hasInvoice: !czyRozliczanyPodatkowo(t) };
+                    updateTankowanie(t.id, patch);
+                    logVatPatch("paliwo", t.id, patch, t);
+                  }}
+                />
+              </div>
               {rozwiniete[t.id] && (
                 <KosztSzczegolyPanel
                   wpis={t}
@@ -830,6 +884,14 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
                 onAuto={() => autoKategoryzuj(k.id, k.nazwa, k.koszt, k.data, "inne", true)}
                 autoBusy={autoBusyId === k.id}
               />
+              <RozliczeniePodatkoweButton
+                checked={czyRozliczanyPodatkowo(k)}
+                onClick={() => {
+                  const patch = { hasInvoice: !czyRozliczanyPodatkowo(k) };
+                  updateInny(k.id, patch);
+                  logVatPatch(k.nazwa || "inny", k.id, patch, k);
+                }}
+              />
 
               {rozwiniete[k.id] && (
                 <KosztSzczegolyPanel
@@ -887,8 +949,8 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
 
       {/* Info o domyślnym traktowaniu kosztów */}
       <p className="text-[11px] text-dim/60 text-center px-4">
-        Domyślnie wszystkie koszty w aplikacji traktowane są jako koszty z faktury
-        (brutto, VAT 23%, odliczany). Szczegóły i wyjątki zmienisz przyciskiem „VAT” przy koszcie.
+        Domyślnie koszty są rozliczane podatkowo. Jeśli nie masz faktury/paragonu do rozliczenia,
+        wyłącz „Rozlicz podatkowo” w szczegółach VAT — koszt zostanie w wyniku, ale bez VAT i podatku dochodowego.
       </p>
 
       {/* Toast */}
