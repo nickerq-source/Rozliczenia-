@@ -114,21 +114,15 @@ export interface LokalnyVat {
 
 const VAT_RULES: { vatRate: VatRate; slowa: string[]; vatDeductible?: boolean }[] = [
   {
-    vatRate: "0.23",
-    slowa: [
-      "napój gazowany", "napoj gazowany", "napoje gazowane", "napój słodzony",
-      "napoj slodzony", "napoje słodzone", "napoje slodzone", "cola", "pepsi",
-      "fanta", "sprite", "oranżada", "oranzada", "energetyk", "napój energetyczny",
-      "napoj energetyczny", "red bull",
-    ],
-  },
-  {
     vatRate: "0.05",
     slowa: [
       "chleb", "pieczywo", "bułka", "bulka", "bułki", "bulki", "mleko",
       "nabiał", "nabial", "jogurt", "ser", "masło", "maslo", "mięso",
       "mieso", "wędlina", "wedlina", "owoce", "warzywa", "woda", "sok",
-      "soki", "książka", "ksiazka", "ebook", "e-book",
+      "soki", "napój", "napoj", "napoje", "napój gazowany", "napoj gazowany",
+      "napoje gazowane", "cola", "pepsi", "fanta", "sprite", "oranżada",
+      "oranzada", "energetyk", "red bull", "książka", "ksiazka", "ebook",
+      "e-book",
     ],
   },
   {
