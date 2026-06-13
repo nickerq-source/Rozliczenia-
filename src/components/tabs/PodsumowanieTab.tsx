@@ -84,6 +84,15 @@ export function PodsumowanieTab({
     if (wyplacone) {
       if (!window.confirm(`Cofnąć oznaczenie wypłaty za ${nazwa} 2026?`)) return;
       onUpdate((prev) => ({ ...prev, wyplata: { status: "niewypłacone" } }));
+      logChange({
+        workspaceId: token,
+        userName,
+        action: "wyplata_cofnieta",
+        entity: "payroll",
+        entityId: String(miesiac),
+        description: `${userName} cofnął oznaczenie wypłaty kierowcy ${nazwa} 2026`,
+        url: `/admin?miesiac=${miesiac}&zakladka=podsumowanie`,
+      });
       return;
     }
     if (

@@ -13,12 +13,24 @@ export async function GET(_req: NextRequest, { params }: Params) {
   if (!profile) return NextResponse.json({ error: "Brak sesji" }, { status: 401 });
 
   const supabase = await getServerSupabase();
-  const { data, error } = await supabase
+  const baseQuery = supabase
     .from("notifications_log")
     .select("id, user_name, action, description, url, read, created_at")
     .eq("workspace_id", profile.workspace_id)
     .order("created_at", { ascending: false })
     .limit(50);
+  let { data, error } = await baseQuery;
+
+  if (error && error.message.toLowerCase().includes("url")) {
+    const fallback = await supabase
+      .from("notifications_log")
+      .select("id, user_name, action, description, read, created_at")
+      .eq("workspace_id", profile.workspace_id)
+      .order("created_at", { ascending: false })
+      .limit(50);
+    data = fallback.data?.map((n) => ({ ...n, url: null })) ?? null;
+    error = fallback.error;
+  }
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

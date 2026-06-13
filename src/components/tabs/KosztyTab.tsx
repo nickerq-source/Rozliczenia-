@@ -49,7 +49,6 @@ import {
   IconCheck,
   IconAlertTriangle,
 } from "../ui/icons";
-import { sendPushEvent } from "@/lib/push";
 import { logChange } from "@/lib/audit";
 import { cn } from "@/lib/utils";
 
@@ -131,6 +130,8 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
   const [toast, setToast] = useState<string | null>(null);
   // Id wpisów już objętych automatycznym backfillem (żeby nie powtarzać AI)
   const backfillDone = useRef<Set<string>>(new Set());
+  const notifiedCostValues = useRef<Record<string, string>>({});
+  const dayEditStart = useRef<Record<string, number>>({});
 
   function showToast(msg: string) {
     setToast(msg);
@@ -142,15 +143,25 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
   }
 
   // Powiadom o dodanym koszcie po wyjściu z pola kwoty (z kategorią i VAT)
-  function pushKoszt(nazwa: string, koszt: number, wpis?: KosztVatInfo) {
+  function pushKoszt(id: string, nazwa: string, koszt: number, wpis?: KosztVatInfo) {
     if (koszt <= 0) return;
+    const key = `${koszt}|${nazwa}|${wpis?.kategoria ?? ""}|${wpis?.vatRate ?? ""}|${wpis?.hasInvoice ?? ""}`;
+    if (notifiedCostValues.current[id] === key) return;
+    notifiedCostValues.current[id] = key;
+
     const kategoria = kategoriaLabel(wpis?.kategoria);
     const vat = vatRateLabel(wpis?.vatRate ?? ustawienia.defaultCostVatRate);
-    sendPushEvent({
-      token,
-      author: userName,
-      eventType: "koszt",
-      body: `${userName} dodał koszt: ${nazwa} ${formatZlCaly(koszt)} — kategoria: ${kategoria}, VAT ${vat}`,
+    const rozliczany = wpis?.hasInvoice ?? ustawienia.defaultCostHasInvoice;
+    logChange({
+      workspaceId: token,
+      userName,
+      action: "koszt_dodany",
+      entity: "cost",
+      entityId: id,
+      newValue: { nazwa, koszt, kategoria, vat, rozliczanyPodatkowo: rozliczany },
+      description: `${userName} dodał koszt: ${nazwa} ${formatZlCaly(koszt)} — ${kategoria}, VAT ${vat}${
+        rozliczany ? "" : ", bez odliczeń"
+      }`,
       url: `/admin?miesiac=${miesiac}&zakladka=koszty`,
     });
   }
@@ -483,6 +494,32 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
     [onUpdate]
   );
 
+  function startDayEdit(iso: string, field: "kolka" | "szkolenie", value: number) {
+    dayEditStart.current[`${iso}:${field}`] = parseNum(value);
+  }
+
+  function finishDayEdit(iso: string, field: "kolka" | "szkolenie", value: number) {
+    const key = `${iso}:${field}`;
+    const oldValue = dayEditStart.current[key] ?? 0;
+    const newValue = parseNum(value);
+    delete dayEditStart.current[key];
+    if (oldValue === newValue) return;
+
+    const dzienTxt = `${iso.slice(8)}.${String(miesiac).padStart(2, "0")}`;
+    const pole = field === "kolka" ? "kółka" : "szkolenie";
+    logChange({
+      workspaceId: token,
+      userName,
+      action: "wyplata_zmieniona",
+      entity: "payroll_day",
+      entityId: iso,
+      oldValue: { [field]: oldValue },
+      newValue: { [field]: newValue },
+      description: `${userName} zaktualizował wypłatę kierowcy: ${dzienTxt} ${pole} ${oldValue} → ${newValue}`,
+      url: `/admin?miesiac=${miesiac}&zakladka=koszty`,
+    });
+  }
+
   // ─── TANKOWANIE ─────────────────────────────────────────────────────────────
 
   function addTankowanie() {
@@ -709,6 +746,8 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
                   <NumInput
                     value={dzien.kolka || ""}
                     onChange={(v) => setKolka(iso, v)}
+                    onFocus={() => startDayEdit(iso, "kolka", dzien.kolka)}
+                    onBlur={(e) => finishDayEdit(iso, "kolka", parseNum(e.currentTarget.value))}
                     placeholder="0"
                     className="!py-1.5 !px-2 !text-sm !text-center !w-16"
                   />
@@ -718,6 +757,8 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
                     <NumInput
                       value={dzien.szkolenie || ""}
                       onChange={(v) => setSzkolenie(iso, v)}
+                      onFocus={() => startDayEdit(iso, "szkolenie", dzien.szkolenie)}
+                      onBlur={(e) => finishDayEdit(iso, "szkolenie", parseNum(e.currentTarget.value))}
                       placeholder="0"
                       className="!py-1.5 !px-2 !text-sm !text-center !w-16"
                     />
@@ -779,7 +820,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
                   <NumInput
                     value={t.koszt}
                     onChange={(v) => updateTankowanie(t.id, { koszt: v })}
-                    onBlur={() => pushKoszt("paliwo", t.koszt, { ...t, kategoria: t.kategoria ?? "paliwo_adblue" })}
+                    onBlur={() => pushKoszt(t.id, "paliwo", t.koszt, { ...t, kategoria: t.kategoria ?? "paliwo_adblue" })}
                     placeholder="0"
                   />
                 </div>
@@ -857,7 +898,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
                   <NumInput
                     value={k.koszt}
                     onChange={(v) => updateInny(k.id, { koszt: v })}
-                    onBlur={() => pushKoszt(k.nazwa || "inny", k.koszt, k)}
+                    onBlur={() => pushKoszt(k.id, k.nazwa || "inny", k.koszt, k)}
                     placeholder="0"
                   />
                 </div>

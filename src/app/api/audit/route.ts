@@ -67,16 +67,29 @@ export async function POST(req: NextRequest) {
       throw new Error(`audit_log: ${auditError.message}`);
     }
 
-    const { error: notificationError } = await admin.from("notifications_log").insert({
+    const notificationPayload = {
       workspace_id: workspaceId,
       user_name: userName,
       action,
       description,
       url,
       read: false,
-    });
+    };
+    const { error: notificationError } = await admin.from("notifications_log").insert(notificationPayload);
     if (notificationError) {
-      throw new Error(`notifications_log: ${notificationError.message}`);
+      if (notificationError.message.toLowerCase().includes("url")) {
+        const payloadWithoutUrl = {
+          workspace_id: workspaceId,
+          user_name: userName,
+          action,
+          description,
+          read: false,
+        };
+        const { error: fallbackError } = await admin.from("notifications_log").insert(payloadWithoutUrl);
+        if (fallbackError) throw new Error(`notifications_log: ${fallbackError.message}`);
+      } else {
+        throw new Error(`notifications_log: ${notificationError.message}`);
+      }
     }
 
     // Push do subskrybentów workspace (poza autorem)

@@ -5,7 +5,7 @@
 import { useRef, useState, useMemo } from "react";
 import { DaneMiesiaca, FakturaWeek, InvoiceStatus, MiesiącId, PDFImportData } from "@/lib/types";
 import { logChange } from "@/lib/audit";
-import { obliczPrzychod, formatZlCaly, formatZl } from "@/lib/business-logic";
+import { obliczPrzychod, formatZlCaly, formatZl, parseNum } from "@/lib/business-logic";
 import {
   getWeeksOfMonth,
   findBestWeekForRange,
@@ -18,7 +18,6 @@ import { NumInput } from "../ui/NumInput";
 import { CardTitle } from "../ui/Card";
 import { IconPaperclip, IconCheck, IconX, IconLoader } from "../ui/icons";
 import { ImportModal, ImportModalProps } from "../ImportModal";
-import { sendPushEvent } from "@/lib/push";
 
 interface Props {
   miesiac: MiesiącId;
@@ -82,6 +81,7 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalState | null>(null);
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const notifiedInvoiceValues = useRef<Record<string, number>>({});
 
   // ─── WGRYWANIE PDF ─────────────────────────────────────────────────────────
 
@@ -206,12 +206,20 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
       return { ...prev, faktury: newFaktury };
     });
 
-    // Powiadom pozostałych użytkowników workspace
-    sendPushEvent({
-      token,
-      author: userName,
-      eventType: "faktura",
-      body: `${userName} dodał fakturę: ${formatZlCaly(filtered.brutto)} (tydzień ${targetIdx + 1})`,
+    logChange({
+      workspaceId: token,
+      userName,
+      action: "faktura_zapisana",
+      entity: "invoice",
+      entityId: faktury[targetIdx]?.id,
+      newValue: {
+        amount: filtered.brutto,
+        source: "pdf",
+        invoiceNumber,
+        fileName,
+        week: targetIdx + 1,
+      },
+      description: `${userName} dodał fakturę z PDF: ${formatZlCaly(filtered.brutto)} (tydzień ${targetIdx + 1})`,
       url: `/admin?miesiac=${miesiac}&zakladka=zarobek`,
     });
 
@@ -288,6 +296,24 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
       const newFaktury = [...faktury];
       newFaktury[idx] = { ...newFaktury[idx], kwota };
       return { ...prev, faktury: newFaktury };
+    });
+  }
+
+  function notifyManualInvoice(idx: number, kwota: number) {
+    if (kwota <= 0) return;
+    const faktura = faktury[idx];
+    if (!faktura || notifiedInvoiceValues.current[faktura.id] === kwota) return;
+    notifiedInvoiceValues.current[faktura.id] = kwota;
+
+    logChange({
+      workspaceId: token,
+      userName,
+      action: "faktura_zapisana",
+      entity: "invoice",
+      entityId: faktura.id,
+      newValue: { amount: kwota, source: "manual", week: idx + 1 },
+      description: `${userName} dodał fakturę: ${formatZlCaly(kwota)} (tydzień ${idx + 1})`,
+      url: `/admin?miesiac=${miesiac}&zakladka=zarobek`,
     });
   }
 
@@ -383,17 +409,7 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
                   <NumInput
                     value={faktura.kwota}
                     onChange={(val) => setKwota(idx, val)}
-                    onBlur={() => {
-                      // Powiadom o ręcznie wpisanej fakturze (po wyjściu z pola)
-                      if (faktura.kwota > 0) {
-                        sendPushEvent({
-                          token,
-                          author: userName,
-                          eventType: "faktura",
-                          body: `${userName} dodał fakturę: ${formatZlCaly(faktura.kwota)} (tydzień ${idx + 1})`,
-                        });
-                      }
-                    }}
+                    onBlur={(e) => notifyManualInvoice(idx, parseNum(e.currentTarget.value))}
                     placeholder="0"
                     className="!text-xl !py-3 !pr-12"
                   />
