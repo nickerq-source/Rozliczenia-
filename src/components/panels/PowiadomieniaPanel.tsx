@@ -167,9 +167,23 @@ export function PowiadomieniaPanel({ token, userName }: Props) {
   }
 
   async function sendTestPush() {
-    if (testBusy) return;
+    if (testBusy || busy) return;
     setTestBusy(true);
     try {
+      if (!supported) {
+        alert("Powiadomienia push są niedostępne w tej przeglądarce.");
+        return;
+      }
+
+      if (!active) {
+        const ok = await subscribePush();
+        setActive(ok);
+        if (!ok) {
+          alert("Nie udało się włączyć powiadomień — sprawdź zgodę w przeglądarce.");
+          return;
+        }
+      }
+
       const res = await fetch("/api/audit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -210,23 +224,18 @@ export function PowiadomieniaPanel({ token, userName }: Props) {
 
   return (
     <Card>
-      {/* Nagłówek — klik rozwija/zwija; pokazuje licznik nieprzeczytanych */}
-      <div className="flex items-center gap-2">
+      {/* Nagłówek + osobny pasek kontrolek, żeby na mobile nic nie nachodziło. */}
+      <div className="space-y-2">
         <button
           type="button"
           onClick={() => setRozwiniete((v) => !v)}
-          className="flex items-center gap-2 flex-1 min-w-0 text-left"
+          className="flex w-full items-center gap-2 text-left"
           title={rozwiniete ? "Zwiń" : "Rozwiń"}
         >
           <IconBell size={18} className="text-amber-brand shrink-0" />
-          <h3 className="text-sm font-bold uppercase tracking-wider text-dim">
+          <h3 className="min-w-0 flex-1 truncate text-sm font-bold uppercase tracking-wider text-dim">
             Powiadomienia
           </h3>
-          {unread > 0 && (
-            <span className="shrink-0 min-w-[18px] h-[18px] px-1 rounded-full bg-amber-brand text-amber-ink text-[11px] font-bold flex items-center justify-center tabular-nums">
-              {unread}
-            </span>
-          )}
           <IconChevronDown
             size={16}
             className={cn(
@@ -236,44 +245,10 @@ export function PowiadomieniaPanel({ token, userName }: Props) {
           />
         </button>
 
-        {supported && active && (
-          <button
-            type="button"
-            onClick={sendTestPush}
-            disabled={testBusy}
-            className="shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-full border border-amber-brand/50 text-amber-brand text-[11px] font-bold hover:bg-amber-brand/10 disabled:opacity-50"
-            title="Wyślij testowe powiadomienie na to urządzenie"
-          >
-            <IconBell size={12} />
-            {testBusy ? "..." : "Test"}
-          </button>
-        )}
-
-        {supported && (
-          <button
-            onClick={toggle}
-            disabled={busy}
-            title={active ? "Wyłącz powiadomienia" : "Włącz powiadomienia"}
-            className={cn(
-              "shrink-0 relative w-11 h-6 rounded-full transition-colors duration-150 disabled:opacity-50",
-              active ? "bg-amber-brand" : "bg-line"
-            )}
-          >
-            <span
-              className={cn(
-                "absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all duration-150",
-                active ? "left-[22px]" : "left-0.5"
-              )}
-            />
-          </button>
-        )}
-      </div>
-
-      {!rozwiniete && (
-        <div className="mt-2 flex items-center justify-between gap-2 text-[11px]">
+        <div className="flex flex-wrap items-center gap-2 text-[11px]">
           <span
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-full px-2 py-1",
+              "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1",
               loadError
                 ? "bg-red-soft text-red-200"
                 : active
@@ -284,7 +259,7 @@ export function PowiadomieniaPanel({ token, userName }: Props) {
             {loadError ? (
               <>
                 <IconAlertTriangle size={12} />
-                Błąd panelu
+                Błąd
               </>
             ) : active ? (
               <>
@@ -294,19 +269,48 @@ export function PowiadomieniaPanel({ token, userName }: Props) {
             ) : (
               <>
                 <IconBellOff size={12} />
-                Push wyłączony
+                Push wył.
               </>
             )}
           </span>
-          <button
-            type="button"
-            onClick={() => setRozwiniete(true)}
-            className="text-dim/70 hover:text-amber-brand transition-colors"
-          >
-            {history.length > 0 ? `${history.length} w historii` : "Rozwiń panel"}
-          </button>
+
+          <span className="inline-flex items-center gap-1 rounded-full bg-surface2 px-2.5 py-1 text-dim tabular-nums">
+            {unread > 0 ? `${unread} nowych` : `${history.length} w historii`}
+          </span>
+
+          {supported && (
+            <button
+              type="button"
+              onClick={sendTestPush}
+              disabled={testBusy || busy}
+              className="inline-flex items-center gap-1 rounded-full border border-amber-brand/50 px-2.5 py-1 text-amber-brand font-bold hover:bg-amber-brand/10 disabled:opacity-50"
+              title="Wyślij testowe powiadomienie na to urządzenie"
+            >
+              <IconBell size={12} />
+              {testBusy ? "..." : "Test push"}
+            </button>
+          )}
+
+          {supported && (
+            <button
+              onClick={toggle}
+              disabled={busy}
+              title={active ? "Wyłącz powiadomienia" : "Włącz powiadomienia"}
+              className={cn(
+                "ml-auto shrink-0 relative w-11 h-6 rounded-full transition-colors duration-150 disabled:opacity-50",
+                active ? "bg-amber-brand" : "bg-line"
+              )}
+            >
+              <span
+                className={cn(
+                  "absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all duration-150",
+                  active ? "left-[22px]" : "left-0.5"
+                )}
+              />
+            </button>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Podgląd najnowszego, gdy zwinięte i jest co pokazać */}
       {!rozwiniete && latest && (
@@ -343,15 +347,6 @@ export function PowiadomieniaPanel({ token, userName }: Props) {
                 <IconCheck size={13} />
                 Aktywne na tym urządzeniu
               </span>
-              <button
-                type="button"
-                onClick={sendTestPush}
-                disabled={testBusy}
-                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full border border-amber-brand/50 text-amber-brand text-xs font-bold hover:bg-amber-brand/10 disabled:opacity-50"
-              >
-                <IconBell size={13} />
-                {testBusy ? "Wysyłam…" : "Test push"}
-              </button>
             </div>
           ) : (
             <p className="text-xs text-dim mb-3">
