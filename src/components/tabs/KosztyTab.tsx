@@ -189,17 +189,21 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
           opisKat = `${kategoriaLabel(patch.kategoria)} + VAT (AI, confidence ${Number(w.confidence).toFixed(2)})`;
         }
       } else {
-        // Brak klucza / błąd → reguła nadaje kategorię + domyślny VAT kategorii
+        // Brak klucza / błąd → reguła nadaje kategorię + VAT produktu z endpointu
+        // (nie domyślne 23% kategorii, bo np. pieczywo/woda powinny mieć 5%).
         const kategoria = w.category as KategoriaKosztu;
         Object.assign(patch, {
           kategoria,
           kategoriaZrodlo: "rule" as const,
           kategoriaConfidence: undefined,
           kategoriaPotwierdzona: undefined,
+          vatRate: w.vat_rate,
+          vatDeductible: w.vat_deductible,
+          vatDeductionPercent: w.vat_deduction_percent,
+          amountMode: w.amount_mode,
           vatZrodlo: "rule" as const,
-          ...domyslnyVatKategorii(kategoria, ustawienia),
         });
-        opisKat = `${kategoriaLabel(kategoria)} (reguła)`;
+        opisKat = `${kategoriaLabel(kategoria)} (reguła) + VAT ${w.vat_rate}`;
       }
 
       if (typ === "tankowanie") updateTankowanie(id, patch);
@@ -823,6 +827,8 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
                   zmienKategorie(k.id, k.nazwa || "inny", k.kategoria, nowa, "inne")
                 }
                 onZatwierdzAI={() => zatwierdzAI(k.id, k.nazwa || "inny", "inne")}
+                onAuto={() => autoKategoryzuj(k.id, k.nazwa, k.koszt, k.data, "inne", true)}
+                autoBusy={autoBusyId === k.id}
               />
 
               {rozwiniete[k.id] && (

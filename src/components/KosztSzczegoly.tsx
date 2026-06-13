@@ -45,10 +45,14 @@ export function KategoriaBadge({
   wpis,
   onZmienKategorie,
   onZatwierdzAI,
+  onAuto,
+  autoBusy,
 }: {
   wpis: KosztVatInfo;
   onZmienKategorie: (k: KategoriaKosztu) => void;
   onZatwierdzAI?: () => void;
+  onAuto?: () => void;
+  autoBusy?: boolean;
 }) {
   const kategoria = wpis.kategoria ?? "inne";
   const zAI = wpis.kategoriaZrodlo === "ai" && !wpis.kategoriaPotwierdzona;
@@ -67,6 +71,19 @@ export function KategoriaBadge({
           <option key={k.id} value={k.id}>{k.label}</option>
         ))}
       </select>
+
+      {onAuto && (
+        <button
+          type="button"
+          onClick={onAuto}
+          disabled={autoBusy}
+          className="inline-flex items-center gap-1 px-3 py-1.5 min-h-[28px] rounded-full bg-amber-brand text-amber-ink text-xs font-extrabold shadow-[0_0_0_1px_rgba(245,165,36,0.35)] hover:bg-[#e09420] disabled:opacity-50 transition-colors"
+          title="Automatycznie dobierz kategorię i VAT"
+        >
+          {autoBusy ? <IconLoader size={11} /> : "↻"}
+          Auto VAT
+        </button>
+      )}
 
       {sprawdzVat && (
         <span

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { getSessionProfile } from "@/lib/supabase-server";
-import { kategoryzujLokalnie } from "@/lib/categorize";
+import { dobierzVatLokalnie, kategoryzujLokalnie } from "@/lib/categorize";
 import { KategoriaKosztu, VatRate } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -23,7 +23,6 @@ const KATEGORIE: KategoriaKosztu[] = [
   "ksiegowosc", "ubezpieczenie", "telefon_aplikacje", "internet",
   "wyposazenie", "art_spozywcze", "inne",
 ];
-const STAWKI: (number | string)[] = [0, 0.05, 0.08, 0.23, "zw", "np"];
 const PROCENTY = [0, 50, 100];
 
 interface WynikKategoryzacji {
@@ -46,13 +45,24 @@ const FALLBACK: WynikKategoryzacji = {
   source: "fallback",
 };
 
-function stawkaToVatRate(raw: number | string): VatRate {
-  if (raw === "zw" || raw === "np") return raw;
-  const n = typeof raw === "number" ? raw : parseFloat(String(raw));
-  if (n === 0) return "0";
-  if (n === 0.05) return "0.05";
-  if (n === 0.08) return "0.08";
-  return "0.23";
+function stawkaToVatRate(raw: unknown): VatRate | null {
+  if (typeof raw === "string") {
+    const txt = raw.trim().toLowerCase().replace(",", ".").replace(/\s/g, "");
+    if (txt === "zw" || txt === "zw." || txt.includes("zwoln")) return "zw";
+    if (txt === "np" || txt === "np." || txt.includes("niepodlega")) return "np";
+    const bezProcentu = txt.endsWith("%") ? txt.slice(0, -1) : txt;
+    const n = Number(bezProcentu);
+    if (!Number.isFinite(n)) return null;
+    return stawkaToVatRate(n);
+  }
+
+  if (typeof raw !== "number" || !Number.isFinite(raw)) return null;
+  const n = raw > 1 ? raw / 100 : raw;
+  if (Math.abs(n - 0) < 0.0001) return "0";
+  if (Math.abs(n - 0.05) < 0.0001) return "0.05";
+  if (Math.abs(n - 0.08) < 0.0001) return "0.08";
+  if (Math.abs(n - 0.23) < 0.0001) return "0.23";
+  return null;
 }
 
 /** Twarda walidacja odpowiedzi AI — cokolwiek niepoprawnego → null (potem fallback) */
@@ -64,10 +74,8 @@ function walidujOdpowiedz(raw: unknown): WynikKategoryzacji | null {
   if (typeof category !== "string" || !KATEGORIE.includes(category as KategoriaKosztu)) return null;
 
   const vatRaw = o.vat_rate;
-  const stawkaOk =
-    (typeof vatRaw === "number" && STAWKI.includes(vatRaw)) ||
-    (typeof vatRaw === "string" && (vatRaw === "zw" || vatRaw === "np"));
-  if (!stawkaOk) return null;
+  const vatRate = stawkaToVatRate(vatRaw);
+  if (!vatRate) return null;
 
   if (typeof o.vat_deductible !== "boolean") return null;
 
@@ -82,7 +90,7 @@ function walidujOdpowiedz(raw: unknown): WynikKategoryzacji | null {
 
   return {
     category: category as KategoriaKosztu,
-    vat_rate: stawkaToVatRate(vatRaw as number | string),
+    vat_rate: vatRate,
     vat_deductible: o.vat_deductible,
     vat_deduction_percent: percent,
     amount_mode: mode,
@@ -141,9 +149,17 @@ export async function POST(req: NextRequest) {
   // Reguła keyword (offline-zapas, gdy AI niedostępne lub odpowie błędnie)
   const zReguly = () => {
     const k = kategoryzujLokalnie(name);
-    return k
-      ? { ...FALLBACK, category: k, confidence: 1, source: "rule" as const }
-      : FALLBACK;
+    if (!k) return FALLBACK;
+    const vat = dobierzVatLokalnie(name, k);
+    return {
+      ...FALLBACK,
+      category: k,
+      vat_rate: vat.vatRate,
+      vat_deductible: vat.vatDeductible,
+      vat_deduction_percent: vat.vatDeductionPercent,
+      confidence: 1,
+      source: "rule" as const,
+    };
   };
 
   // 1. AI dobiera kategorię ORAZ stawkę VAT dla KAŻDEGO kosztu (gdy mamy klucz).

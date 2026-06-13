@@ -2,7 +2,7 @@
 // Kolejność sekcji = priorytet dopasowania (pierwsza wygrana reguła).
 // Brak dopasowania → null (wtedy AI fallback przez /api/categorize-cost).
 
-import { KategoriaKosztu } from "./types";
+import { KategoriaKosztu, VatRate } from "./types";
 
 // Specyficzne frazy przed ogólnymi: "płyn hamulcowy" (czesci) musi wygrać,
 // zanim ogólniejsze słowa trafią w inną kategorię.
@@ -102,4 +102,74 @@ export function kategoryzujLokalnie(nazwa: string): KategoriaKosztu | null {
     }
   }
   return null;
+}
+
+export interface LokalnyVat {
+  vatRate: VatRate;
+  vatDeductible: boolean;
+  vatDeductionPercent: number;
+}
+
+const VAT_RULES: { vatRate: VatRate; slowa: string[]; vatDeductible?: boolean }[] = [
+  {
+    vatRate: "0.05",
+    slowa: [
+      "chleb", "pieczywo", "bułka", "bulka", "bułki", "bulki", "mleko",
+      "nabiał", "nabial", "jogurt", "ser", "masło", "maslo", "mięso",
+      "mieso", "wędlina", "wedlina", "owoce", "warzywa", "woda", "sok",
+      "soki", "książka", "ksiazka", "ebook", "e-book",
+    ],
+  },
+  {
+    vatRate: "0.08",
+    slowa: [
+      "catering", "gastronomia", "bar", "restauracja", "obiad", "danie gotowe",
+      "kanapka", "kanapki", "nocleg", "hotel", "pensjonat",
+    ],
+  },
+  {
+    vatRate: "zw",
+    vatDeductible: false,
+    slowa: ["ubezpieczenie", "polisa", "oc", "ac", "nnw"],
+  },
+  {
+    vatRate: "np",
+    vatDeductible: false,
+    slowa: [
+      "urząd", "urzad", "skarbówka", "skarbowka", "podatek", "viatoll",
+      "e-toll", "etoll", "opłata drogowa", "oplata drogowa", "opłata urzędowa",
+      "oplata urzedowa",
+    ],
+  },
+];
+
+/**
+ * Awaryjny dobór VAT po nazwie produktu/usługi. AI jest dokładniejsze, ale ta
+ * funkcja pilnuje oczywistych stawek, gdy API nie odpowie albo nie ma klucza.
+ */
+export function dobierzVatLokalnie(nazwa: string, kategoria?: KategoriaKosztu | null): LokalnyVat {
+  const n = (nazwa ?? "").toLowerCase().trim();
+
+  for (const r of VAT_RULES) {
+    if (r.slowa.some((s) => n.includes(s))) {
+      const odliczany = r.vatDeductible ?? true;
+      return {
+        vatRate: r.vatRate,
+        vatDeductible: odliczany,
+        vatDeductionPercent: odliczany ? 100 : 0,
+      };
+    }
+  }
+
+  if (kategoria === "ubezpieczenie") {
+    return { vatRate: "zw", vatDeductible: false, vatDeductionPercent: 0 };
+  }
+  if (kategoria === "oplaty") {
+    return { vatRate: "np", vatDeductible: false, vatDeductionPercent: 0 };
+  }
+  if (kategoria === "art_spozywcze") {
+    return { vatRate: "0.05", vatDeductible: true, vatDeductionPercent: 100 };
+  }
+
+  return { vatRate: "0.23", vatDeductible: true, vatDeductionPercent: 100 };
 }

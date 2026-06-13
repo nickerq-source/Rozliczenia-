@@ -84,6 +84,8 @@ export function domyslnyVatKategorii(
       return { vatRate: "zw", vatDeductible: false, vatDeductionPercent: 0 };
     case "oplaty":
       return { vatRate: "np", vatDeductible: false, vatDeductionPercent: 0 };
+    case "art_spozywcze":
+      return { vatRate: "0.05", vatDeductible: true, vatDeductionPercent: 100 };
     default:
       return { vatRate: "0.23", vatDeductible: true, vatDeductionPercent: 100 };
   }
