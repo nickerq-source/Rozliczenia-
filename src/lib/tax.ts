@@ -37,13 +37,17 @@ export const DOMYSLNE_USTAWIENIA: UstawieniaPodatkowe = {
   linearTaxRate: 0.19,
   healthRateSkala: 0.09,
   healthRateLiniowy: 0.049,
-  healthMinMonthly: 0,
+  healthMinMonthly: 432.54,
   healthMinEnabled: true,
 };
 
 /** Ustawienia z danych workspace + domyślne dla brakujących pól */
 export function getUstawienia(data: WorkspaceData): UstawieniaPodatkowe {
-  return { ...DOMYSLNE_USTAWIENIA, ...(data.ustawienia ?? {}) };
+  const ustawienia = { ...DOMYSLNE_USTAWIENIA, ...(data.ustawienia ?? {}) };
+  if (ustawienia.healthMinEnabled && ustawienia.healthMinMonthly <= 0) {
+    ustawienia.healthMinMonthly = DOMYSLNE_USTAWIENIA.healthMinMonthly;
+  }
+  return ustawienia;
 }
 
 // ─── KATEGORIE ───────────────────────────────────────────────────────────────

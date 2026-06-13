@@ -89,5 +89,5 @@ ALTER TABLE settings
   -- Zdrowotna (sekcja 12)
   ADD COLUMN IF NOT EXISTS health_rate_skala DECIMAL(4,3) DEFAULT 0.090,
   ADD COLUMN IF NOT EXISTS health_rate_liniowy DECIMAL(4,3) DEFAULT 0.049,
-  ADD COLUMN IF NOT EXISTS health_min_monthly DECIMAL(12,2) DEFAULT 0.00,
+  ADD COLUMN IF NOT EXISTS health_min_monthly DECIMAL(12,2) DEFAULT 432.54,
   ADD COLUMN IF NOT EXISTS health_min_enabled BOOLEAN DEFAULT TRUE;

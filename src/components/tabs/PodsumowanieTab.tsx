@@ -148,7 +148,7 @@ export function PodsumowanieTab({
             <IconMoneybag size={26} />
           </span>
           <span className="text-sm font-bold text-white uppercase tracking-wide flex-1">
-            Zysk na czysto
+            Zysk przed podatkami
           </span>
           <span
             className={cn(
@@ -198,7 +198,7 @@ export function PodsumowanieTab({
       )}
 
       {/* Podatki — szacunek (tylko admin) */}
-      {isAdmin && podatki && <PodatkiCard p={podatki} taxForm={taxForm} />}
+      {isAdmin && podatki && <PodatkiCard p={podatki} taxForm={taxForm} wynik={wynik} />}
 
       {/* Notatki + Powiadomienia: 2 kolumny na desktop, stack na mobile */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
