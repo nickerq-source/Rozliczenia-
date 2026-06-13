@@ -2,7 +2,7 @@
 
 // Szczegóły faktury/VAT kosztu: badge kategorii (select), ostrzeżenia,
 // rozwijany panel z polami faktury, trybem netto/brutto, stawką VAT,
-// odliczeniem oraz wyliczonym rozbiciem (netto / VAT / do odliczenia / koszt PIT).
+// odliczeniem oraz wyliczonym rozbiciem (netto / VAT / do odliczenia / koszt podatkowy).
 
 import {
   KategoriaKosztu,
@@ -245,7 +245,7 @@ export function KosztSzczegolyPanel({
         <span className="text-dim">VAT<br /><b className="text-ink">{formatZl(r.vat)}</b></span>
         <span className="text-dim">do odliczenia<br /><b className="text-green-300">{formatZl(r.vatDoOdliczenia)}</b></span>
         <span className="text-dim">brutto<br /><b className="text-ink">{formatZl(r.brutto)}</b></span>
-        <span className="text-dim">koszt PIT<br /><b className="text-amber-brand">{formatZl(r.kosztPit)}</b></span>
+        <span className="text-dim">koszt podatkowy<br /><b className="text-amber-brand">{formatZl(r.kosztPit)}</b></span>
       </div>
 
       {/* Źródła */}

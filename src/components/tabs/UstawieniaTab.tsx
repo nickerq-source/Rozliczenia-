@@ -1,6 +1,6 @@
 "use client";
 
-// Zakładka Ustawienia (admin) — koszty/VAT, paliwo, sprzedaż, PIT, zdrowotna.
+// Zakładka Ustawienia (admin) — koszty/VAT, paliwo, sprzedaż, podatek dochodowy, zdrowotna.
 // Każda zmiana trafia do audit logu.
 
 import { UstawieniaPodatkowe } from "@/lib/types";
@@ -137,7 +137,7 @@ export function UstawieniaTab({ ustawienia: u, onUpdate, token, userName }: Prop
 
       {/* ── PODATEK DOCHODOWY ────────────────────────────────────────────── */}
       <Card>
-        <CardTitle>Podatek dochodowy (PIT)</CardTitle>
+        <CardTitle>Podatek dochodowy</CardTitle>
         <div className={rowCls}>
           <span className={labelCls}>Forma opodatkowania</span>
           <div className="flex gap-1">

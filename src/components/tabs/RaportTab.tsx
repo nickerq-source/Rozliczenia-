@@ -258,22 +258,22 @@ export function RaportTab({ data }: Props) {
           value={Math.abs(podatkiSuma.vatDoZaplaty)}
         />
 
-        <p className="text-xs font-bold uppercase tracking-wider text-amber-brand mb-1 mt-4">PIT</p>
+        <p className="text-xs font-bold uppercase tracking-wider text-amber-brand mb-1 mt-4">Podatek dochodowy</p>
         <Row label="Przychód netto" value={podatkiSuma.sprzedazNetto} />
         <Row label="Koszty podatkowe" value={podatkiSuma.kosztyPodatkowe} />
         <Row
           label={podatkiSuma.dochodYtd >= 0 ? "Dochód narastająco" : "Strata narastająco"}
           value={Math.abs(podatkiSuma.dochodYtd)}
         />
-        <Row label="PIT narastająco" value={podatkiSuma.pitYtd} />
-        <Row label="Suma zaliczek PIT" value={podatkiSuma.pit} />
+        <Row label="Podatek narastająco" value={podatkiSuma.pitYtd} />
+        <Row label="Suma zaliczek podatku" value={podatkiSuma.pit} />
 
         <p className="text-xs font-bold uppercase tracking-wider text-amber-brand mb-1 mt-4">Zdrowotna</p>
         <Row label="Suma składek" value={podatkiSuma.zdrowotna} />
 
         <p className="text-xs font-bold uppercase tracking-wider text-amber-brand mb-1 mt-4">Zysk</p>
         <Row label="Przed podatkami" value={raport.zysk} />
-        <Row label="Po PIT i zdrowotnej" value={podatkiSuma.zyskPo} />
+        <Row label="Po dochodowym i zdrowotnej" value={podatkiSuma.zyskPo} />
         <Row label="Cashflow po podatkach" value={podatkiSuma.cashflow} />
 
         {/* Tabela miesięczna */}
@@ -285,7 +285,7 @@ export function RaportTab({ data }: Props) {
                   <th className="py-1 pr-2 font-medium">Mies.</th>
                   <th className="py-1 pr-2 font-medium text-right">Dochód</th>
                   <th className="py-1 pr-2 font-medium text-right">VAT</th>
-                  <th className="py-1 pr-2 font-medium text-right">PIT</th>
+                  <th className="py-1 pr-2 font-medium text-right">Doch.</th>
                   <th className="py-1 font-medium text-right">Zdrow.</th>
                 </tr>
               </thead>

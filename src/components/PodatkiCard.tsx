@@ -1,6 +1,6 @@
 "use client";
 
-// Karta „Na czysto" dla aktywnego miesiąca (koszty / VAT / PIT / zdrowotna / zysk).
+// Karta „Na czysto" dla aktywnego miesiąca (koszty / VAT / podatek dochodowy / zdrowotna / zysk).
 
 import { PodatkiMiesiaca } from "@/lib/tax";
 import { formatZl } from "@/lib/business-logic";
@@ -54,7 +54,7 @@ export function PodatkiCard({
         <h3 className="text-sm font-bold uppercase tracking-wider text-dim">Na czysto — podatki i koszty</h3>
       </div>
       <p className="text-[11px] text-dim/60 mb-3">
-        Szacunek pomocniczy. VAT, PIT i zdrowotna zależą od ustawień i kwalifikacji kosztów.
+        Szacunek pomocniczy. VAT, podatek dochodowy i zdrowotna zależą od ustawień i kwalifikacji kosztów.
       </p>
 
       {/* Koszty */}
@@ -76,9 +76,9 @@ export function PodatkiCard({
         <Wiersz label="VAT do zapłaty" value={p.vatDoZaplaty} klasa="text-red-300" bold />
       )}
 
-      {/* PIT */}
+      {/* Podatek dochodowy */}
       <p className="text-xs font-bold uppercase tracking-wider text-amber-brand mb-1 mt-4">
-        PIT ({taxForm === "skala" ? "skala" : "liniowy 19%"})
+        Podatek dochodowy ({taxForm === "skala" ? "skala" : "liniowy 19%"})
       </p>
       <Wiersz label="Przychód netto" value={p.przychodNetto} />
       <Wiersz
@@ -92,7 +92,7 @@ export function PodatkiCard({
         <Wiersz label="Dochód podatkowy" value={p.dochod} bold />
       )}
       <Wiersz label="Dochód narastająco (YTD)" value={p.dochodYtd} />
-      <Wiersz label="Zaliczka PIT za miesiąc" value={p.pitMiesiac} klasa="text-red-300" bold />
+      <Wiersz label="Zaliczka podatku za miesiąc" value={p.pitMiesiac} klasa="text-red-300" bold />
 
       {/* Zdrowotna */}
       <p className="text-xs font-bold uppercase tracking-wider text-amber-brand mb-1 mt-4">Zdrowotna</p>
@@ -107,7 +107,7 @@ export function PodatkiCard({
       <p className="text-xs font-bold uppercase tracking-wider text-amber-brand mb-1 mt-4">Ile zostaje</p>
       <Wiersz label="Zysk operacyjny przed podatkami" value={p.zyskPrzedPodatkami} />
       <Wiersz
-        label="Na czysto po PIT i zdrowotnej"
+        label="Na czysto po dochodowym i zdrowotnej"
         value={p.zyskPoPodatkach}
         klasa={p.zyskPoPodatkach >= 0 ? "text-green-300" : "text-red-300"}
         bold
