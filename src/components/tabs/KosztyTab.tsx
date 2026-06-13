@@ -2,7 +2,7 @@
 
 // Zakładka Koszty — sekcje: Dni kierowcy, Tankowanie, Inne koszty, Leasing
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 import {
   DaneMiesiaca,
@@ -15,6 +15,7 @@ import {
   ZgloszenieDnia,
 } from "@/lib/types";
 import { kategoriaLabel, domyslnyVatKategorii } from "@/lib/tax";
+import { kategoryzujLokalnie } from "@/lib/categorize";
 import {
   KategoriaBadge,
   KosztSzczegolyPanel,
@@ -99,6 +100,8 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
   const [rozwiniete, setRozwiniete] = useState<Record<string, boolean>>({});
   const [autoBusyId, setAutoBusyId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  // Id wpisów już objętych automatycznym backfillem (żeby nie powtarzać AI)
+  const backfillDone = useRef<Set<string>>(new Set());
 
   function showToast(msg: string) {
     setToast(msg);
@@ -152,7 +155,12 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
       const w = await res.json();
       if (!w?.category) return;
 
-      const zrodlo = w.source === "rule" ? "rule" : w.source === "ai" ? "ai" : "rule";
+      // Fallback = AI niedostępne (brak klucza / błąd). Nie zapisujemy źródła,
+      // żeby po dodaniu klucza wpis został ponownie przeanalizowany — chyba że
+      // admin wymusił ręcznie (wtedy akceptujemy 'inne' jako wynik).
+      if (w.source === "fallback" && !wymus) return;
+
+      const zrodlo = w.source === "ai" ? "ai" : "rule";
       const kategoria = w.category as KategoriaKosztu;
       // VAT: reguła → domyślne kategorii; AI → wynik AI
       const vat =
@@ -267,6 +275,69 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
       });
     }
   }
+
+  // ─── AUTO-BACKFILL KATEGORII ────────────────────────────────────────────────
+  // Istniejące koszty bez przypisanej kategorii (kategoriaZrodlo === undefined)
+  // kategoryzujemy automatycznie: reguły od ręki (jeden batch), reszta → AI w tle.
+  // Ręcznie ustawiona kategoria (manual/rule/ai) NIE jest ruszana.
+  useEffect(() => {
+    type Reg = { id: string; kategoria: KategoriaKosztu; typ: "tankowanie" | "inne" };
+    const reguly: Reg[] = [];
+    const doAI: { id: string; nazwa: string; koszt: number; data: string }[] = [];
+
+    // Wpis wymaga (re)kategoryzacji, gdy jest w 'inne' i nie nadał mu jej
+    // ani admin (manual), ani AI (ai). 'inne' ze źródłem 'rule' to ślad po
+    // fallbacku bez klucza AI — ponawiamy, aż AI nada właściwą kategorię.
+    const wymagaKat = (k: KosztVatInfo) => {
+      const kat = k.kategoria ?? "inne";
+      if (kat !== "inne") return false;
+      return k.kategoriaZrodlo !== "manual" && k.kategoriaZrodlo !== "ai";
+    };
+
+    for (const t of dane.tankowanie ?? []) {
+      if (backfillDone.current.has(t.id)) continue;
+      if (!wymagaKat(t)) continue;
+      backfillDone.current.add(t.id);
+      reguly.push({ id: t.id, kategoria: "paliwo_adblue", typ: "tankowanie" });
+    }
+    for (const k of dane.inneKoszty ?? []) {
+      if (backfillDone.current.has(k.id)) continue;
+      if (!k.nazwa?.trim() || !wymagaKat(k)) continue; // pusty lub już skategoryzowany
+      backfillDone.current.add(k.id);
+      const reg = kategoryzujLokalnie(k.nazwa);
+      if (reg) reguly.push({ id: k.id, kategoria: reg, typ: "inne" });
+      else doAI.push({ id: k.id, nazwa: k.nazwa, koszt: k.koszt, data: k.data });
+    }
+
+    // Reguły — jeden batch (natychmiast, bez sieci)
+    if (reguly.length) {
+      onUpdate((prev) => {
+        let nt = prev.tankowanie;
+        let ni = prev.inneKoszty;
+        for (const r of reguly) {
+          const patch = {
+            kategoria: r.kategoria,
+            kategoriaZrodlo: "rule" as const,
+            vatZrodlo: "rule" as const,
+            ...domyslnyVatKategorii(r.kategoria, ustawienia),
+          };
+          if (r.typ === "tankowanie") nt = nt.map((x) => (x.id === r.id ? { ...x, ...patch } : x));
+          else ni = ni.map((x) => (x.id === r.id ? { ...x, ...patch } : x));
+        }
+        return { ...prev, tankowanie: nt, inneKoszty: ni };
+      });
+    }
+
+    // Niedopasowane → AI sekwencyjnie w tle (bez klucza serwer zwróci 'inne')
+    if (doAI.length) {
+      (async () => {
+        for (const c of doAI) {
+          await autoKategoryzuj(c.id, c.nazwa, c.koszt, c.data, "inne");
+        }
+      })();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dane.tankowanie, dane.inneKoszty]);
 
   const allDays = getDniMiesiaca(miesiac);
   const { dniowki, wynagrodzenie, liczbaSobot, premia } = obliczWynagrodzenie(
