@@ -61,8 +61,10 @@ const REGULY: { kategoria: KategoriaKosztu; slowa: string[] }[] = [
     kategoria: "art_spozywcze",
     slowa: [
       "art. spożywcze", "artykuły spożywcze", "artykuly spozywcze", "spożywcze",
-      "spozywcze", "jedzenie", "woda", "kawa", "herbata", "napoje", "cukier",
-      "mleko", "pieczywo", "bułki", "bulki", "kanapki", "catering", "prowiant",
+      "spozywcze", "jedzenie", "woda", "kawa", "herbata", "napój", "napoj",
+      "napoje", "cola", "pepsi", "fanta", "sprite", "oranżada", "oranzada",
+      "energetyk", "red bull", "cukier", "mleko", "pieczywo", "bułki",
+      "bulki", "kanapki", "catering", "prowiant",
     ],
   },
   {
@@ -111,6 +113,15 @@ export interface LokalnyVat {
 }
 
 const VAT_RULES: { vatRate: VatRate; slowa: string[]; vatDeductible?: boolean }[] = [
+  {
+    vatRate: "0.23",
+    slowa: [
+      "napój gazowany", "napoj gazowany", "napoje gazowane", "napój słodzony",
+      "napoj slodzony", "napoje słodzone", "napoje slodzone", "cola", "pepsi",
+      "fanta", "sprite", "oranżada", "oranzada", "energetyk", "napój energetyczny",
+      "napoj energetyczny", "red bull",
+    ],
+  },
   {
     vatRate: "0.05",
     slowa: [

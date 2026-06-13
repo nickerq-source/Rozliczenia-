@@ -111,7 +111,8 @@ Dozwolone stawki VAT: 0, 0.05, 0.08, 0.23, "zw", "np".
 
 POLSKIE STAWKI VAT — dobieraj wg rzeczywistego towaru/usługi, NIE domyślaj 23% gdy produkt ma niższą:
 - 0.23 (podstawowa): części, oleje, opony, narzędzia, elektronika, paliwo, AdBlue,
-  myjnia, parking, serwis/naprawa, telefon, internet, odzież robocza, większość usług.
+  myjnia, parking, serwis/naprawa, telefon, internet, odzież robocza, większość usług,
+  napoje gazowane/słodzone/energetyczne (cola, oranżada, energetyk itp.).
 - 0.08: usługi gastronomiczne i catering, hotele/noclegi, transport pasażerski,
   niektóre dania gotowe i napoje w gastronomii.
 - 0.05: podstawowe artykuły spożywcze (chleb, pieczywo, nabiał, mleko, mięso, owoce,
