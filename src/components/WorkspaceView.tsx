@@ -19,7 +19,7 @@ import { domyslneDaneMiesiaca } from "@/lib/business-logic";
 import { getUserName, setUserName } from "@/lib/push";
 import { logChange } from "@/lib/audit";
 import { IconLock, IconLockOpen } from "./ui/icons";
-import { POLSKIE_MIESIACE, MIESIACE_ZAKRESU } from "@/lib/dates";
+import { getWeeksOfMonth, POLSKIE_MIESIACE, MIESIACE_ZAKRESU } from "@/lib/dates";
 
 // Tło z obrazu + ciemna nakładka; karty leżą nad nakładką
 function Background() {
@@ -137,6 +137,43 @@ function FooterGraphic() {
   );
 }
 
+function buildCloseChecklist(dane: ReturnType<typeof domyslneDaneMiesiaca>, miesiac: MiesiącId) {
+  const weeks = getWeeksOfMonth(miesiac);
+  const fakturyZKwota = (dane.faktury ?? []).filter((f) => (f.kwota ?? 0) > 0).length;
+  const koszty = [...(dane.tankowanie ?? []), ...(dane.inneKoszty ?? [])];
+  const kosztyZKategoria = koszty.filter((k) => !!k.kategoria).length;
+  const kosztyZeStatusem = koszty.filter((k) => k.documentStatus || k.hasInvoice !== undefined).length;
+  const zgloszeniaOtwarte = (dane.zgloszenia ?? []).filter((z) => z.status === "zgloszony").length;
+
+  return [
+    {
+      label: "Faktury wpisane",
+      ok: fakturyZKwota > 0 && fakturyZKwota === weeks.length,
+      detail: `${fakturyZKwota}/${weeks.length}`,
+    },
+    {
+      label: "Koszty mają kategorię",
+      ok: koszty.length === 0 || kosztyZKategoria === koszty.length,
+      detail: `${kosztyZKategoria}/${koszty.length}`,
+    },
+    {
+      label: "Koszty mają status dokumentu",
+      ok: koszty.length === 0 || kosztyZeStatusem === koszty.length,
+      detail: `${kosztyZeStatusem}/${koszty.length}`,
+    },
+    {
+      label: "Wypłata oznaczona",
+      ok: dane.wyplata?.status === "wypłacone",
+      detail: dane.wyplata?.status ?? "niewypłacone",
+    },
+    {
+      label: "Zgłoszenia kierowcy rozwiązane",
+      ok: zgloszeniaOtwarte === 0,
+      detail: zgloszeniaOtwarte === 0 ? "OK" : `${zgloszeniaOtwarte} oczekuje`,
+    },
+  ];
+}
+
 interface Props {
   token: string;
   // Z profilu Supabase Auth — gdy podane, pomijamy modal pytania o imię
@@ -189,6 +226,7 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
   const ustawienia = getUstawienia(data);
   const podatki = isAdmin ? podatkiMiesiaca(data, aktywnyMiesiac) : undefined;
   const monthLocked = !!daneMiesiaca.zamkniety?.locked;
+  const closeChecklist = buildCloseChecklist(daneMiesiaca, aktywnyMiesiac);
   const lockedMonths = MIESIACE_ZAKRESU.filter(
     (m) => !!data.miesiace[m as MiesiącId]?.zamkniety?.locked
   ) as number[];
@@ -204,7 +242,11 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
     if (monthLocked) {
       if (!window.confirm(`Odblokować miesiąc ${nazwa} 2026?`)) return;
     } else {
-      if (!window.confirm(`Zamknąć miesiąc ${nazwa} 2026? Wszystkie pola staną się tylko do odczytu.`)) return;
+      const braki = closeChecklist.filter((x) => !x.ok);
+      const detail = braki.length
+        ? `\n\nDo sprawdzenia:\n${braki.map((x) => `- ${x.label}: ${x.detail}`).join("\n")}`
+        : "";
+      if (!window.confirm(`Zamknąć miesiąc ${nazwa} 2026? Wszystkie pola staną się tylko do odczytu.${detail}`)) return;
     }
     const newLocked = !monthLocked;
     updateMiesiac(aktywnyMiesiac, (prev) => ({
@@ -273,6 +315,7 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
                       isAdmin={isAdmin}
                       podatki={podatki}
                       taxForm={ustawienia.taxForm}
+                      ustawienia={ustawienia}
                     />
                   )}
                   {aktywnaZakladka === "zarobek" && (
@@ -311,15 +354,33 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
 
               {/* Zamknięcie / odblokowanie miesiąca (poza fieldsetem) */}
               {isAdmin && aktywnaZakladka !== "raport" && aktywnaZakladka !== "historia" && aktywnaZakladka !== "ustawienia" && (
-                <button
-                  onClick={toggleMonthLock}
-                  className="w-full flex items-center justify-center gap-2 py-2.5 min-h-[44px] rounded-xl border border-line text-sm text-dim hover:text-ink hover:border-dim transition-all duration-150"
-                >
-                  {monthLocked ? <IconLockOpen size={15} /> : <IconLock size={15} />}
-                  {monthLocked
-                    ? `Odblokuj miesiąc ${POLSKIE_MIESIACE[aktywnyMiesiac]}`
-                    : `Zamknij miesiąc ${POLSKIE_MIESIACE[aktywnyMiesiac]}`}
-                </button>
+                <div className="space-y-2">
+                  <div className="rounded-2xl border border-line bg-surface p-4">
+                    <p className="mb-2 text-xs font-bold uppercase tracking-wider text-dim">
+                      Checklista zamknięcia
+                    </p>
+                    <div className="space-y-1.5">
+                      {closeChecklist.map((item) => (
+                        <div key={item.label} className="flex items-center gap-2 text-xs">
+                          <span className={item.ok ? "text-green-300" : "text-amber-brand"}>
+                            {item.ok ? "✓" : "!"}
+                          </span>
+                          <span className="flex-1 text-ink">{item.label}</span>
+                          <span className="tabular-nums text-dim">{item.detail}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <button
+                    onClick={toggleMonthLock}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 min-h-[44px] rounded-xl border border-line text-sm text-dim hover:text-ink hover:border-dim transition-all duration-150"
+                  >
+                    {monthLocked ? <IconLockOpen size={15} /> : <IconLock size={15} />}
+                    {monthLocked
+                      ? `Odblokuj miesiąc ${POLSKIE_MIESIACE[aktywnyMiesiac]}`
+                      : `Zamknij miesiąc ${POLSKIE_MIESIACE[aktywnyMiesiac]}`}
+                  </button>
+                </div>
               )}
             </>
           )}

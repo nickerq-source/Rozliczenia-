@@ -6,8 +6,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 import {
   DaneMiesiaca,
+  DocumentStatus,
   KategoriaKosztu,
   KosztVatInfo,
+  KosztZalacznik,
   MiesiącId,
   UstawieniaPodatkowe,
   WpisTankowania,
@@ -48,6 +50,7 @@ import {
   IconX,
   IconCheck,
   IconAlertTriangle,
+  IconPaperclip,
 } from "../ui/icons";
 import { logChange } from "@/lib/audit";
 import { cn } from "@/lib/utils";
@@ -120,6 +123,154 @@ function RozliczeniePodatkoweButton({
       {checked ? <IconCheck size={11} /> : <IconAlertTriangle size={11} />}
       {checked ? "Rozlicz podatkowo" : "Bez odliczeń"}
     </button>
+  );
+}
+
+const STATUSY_DOKUMENTU: { id: DocumentStatus; label: string }[] = [
+  { id: "brak", label: "brak dokumentu" },
+  { id: "paragon", label: "paragon" },
+  { id: "faktura", label: "faktura" },
+];
+
+function statusDokumentu(wpis: KosztVatInfo): DocumentStatus {
+  if (wpis.documentStatus) return wpis.documentStatus;
+  return (wpis.hasInvoice ?? true) ? "faktura" : "brak";
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error ?? new Error("Nie udało się odczytać pliku"));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function imageToCompressedDataUrl(file: File): Promise<string> {
+  const raw = await readFileAsDataUrl(file);
+  if (!file.type.startsWith("image/")) return raw;
+
+  const img = new Image();
+  img.src = raw;
+  await new Promise<void>((resolve, reject) => {
+    img.onload = () => resolve();
+    img.onerror = () => reject(new Error("Nie udało się przetworzyć zdjęcia"));
+  });
+
+  const maxSide = 1400;
+  const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(img.width * scale));
+  canvas.height = Math.max(1, Math.round(img.height * scale));
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return raw;
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL("image/jpeg", 0.74);
+}
+
+async function fileToZalacznik(file: File, typ: KosztZalacznik["typ"]): Promise<KosztZalacznik> {
+  return {
+    id: uuidv4(),
+    typ,
+    nazwa: file.name,
+    mime: file.type || "image/jpeg",
+    dataUrl: await imageToCompressedDataUrl(file),
+    createdAt: new Date().toISOString(),
+  };
+}
+
+function DokumentyKosztu({
+  wpis,
+  onStatus,
+  onAdd,
+  onRemove,
+  showLicznik = false,
+}: {
+  wpis: KosztVatInfo;
+  onStatus: (status: DocumentStatus) => void;
+  onAdd: (file: File, typ: KosztZalacznik["typ"]) => void;
+  onRemove: (id: string) => void;
+  showLicznik?: boolean;
+}) {
+  const status = statusDokumentu(wpis);
+  const zalaczniki = wpis.zalaczniki ?? [];
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <select
+        value={status}
+        onChange={(e) => onStatus(e.target.value as DocumentStatus)}
+        title="Status dokumentu kosztu"
+        className={cn(
+          "rounded-full border px-2.5 py-1 text-[10px] font-bold",
+          status === "brak"
+            ? "border-red-500/45 bg-red-soft text-red-200"
+            : "border-green-500/45 bg-green-soft text-green-300"
+        )}
+      >
+        {STATUSY_DOKUMENTU.map((s) => (
+          <option key={s.id} value={s.id}>{s.label}</option>
+        ))}
+      </select>
+
+      <label className="inline-flex cursor-pointer items-center gap-1 rounded-full border border-amber-brand/45 px-2.5 py-1 text-[10px] font-bold text-amber-brand hover:bg-amber-brand/10">
+        <IconPaperclip size={11} />
+        + dokument
+        <input
+          type="file"
+          accept="image/*"
+          capture="environment"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            e.currentTarget.value = "";
+            if (file) onAdd(file, "dokument");
+          }}
+        />
+      </label>
+
+      {showLicznik && (
+        <label className="inline-flex cursor-pointer items-center gap-1 rounded-full border border-line px-2.5 py-1 text-[10px] font-bold text-dim hover:text-ink hover:bg-surface2">
+          <IconGasStation size={11} />
+          + licznik
+          <input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.currentTarget.value = "";
+              if (file) onAdd(file, "licznik");
+            }}
+          />
+        </label>
+      )}
+
+      {zalaczniki.map((z) => (
+        <span
+          key={z.id}
+          className="inline-flex items-center gap-1 rounded-full bg-surface2 border border-line px-2 py-1 text-[10px] text-dim"
+        >
+          <button
+            type="button"
+            onClick={() => window.open(z.dataUrl, "_blank", "noopener,noreferrer")}
+            className="max-w-[92px] truncate hover:text-amber-brand"
+            title={z.nazwa}
+          >
+            {z.typ === "licznik" ? "licznik" : "dokument"} · {z.nazwa}
+          </button>
+          <button
+            type="button"
+            onClick={() => onRemove(z.id)}
+            className="text-red-300 hover:text-red-200"
+            title="Usuń załącznik"
+          >
+            <IconX size={10} />
+          </button>
+        </span>
+      ))}
+    </div>
   );
 }
 
@@ -350,7 +501,80 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
   }
 
   function czyRozliczanyPodatkowo(wpis: KosztVatInfo) {
-    return wpis.hasInvoice ?? ustawienia.defaultCostHasInvoice;
+    return wpis.documentStatus === "brak"
+      ? false
+      : wpis.hasInvoice ?? ustawienia.defaultCostHasInvoice;
+  }
+
+  function zmienStatusDokumentu(
+    id: string,
+    nazwa: string,
+    status: DocumentStatus,
+    typ: "tankowanie" | "inne",
+    stary?: KosztVatInfo
+  ) {
+    const patch: Partial<KosztVatInfo> = {
+      documentStatus: status,
+      hasInvoice: status !== "brak",
+    };
+    if (typ === "tankowanie") updateTankowanie(id, patch);
+    else updateInny(id, patch);
+
+    logChange({
+      workspaceId: token,
+      userName,
+      action: "koszt_dokument_status",
+      entity: "cost",
+      entityId: id,
+      oldValue: { documentStatus: statusDokumentu(stary ?? {}) },
+      newValue: { documentStatus: status, hasInvoice: patch.hasInvoice },
+      description: `${userName} zmienił dokument kosztu ${nazwa}: ${STATUSY_DOKUMENTU.find((s) => s.id === status)?.label}`,
+      url: `/admin?miesiac=${miesiac}&zakladka=koszty`,
+    });
+  }
+
+  async function dodajZalacznik(
+    id: string,
+    nazwa: string,
+    file: File,
+    zalacznikTyp: KosztZalacznik["typ"],
+    kosztTyp: "tankowanie" | "inne"
+  ) {
+    try {
+      const zalacznik = await fileToZalacznik(file, zalacznikTyp);
+      const lista = kosztTyp === "tankowanie" ? dane.tankowanie : dane.inneKoszty;
+      const wpis = lista.find((w) => w.id === id);
+      const next = [...(wpis?.zalaczniki ?? []), zalacznik];
+      const patch: Partial<KosztVatInfo> = { zalaczniki: next };
+      if (kosztTyp === "tankowanie") updateTankowanie(id, patch);
+      else updateInny(id, patch);
+
+      logChange({
+        workspaceId: token,
+        userName,
+        action: "koszt_zalacznik_dodany",
+        entity: "cost",
+        entityId: id,
+        newValue: { typ: zalacznikTyp, nazwa: file.name },
+        description: `${userName} dodał załącznik do kosztu ${nazwa}: ${zalacznikTyp === "licznik" ? "licznik" : "dokument"}`,
+        url: `/admin?miesiac=${miesiac}&zakladka=koszty`,
+      });
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Nie udało się dodać załącznika");
+    }
+  }
+
+  function usunZalacznik(
+    id: string,
+    zalacznikId: string,
+    kosztTyp: "tankowanie" | "inne"
+  ) {
+    const lista = kosztTyp === "tankowanie" ? dane.tankowanie : dane.inneKoszty;
+    const wpis = lista.find((w) => w.id === id);
+    const next = (wpis?.zalaczniki ?? []).filter((z) => z.id !== zalacznikId);
+    const patch: Partial<KosztVatInfo> = { zalaczniki: next };
+    if (kosztTyp === "tankowanie") updateTankowanie(id, patch);
+    else updateInny(id, patch);
   }
 
   // ─── AUTO-BACKFILL KATEGORII ────────────────────────────────────────────────
@@ -846,6 +1070,13 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
                   }}
                 />
               </div>
+              <DokumentyKosztu
+                wpis={t}
+                showLicznik
+                onStatus={(status) => zmienStatusDokumentu(t.id, "paliwo", status, "tankowanie", t)}
+                onAdd={(file, typ) => dodajZalacznik(t.id, "paliwo", file, typ, "tankowanie")}
+                onRemove={(zalacznikId) => usunZalacznik(t.id, zalacznikId, "tankowanie")}
+              />
               {rozwiniete[t.id] && (
                 <KosztSzczegolyPanel
                   wpis={t}
@@ -932,6 +1163,12 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
                   updateInny(k.id, patch);
                   logVatPatch(k.nazwa || "inny", k.id, patch, k);
                 }}
+              />
+              <DokumentyKosztu
+                wpis={k}
+                onStatus={(status) => zmienStatusDokumentu(k.id, k.nazwa || "inny", status, "inne", k)}
+                onAdd={(file, typ) => dodajZalacznik(k.id, k.nazwa || "inny", file, typ, "inne")}
+                onRemove={(zalacznikId) => usunZalacznik(k.id, zalacznikId, "inne")}
               />
 
               {rozwiniete[k.id] && (

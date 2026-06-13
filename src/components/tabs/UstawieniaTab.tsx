@@ -43,15 +43,15 @@ export function UstawieniaTab({ ustawienia: u, onUpdate, token, userName }: Prop
       <Card>
         <CardTitle>Koszty</CardTitle>
         <p className="text-xs text-dim mb-3">
-          Domyślnie wszystkie koszty w aplikacji traktowane są jako koszty z faktury.
+          Domyślnie koszty wchodzą do rozliczeń podatkowych, dopóki przy koszcie nie ustawisz „brak dokumentu”.
         </p>
         <div className={rowCls}>
-          <span className={labelCls}>Koszty są domyślnie na fakturze</span>
+          <span className={labelCls}>Koszty domyślnie rozliczane podatkowo</span>
           <input
             type="checkbox"
             checked={u.defaultCostHasInvoice}
             onChange={(e) =>
-              zmien({ defaultCostHasInvoice: e.target.checked }, `zmienił domyślne „koszt z faktury" na ${e.target.checked ? "tak" : "nie"}`)
+              zmien({ defaultCostHasInvoice: e.target.checked }, `zmienił domyślne rozliczenie podatkowe kosztów na ${e.target.checked ? "tak" : "nie"}`)
             }
             className="accent-[#f5a524] w-4 h-4"
           />

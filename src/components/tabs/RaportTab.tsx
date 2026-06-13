@@ -101,7 +101,14 @@ export function RaportTab({ data }: Props) {
   const raport = useMemo(() => {
     let przychod = 0, wynagrodzenie = 0, paliwo = 0, inne = 0, leasing = 0;
     let aktywne = 0, kmTotal = 0, kolkaTotal = 0;
-    const miesieczne: { m: MiesiącId; przychod: number; koszty: number }[] = [];
+    const miesieczne: {
+      m: MiesiącId;
+      przychod: number;
+      koszty: number;
+      paliwo: number;
+      wynagrodzenie: number;
+      zysk: number;
+    }[] = [];
     const ranking: RankRow[] = [];
 
     for (const m of MIESIACE_ZAKRESU) {
@@ -127,6 +134,9 @@ export function RaportTab({ data }: Props) {
         m,
         przychod: wynik.przychod,
         koszty: wynik.wynagrodzeniePracownika + wynik.paliwo + wynik.inne + wynik.leasing,
+        paliwo: wynik.paliwo,
+        wynagrodzenie: wynik.wynagrodzeniePracownika,
+        zysk: wynik.zysk,
       });
 
       // Ranking tygodni + suma km/kółek z importów PDF
@@ -172,6 +182,25 @@ export function RaportTab({ data }: Props) {
     1,
     ...raport.miesieczne.map((x) => Math.max(x.przychod, x.koszty))
   );
+  const aktywneMiesieczne = raport.miesieczne.filter((x) => x.przychod > 0 || x.koszty > 0);
+  const najlepszyMiesiac = aktywneMiesieczne.reduce<typeof aktywneMiesieczne[number] | null>(
+    (best, x) => (!best || x.zysk > best.zysk ? x : best),
+    null
+  );
+  const najgorszyMiesiac = aktywneMiesieczne.reduce<typeof aktywneMiesieczne[number] | null>(
+    (worst, x) => (!worst || x.zysk < worst.zysk ? x : worst),
+    null
+  );
+  const sredniZysk = aktywneMiesieczne.length
+    ? aktywneMiesieczne.reduce((s, x) => s + x.zysk, 0) / aktywneMiesieczne.length
+    : 0;
+  const przychodPorownanie = aktywneMiesieczne.reduce((s, x) => s + x.przychod, 0);
+  const paliwoProc = przychodPorownanie > 0
+    ? (aktywneMiesieczne.reduce((s, x) => s + x.paliwo, 0) / przychodPorownanie) * 100
+    : 0;
+  const wynagrodzenieProc = przychodPorownanie > 0
+    ? (aktywneMiesieczne.reduce((s, x) => s + x.wynagrodzenie, 0) / przychodPorownanie) * 100
+    : 0;
 
   const medal = (rank: number) =>
     rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : null;
@@ -234,6 +263,43 @@ export function RaportTab({ data }: Props) {
           value={String(raport.kolkaTotal)}
         />
       </div>
+
+      {aktywneMiesieczne.length > 0 && (
+        <Card>
+          <div className="flex items-center gap-2 mb-3">
+            <IconChartBar size={18} className="text-amber-brand" />
+            <h3 className="text-sm font-bold uppercase tracking-wider text-dim">
+              Porównanie miesięcy
+            </h3>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-xl bg-surface2 border border-line p-3">
+              <p className="text-[11px] text-dim">Najlepszy miesiąc</p>
+              <p className="text-sm font-bold text-white">{najlepszyMiesiac ? POLSKIE_MIESIACE[najlepszyMiesiac.m] : "—"}</p>
+              <p className="tabular-nums text-green-300">{formatZl(najlepszyMiesiac?.zysk ?? 0)}</p>
+            </div>
+            <div className="rounded-xl bg-surface2 border border-line p-3">
+              <p className="text-[11px] text-dim">Najsłabszy miesiąc</p>
+              <p className="text-sm font-bold text-white">{najgorszyMiesiac ? POLSKIE_MIESIACE[najgorszyMiesiac.m] : "—"}</p>
+              <p className="tabular-nums text-red-300">{formatZl(najgorszyMiesiac?.zysk ?? 0)}</p>
+            </div>
+          </div>
+          <div className="mt-3 space-y-1 text-sm">
+            <div className="flex justify-between">
+              <span className="text-dim">Średni zysk</span>
+              <span className="tabular-nums text-ink">{formatZl(sredniZysk)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-dim">Paliwo jako % przychodu</span>
+              <span className="tabular-nums text-amber-brand">{paliwoProc.toFixed(1).replace(".", ",")}%</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-dim">Wynagrodzenie jako % przychodu</span>
+              <span className="tabular-nums text-amber-brand">{wynagrodzenieProc.toFixed(1).replace(".", ",")}%</span>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* ── SEKCJA: PODATKI — SZACUNEK ───────────────────────────────────── */}
       <Card>

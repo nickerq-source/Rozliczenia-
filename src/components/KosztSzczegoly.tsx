@@ -140,7 +140,10 @@ export function KosztSzczegolyPanel({
   const vatDeductible = wpis.vatDeductible ?? defVat.vatDeductible;
   const vatPercent = wpis.vatDeductionPercent ?? defVat.vatDeductionPercent;
   const amountMode = wpis.amountMode ?? ustawienia.defaultCostAmountMode;
-  const rozliczPodatkowo = wpis.hasInvoice ?? ustawienia.defaultCostHasInvoice;
+  const rozliczPodatkowo =
+    wpis.documentStatus === "brak"
+      ? false
+      : wpis.hasInvoice ?? ustawienia.defaultCostHasInvoice;
 
   const r = rozbijWpis(wpis, ustawienia, domyslnaKategoria);
 

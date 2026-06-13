@@ -34,6 +34,15 @@ interface Props {
   userName: string;
 }
 
+interface PushDiagnostics {
+  pushConfigured: boolean;
+  subscriptions: number;
+  currentUserSubscriptions: number;
+  currentDeviceSaved: boolean;
+  lastTest: { description: string; created_at: string } | null;
+  lastError: string | null;
+}
+
 function relativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const min = Math.floor(diff / 60000);
@@ -61,6 +70,7 @@ export function PowiadomieniaPanel({ token, userName }: Props) {
   const [busy, setBusy] = useState(false);
   const [testBusy, setTestBusy] = useState(false);
   const [history, setHistory] = useState<NotificationRow[]>([]);
+  const [diagnostics, setDiagnostics] = useState<PushDiagnostics | null>(null);
   const [rozwiniete, setRozwiniete] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [realtimeStatus, setRealtimeStatus] = useState<"off" | "connecting" | "on" | "error">(
@@ -88,6 +98,18 @@ export function PowiadomieniaPanel({ token, userName }: Props) {
   }, [token]);
 
   useEffect(() => { loadHistory(); }, [loadHistory]);
+
+  const loadDiagnostics = useCallback(async () => {
+    try {
+      const res = await fetch("/api/push/diagnostics");
+      if (!res.ok) return;
+      setDiagnostics(await res.json());
+    } catch {
+      // Diagnostyka jest pomocnicza — nie blokuje panelu.
+    }
+  }, []);
+
+  useEffect(() => { loadDiagnostics(); }, [loadDiagnostics]);
 
   // Realtime: nowe powiadomienia pojawiają się bez odświeżania
   useEffect(() => {
@@ -134,6 +156,7 @@ export function PowiadomieniaPanel({ token, userName }: Props) {
         setActive(ok);
         if (!ok) alert("Nie udało się włączyć powiadomień — sprawdź zgodę w przeglądarce.");
       }
+      await loadDiagnostics();
     } finally {
       setBusy(false);
     }
@@ -199,6 +222,7 @@ export function PowiadomieniaPanel({ token, userName }: Props) {
         throw new Error(json.error ?? `Błąd testu push (${res.status})`);
       }
       await loadHistory();
+      await loadDiagnostics();
       const push = json.push;
       alert(
         push
@@ -369,6 +393,37 @@ export function PowiadomieniaPanel({ token, userName }: Props) {
               Historia działa, ale odświeżanie na żywo jest chwilowo niedostępne.
             </p>
           )}
+
+          <div className="mb-3 rounded-xl border border-line bg-surface2 px-3 py-2 text-[11px]">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-bold uppercase tracking-wide text-dim">Diagnostyka push</span>
+              <button
+                type="button"
+                onClick={loadDiagnostics}
+                className="text-amber-brand hover:text-[#e09420]"
+              >
+                odśwież
+              </button>
+            </div>
+            <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 tabular-nums">
+              <span className="text-dim">VAPID</span>
+              <span className={diagnostics?.pushConfigured ? "text-green-300" : "text-red-300"}>
+                {diagnostics ? (diagnostics.pushConfigured ? "OK" : "brak") : "…"}
+              </span>
+              <span className="text-dim">Telefon/konto</span>
+              <span className={diagnostics?.currentDeviceSaved ? "text-green-300" : "text-amber-brand"}>
+                {diagnostics ? (diagnostics.currentDeviceSaved ? "zapisany" : "brak zapisu") : "…"}
+              </span>
+              <span className="text-dim">Subskrypcje</span>
+              <span className="text-ink">
+                {diagnostics ? `${diagnostics.subscriptions} razem / ${diagnostics.currentUserSubscriptions} Twoje` : "…"}
+              </span>
+              <span className="text-dim">Ostatni test</span>
+              <span className="text-ink">
+                {diagnostics?.lastTest ? relativeTime(diagnostics.lastTest.created_at) : "brak"}
+              </span>
+            </div>
+          </div>
 
           {/* Historia */}
           {history.length === 0 ? (

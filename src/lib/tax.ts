@@ -157,7 +157,10 @@ export function rozbijWpis(
   domyslnaKategoria: KategoriaKosztu = "inne"
 ): RozbicieVat & { kategoria: KategoriaKosztu } {
   const kategoria = wpis.kategoria ?? domyslnaKategoria;
-  const rozliczPodatkowo = wpis.hasInvoice ?? ustawienia.defaultCostHasInvoice;
+  const rozliczPodatkowo =
+    wpis.documentStatus === "brak"
+      ? false
+      : wpis.hasInvoice ?? ustawienia.defaultCostHasInvoice;
   if (!rozliczPodatkowo) {
     const brutto = round2(parseNum(wpis.koszt));
     return {

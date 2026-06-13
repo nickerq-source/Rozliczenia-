@@ -83,9 +83,22 @@ export type VatRate = "0" | "0.05" | "0.08" | "0.23" | "zw" | "np";
 /** Skąd pochodzi kategoria/VAT: ręcznie, z reguły keyword, z AI */
 export type ZrodloKategorii = "manual" | "rule" | "ai";
 
+export type DocumentStatus = "brak" | "paragon" | "faktura";
+
+export interface KosztZalacznik {
+  id: string;
+  typ: "dokument" | "licznik";
+  nazwa: string;
+  mime: string;
+  dataUrl: string;
+  createdAt: string;
+}
+
 /** Pola podatkowe kosztu (domyślnie: rozliczany podatkowo, brutto, VAT 23%) */
 export interface KosztVatInfo {
   hasInvoice?: boolean; // czy koszt wchodzi do VAT i kosztów podatkowych; domyślnie true
+  documentStatus?: DocumentStatus; // brak dokumentu / paragon / faktura
+  zalaczniki?: KosztZalacznik[];
   invoiceNumber?: string;
   supplierName?: string;
   supplierNip?: string;
