@@ -91,16 +91,34 @@ function walidujOdpowiedz(raw: unknown): WynikKategoryzacji | null {
   };
 }
 
-const PROMPT_SYSTEM = `Jesteś klasyfikatorem kosztów firmy transportowej. Zwróć wyłącznie JSON.
+const PROMPT_SYSTEM = `Jesteś księgowym klasyfikującym koszty polskiej firmy transportowej.
+Dobierasz kategorię ORAZ właściwą polską stawkę VAT dla danego towaru/usługi.
+Zwróć wyłącznie JSON, bez komentarzy.
+
 Dozwolone kategorie: serwis, czesci, paliwo_adblue, parking, myjnia, oplaty,
 ksiegowosc, ubezpieczenie, telefon_aplikacje, internet, wyposazenie,
 art_spozywcze, inne.
+
 Dozwolone stawki VAT: 0, 0.05, 0.08, 0.23, "zw", "np".
-Dozwolone amount_mode: "netto", "brutto".
-Jeśli nie masz pewności: category="inne", vat_rate=0.23, vat_deductible=true,
-amount_mode="brutto".
+
+POLSKIE STAWKI VAT — dobieraj wg rzeczywistego towaru/usługi, NIE domyślaj 23% gdy produkt ma niższą:
+- 0.23 (podstawowa): części, oleje, opony, narzędzia, elektronika, paliwo, AdBlue,
+  myjnia, parking, serwis/naprawa, telefon, internet, odzież robocza, większość usług.
+- 0.08: usługi gastronomiczne i catering, hotele/noclegi, transport pasażerski,
+  niektóre dania gotowe i napoje w gastronomii.
+- 0.05: podstawowe artykuły spożywcze (chleb, pieczywo, nabiał, mleko, mięso, owoce,
+  warzywa, woda, soki), książki, e-booki, czasopisma specjalistyczne.
+- "zw" (zwolnione): ubezpieczenia (OC, AC, NNW), usługi finansowe/bankowe.
+- "np" (nie podlega): opłaty urzędowe i administracyjne, podatki, opłaty drogowe/viaTOLL,
+  badania/przeglądy w urzędzie.
+
+vat_deductible=false TYLKO dla "zw" i "np" (wtedy vat_deduction_percent=0).
+W pozostałych przypadkach vat_deductible=true, vat_deduction_percent=100.
+amount_mode domyślnie "brutto".
+Gdy naprawdę nie wiesz: category="inne", vat_rate=0.23, vat_deductible=true.
+
 Zwróć JSON:
-{"category":"...","vat_rate":0.23,"vat_deductible":true,
+{"category":"...","vat_rate":0.08,"vat_deductible":true,
 "vat_deduction_percent":100,"amount_mode":"brutto","confidence":0.82}`;
 
 export async function POST(req: NextRequest) {
@@ -120,21 +138,19 @@ export async function POST(req: NextRequest) {
   const name = (body.name ?? "").trim();
   if (!name) return NextResponse.json({ error: "Brak nazwy kosztu" }, { status: 400 });
 
-  // 1. Lokalne reguły — szybkie i deterministyczne
-  const zReguly = kategoryzujLokalnie(name);
-  if (zReguly) {
-    return NextResponse.json({
-      ...FALLBACK,
-      category: zReguly,
-      confidence: 1,
-      source: "rule" as const,
-    });
-  }
+  // Reguła keyword (offline-zapas, gdy AI niedostępne lub odpowie błędnie)
+  const zReguly = () => {
+    const k = kategoryzujLokalnie(name);
+    return k
+      ? { ...FALLBACK, category: k, confidence: 1, source: "rule" as const }
+      : FALLBACK;
+  };
 
-  // 2. AI fallback — tylko gdy mamy klucz; brak klucza = bezpieczny fallback 'inne'
+  // 1. AI dobiera kategorię ORAZ stawkę VAT dla KAŻDEGO kosztu (gdy mamy klucz).
+  //    Brak klucza → spadamy na reguły/„inne" (VAT 23% / wg kategorii po stronie klienta).
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    return NextResponse.json(FALLBACK);
+    return NextResponse.json(zReguly());
   }
 
   try {
@@ -162,13 +178,13 @@ export async function POST(req: NextRequest) {
 
     // Wyciągnij JSON (model może otoczyć go tekstem/markdownem)
     const match = text.match(/\{[\s\S]*\}/);
-    if (!match) return NextResponse.json(FALLBACK);
+    if (!match) return NextResponse.json(zReguly());
 
     const wynik = walidujOdpowiedz(JSON.parse(match[0]));
-    return NextResponse.json(wynik ?? FALLBACK);
+    return NextResponse.json(wynik ?? zReguly());
   } catch (e) {
-    // Błąd AI nie może wywalić aplikacji — koszt ląduje w 'inne'
+    // Błąd AI nie może wywalić aplikacji — spadamy na reguły / 'inne'
     console.error("[categorize-cost] AI error:", e instanceof Error ? e.message : e);
-    return NextResponse.json(FALLBACK);
+    return NextResponse.json(zReguly());
   }
 }

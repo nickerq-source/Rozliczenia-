@@ -160,27 +160,48 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
       // admin wymusił ręcznie (wtedy akceptujemy 'inne' jako wynik).
       if (w.source === "fallback" && !wymus) return;
 
-      const zrodlo = w.source === "ai" ? "ai" : "rule";
-      const kategoria = w.category as KategoriaKosztu;
-      // VAT: reguła → domyślne kategorii; AI → wynik AI
-      const vat =
-        w.source === "ai"
-          ? {
-              vatRate: w.vat_rate,
-              vatDeductible: w.vat_deductible,
-              vatDeductionPercent: w.vat_deduction_percent,
-              amountMode: w.amount_mode,
-            }
-          : domyslnyVatKategorii(kategoria, ustawienia);
+      const zAI = w.source === "ai";
+      const reg = kategoryzujLokalnie(nazwa); // kategoria z reguły (lub null)
+      const patch: Partial<KosztVatInfo> = {};
+      let opisKat = "";
 
-      const patch: Partial<KosztVatInfo> = {
-        kategoria,
-        kategoriaZrodlo: zrodlo,
-        kategoriaConfidence: w.source === "ai" ? w.confidence : undefined,
-        kategoriaPotwierdzona: w.source === "ai" ? false : undefined,
-        vatZrodlo: zrodlo,
-        ...vat,
-      };
+      if (zAI) {
+        // VAT (stawka, odliczalność, tryb) ZAWSZE z AI — dla każdego kosztu
+        patch.vatRate = w.vat_rate;
+        patch.vatDeductible = w.vat_deductible;
+        patch.vatDeductionPercent = w.vat_deduction_percent;
+        patch.amountMode = w.amount_mode;
+        patch.vatZrodlo = "ai";
+
+        if (reg) {
+          // Reguła trafiła w kategorię → bierzemy ją (czysto, bez badge), VAT z AI
+          patch.kategoria = reg;
+          patch.kategoriaZrodlo = "rule";
+          patch.kategoriaConfidence = undefined;
+          patch.kategoriaPotwierdzona = undefined;
+          opisKat = `${kategoriaLabel(reg)} (reguła) + VAT ${w.vat_rate} (AI)`;
+        } else {
+          // Brak reguły → kategoria z AI (z badge do potwierdzenia)
+          patch.kategoria = w.category as KategoriaKosztu;
+          patch.kategoriaZrodlo = "ai";
+          patch.kategoriaConfidence = w.confidence;
+          patch.kategoriaPotwierdzona = false;
+          opisKat = `${kategoriaLabel(patch.kategoria)} + VAT (AI, confidence ${Number(w.confidence).toFixed(2)})`;
+        }
+      } else {
+        // Brak klucza / błąd → reguła nadaje kategorię + domyślny VAT kategorii
+        const kategoria = w.category as KategoriaKosztu;
+        Object.assign(patch, {
+          kategoria,
+          kategoriaZrodlo: "rule" as const,
+          kategoriaConfidence: undefined,
+          kategoriaPotwierdzona: undefined,
+          vatZrodlo: "rule" as const,
+          ...domyslnyVatKategorii(kategoria, ustawienia),
+        });
+        opisKat = `${kategoriaLabel(kategoria)} (reguła)`;
+      }
+
       if (typ === "tankowanie") updateTankowanie(id, patch);
       else updateInny(id, patch);
 
@@ -190,11 +211,8 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
         action: "kategoria_auto",
         entity: "cost",
         entityId: id,
-        newValue: { kategoria, zrodlo, confidence: w.confidence },
-        description:
-          w.source === "ai"
-            ? `System przypisał kategorię kosztu ${nazwa}: ${kategoriaLabel(kategoria)} (AI, confidence ${Number(w.confidence).toFixed(2)})`
-            : `System przypisał kategorię kosztu ${nazwa}: ${kategoriaLabel(kategoria)} (reguła)`,
+        newValue: patch as Record<string, unknown>,
+        description: `System przypisał koszt ${nazwa}: ${opisKat}`,
       });
     } catch {
       // AI niedostępne — koszt zostaje w 'inne', bez crasha
@@ -285,28 +303,29 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
     const reguly: Reg[] = [];
     const doAI: { id: string; nazwa: string; koszt: number; data: string }[] = [];
 
-    // Wpis wymaga (re)kategoryzacji, gdy jest w 'inne' i nie nadał mu jej
-    // ani admin (manual), ani AI (ai). 'inne' ze źródłem 'rule' to ślad po
-    // fallbacku bez klucza AI — ponawiamy, aż AI nada właściwą kategorię.
-    const wymagaKat = (k: KosztVatInfo) => {
-      const kat = k.kategoria ?? "inne";
-      if (kat !== "inne") return false;
-      return k.kategoriaZrodlo !== "manual" && k.kategoriaZrodlo !== "ai";
+    // Wpis idzie do AI po kategorię I stawkę VAT, dopóki nie zrobiło tego AI
+    // ani admin. To znaczy: pomijamy tylko gdy kategoria lub VAT pochodzą z AI
+    // albo zostały ustawione ręcznie (manual). Koszty „z reguły" są ponawiane,
+    // żeby AI dobrało im właściwą stawkę VAT (nie zawsze 23%).
+    const wymagaAI = (k: KosztVatInfo) => {
+      if (k.kategoriaZrodlo === "manual" || k.vatZrodlo === "manual") return false;
+      if (k.kategoriaZrodlo === "ai" || k.vatZrodlo === "ai") return false;
+      return true;
     };
 
+    // Tankowanie zostaje regułą (paliwo/AdBlue = zawsze 23%, odliczenie z ustawień)
     for (const t of dane.tankowanie ?? []) {
       if (backfillDone.current.has(t.id)) continue;
-      if (!wymagaKat(t)) continue;
+      if ((t.kategoria ?? "inne") === "paliwo_adblue" && t.kategoriaZrodlo) continue;
       backfillDone.current.add(t.id);
       reguly.push({ id: t.id, kategoria: "paliwo_adblue", typ: "tankowanie" });
     }
+    // Inne koszty → AI dobiera kategorię i VAT dla każdego
     for (const k of dane.inneKoszty ?? []) {
       if (backfillDone.current.has(k.id)) continue;
-      if (!k.nazwa?.trim() || !wymagaKat(k)) continue; // pusty lub już skategoryzowany
+      if (!k.nazwa?.trim() || !wymagaAI(k)) continue;
       backfillDone.current.add(k.id);
-      const reg = kategoryzujLokalnie(k.nazwa);
-      if (reg) reguly.push({ id: k.id, kategoria: reg, typ: "inne" });
-      else doAI.push({ id: k.id, nazwa: k.nazwa, koszt: k.koszt, data: k.data });
+      doAI.push({ id: k.id, nazwa: k.nazwa, koszt: k.koszt, data: k.data });
     }
 
     // Reguły — jeden batch (natychmiast, bez sieci)

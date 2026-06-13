@@ -3,7 +3,7 @@
 // Zakładka Ustawienia (admin) — koszty/VAT, paliwo, sprzedaż, PIT, zdrowotna.
 // Każda zmiana trafia do audit logu.
 
-import { UstawieniaPodatkowe, VatRate } from "@/lib/types";
+import { UstawieniaPodatkowe } from "@/lib/types";
 import { Card, CardTitle } from "../ui/Card";
 import { NumInput } from "../ui/NumInput";
 import { logChange } from "@/lib/audit";
@@ -69,35 +69,11 @@ export function UstawieniaTab({ ustawienia: u, onUpdate, token, userName }: Prop
             <option value="netto">netto</option>
           </select>
         </div>
-        <div className={rowCls}>
-          <span className={labelCls}>Domyślna stawka VAT</span>
-          <select
-            value={u.defaultCostVatRate}
-            onChange={(e) =>
-              zmien({ defaultCostVatRate: e.target.value as VatRate }, `zmienił domyślną stawkę VAT kosztów na ${e.target.value}`)
-            }
-            className={selectCls}
-          >
-            <option value="0.23">23%</option>
-            <option value="0.08">8%</option>
-            <option value="0.05">5%</option>
-            <option value="0">0%</option>
-          </select>
-        </div>
-        <div className={rowCls}>
-          <span className={labelCls}>Domyślne odliczenie VAT</span>
-          <select
-            value={u.defaultCostVatDeductionPercent}
-            onChange={(e) =>
-              zmien({ defaultCostVatDeductionPercent: Number(e.target.value) }, `zmienił domyślne odliczenie VAT na ${e.target.value}%`)
-            }
-            className={selectCls}
-          >
-            <option value={100}>100%</option>
-            <option value={50}>50%</option>
-            <option value={0}>0%</option>
-          </select>
-        </div>
+        <p className="text-[11px] text-dim/60 mt-2">
+          Stawkę VAT i odliczenie dobiera automatycznie AI dla każdego kosztu
+          (gdy AI niedostępne — domyślnie 23%). Możesz je nadpisać ręcznie przy
+          koszcie (przycisk „VAT”). Wyjątki stałe: ubezpieczenie = zw, opłaty = np.
+        </p>
       </Card>
 
       {/* ── PALIWO ───────────────────────────────────────────────────────── */}
