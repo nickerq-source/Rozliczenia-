@@ -120,7 +120,7 @@ export function PodsumowanieTab({
   taxForm = "skala",
   ustawienia,
 }: PodsumowanieProps) {
-  const wynik = useMemo(() => obliczWynikMiesiaca(miesiac, dane), [miesiac, dane]);
+  const wynik = useMemo(() => obliczWynikMiesiaca(miesiac, dane, ustawienia), [miesiac, dane, ustawienia]);
   const zyskDodatni = wynik.zysk >= 0;
 
   const wyplata = dane.wyplata ?? { status: "niewypłacone" as const };
@@ -283,7 +283,7 @@ export function PodsumowanieTab({
       <h1>PapiTrans — ${POLSKIE_MIESIACE[miesiac]} 2026</h1>
       <div class="grid">
         <div class="box">Przychód: <b>${formatZl(wynik.przychod)}</b></div>
-        <div class="box">Koszty operacyjne: <b>${formatZl(wynik.wynagrodzeniePracownika + wynik.paliwo + wynik.inne + wynik.leasing)}</b></div>
+        <div class="box">Koszty operacyjne: <b>${formatZl(wynik.wynagrodzeniePracownika + wynik.zusPracodawcy + wynik.paliwo + wynik.inne + wynik.leasing)}</b></div>
         <div class="box">VAT do zapłaty: <b>${formatZl(podatki?.vatDoZaplaty ?? 0)}</b></div>
         <div class="box">Podatek dochodowy: <b>${formatZl(podatki?.pitMiesiac ?? 0)}</b></div>
         <div class="box">Zdrowotna: <b>${formatZl(podatki?.zdrowotna ?? 0)}</b></div>
@@ -362,6 +362,9 @@ export function PodsumowanieTab({
         <div className="mb-4">
           <p className="text-xs font-bold uppercase tracking-wider text-dim mb-1">Koszty</p>
           <Row icon={<IconUsers size={18} />} label="Wynagrodzenie kierowcy" value={wynik.wynagrodzeniePracownika} />
+          {wynik.zusPracodawcy > 0 && (
+            <Row icon={<IconUsers size={18} />} label="ZUS pracodawcy" value={wynik.zusPracodawcy} />
+          )}
           <Row icon={<IconGasStation size={18} />} label="Paliwo" value={wynik.paliwo} />
           <Row icon={<IconPackage size={18} />} label="Inne koszty" value={wynik.inne} />
           <Row icon={<IconCar size={18} />} label="Leasing" value={wynik.leasing} />

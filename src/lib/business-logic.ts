@@ -6,6 +6,7 @@ import {
   DniowkaInfo,
   WynikMiesiaca,
   FakturaWeek,
+  UstawieniaPodatkowe,
 } from "./types";
 import {
   getDniMiesiaca,
@@ -162,7 +163,8 @@ export function liczDniWgTypu(dni: Record<string, DzienKierowcy>): {
 
 export function obliczWynikMiesiaca(
   miesiac: number,
-  daneM: DaneMiesiaca
+  daneM: DaneMiesiaca,
+  ustawienia?: UstawieniaPodatkowe
 ): WynikMiesiaca {
   const przychod = obliczPrzychod(daneM.faktury);
   const { wynagrodzenie, premia, sumaDniowek, liczbaSobot } = obliczWynagrodzenie(
@@ -173,11 +175,19 @@ export function obliczWynikMiesiaca(
   const inne = obliczInneKoszty(daneM.inneKoszty);
   const leasing = parseNum(daneM.leasing);
 
-  const zysk = przychod - wynagrodzenie - paliwo - inne - leasing;
+  // ZUS pracodawcy — realny koszt na wierzchu pensji (gdy włączone oficjalne
+  // wynagrodzenie i kierowca w tym miesiącu pracował).
+  const zusPracodawcy =
+    ustawienia?.pracownikOficjalnyEnabled && wynagrodzenie > 0
+      ? parseNum(ustawienia.pracownikZusPracodawcyMies)
+      : 0;
+
+  const zysk = przychod - wynagrodzenie - zusPracodawcy - paliwo - inne - leasing;
 
   return {
     przychod,
     wynagrodzeniePracownika: wynagrodzenie,
+    zusPracodawcy,
     paliwo,
     inne,
     leasing,

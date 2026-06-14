@@ -99,7 +99,8 @@ export function RaportTab({ data }: Props) {
   }, [podatki]);
 
   const raport = useMemo(() => {
-    let przychod = 0, wynagrodzenie = 0, paliwo = 0, inne = 0, leasing = 0;
+    const u = getUstawienia(data);
+    let przychod = 0, wynagrodzenie = 0, paliwo = 0, inne = 0, leasing = 0, zusPrac = 0;
     let aktywne = 0, kmTotal = 0, kolkaTotal = 0;
     const miesieczne: {
       m: MiesiącId;
@@ -113,7 +114,7 @@ export function RaportTab({ data }: Props) {
 
     for (const m of MIESIACE_ZAKRESU) {
       const dane = data.miesiace[m] ?? domyslneDaneMiesiaca(m);
-      const wynik = obliczWynikMiesiaca(m, dane);
+      const wynik = obliczWynikMiesiaca(m, dane, u);
 
       const aktywny =
         wynik.przychod > 0 ||
@@ -125,6 +126,7 @@ export function RaportTab({ data }: Props) {
         aktywne++;
         przychod += wynik.przychod;
         wynagrodzenie += wynik.wynagrodzeniePracownika;
+        zusPrac += wynik.zusPracodawcy;
         paliwo += wynik.paliwo;
         inne += wynik.inne;
         leasing += wynik.leasing;
@@ -133,7 +135,7 @@ export function RaportTab({ data }: Props) {
       miesieczne.push({
         m,
         przychod: wynik.przychod,
-        koszty: wynik.wynagrodzeniePracownika + wynik.paliwo + wynik.inne + wynik.leasing,
+        koszty: wynik.wynagrodzeniePracownika + wynik.zusPracodawcy + wynik.paliwo + wynik.inne + wynik.leasing,
         paliwo: wynik.paliwo,
         wynagrodzenie: wynik.wynagrodzeniePracownika,
         zysk: wynik.zysk,
@@ -165,10 +167,10 @@ export function RaportTab({ data }: Props) {
 
     // Rangi liczone zawsze od najlepszej (1 = najwyższa kwota)
     const sortedDesc = [...ranking].sort((a, b) => b.kwota - a.kwota);
-    const zysk = przychod - wynagrodzenie - paliwo - inne - leasing;
+    const zysk = przychod - wynagrodzenie - zusPrac - paliwo - inne - leasing;
 
     return {
-      przychod, wynagrodzenie, paliwo, inne, leasing, zysk,
+      przychod, wynagrodzenie, zusPrac, paliwo, inne, leasing, zysk,
       aktywne, kmTotal, kolkaTotal, miesieczne, sortedDesc,
     };
   }, [data]);

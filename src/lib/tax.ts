@@ -39,6 +39,9 @@ export const DOMYSLNE_USTAWIENIA: UstawieniaPodatkowe = {
   healthRateLiniowy: 0.049,
   healthMinMonthly: 432.54,
   healthMinEnabled: true,
+  pracownikOficjalnyEnabled: false,
+  pracownikBruttoMies: 1255,
+  pracownikZusPracodawcyMies: 0,
 };
 
 /** Ustawienia z danych workspace + domyślne dla brakujących pól */
@@ -257,6 +260,8 @@ export interface PodatkiMiesiaca {
   // PIT
   przychodNetto: number;
   kosztyPodatkowe: number;
+  wynagrodzeniePodatkowe: number; // wynagrodzenie wliczone do kosztów podatkowych (oficjalne+ZUS lub realne)
+  zusPracodawcy: number; // składki ZUS pracodawcy wliczone w koszty podatkowe
   dochod: number; // może być ujemny (strata)
   dochodYtd: number;
   pitYtd: number;
@@ -305,13 +310,26 @@ function podstawyMiesiaca(m: MiesiącId, dane: DaneMiesiaca, u: UstawieniaPodatk
     return {
       sprzedazNetto: 0, vatNalezny: 0, kosztyNetto: 0, vatNaliczony: 0,
       kosztyPodatkowe: 0, dochod: 0, zyskPrzedPodatkami: 0,
+      wynagrodzeniePodatkowe: 0, zusPracodawcy: 0,
     };
   }
 
+  // Wynagrodzenie pracownika:
+  //  • do PODATKU dochodowego liczymy tylko oficjalny brutto z umowy + ZUS
+  //    pracodawcy (gdy włączone) — bo tylko ta część jest udokumentowana.
+  //  • do realnego P&L bierzemy całą realną wypłatę (kierowca dostaje ją w ręce)
+  //    plus ZUS pracodawcy (realny wydatek na wierzchu brutto).
+  // Nadwyżka (realna − oficjalna) jest realnym kosztem, ale NIE pomniejsza podatku.
+  const oficjalne = u.pracownikOficjalnyEnabled && wynagrodzenie > 0;
+  const zusPracodawcy = oficjalne ? round2(parseNum(u.pracownikZusPracodawcyMies)) : 0;
+  const wynagrodzeniePodatkowe = oficjalne
+    ? round2(parseNum(u.pracownikBruttoMies) + zusPracodawcy)
+    : wynagrodzenie;
+
   const leasing = parseNum(dane.leasing);
-  const kosztyPodatkowe = round2(kosztyPitFaktury + wynagrodzenie + leasing);
+  const kosztyPodatkowe = round2(kosztyPitFaktury + wynagrodzeniePodatkowe + leasing);
   const dochod = round2(sprzedazNetto - kosztyPodatkowe);
-  const zyskPrzedPodatkami = round2(przychodBrutto - wynagrodzenie - kosztyBrutto - leasing);
+  const zyskPrzedPodatkami = round2(przychodBrutto - wynagrodzenie - zusPracodawcy - kosztyBrutto - leasing);
 
   return {
     sprzedazNetto: round2(sprzedazNetto),
@@ -321,6 +339,8 @@ function podstawyMiesiaca(m: MiesiącId, dane: DaneMiesiaca, u: UstawieniaPodatk
     kosztyPodatkowe,
     dochod,
     zyskPrzedPodatkami,
+    wynagrodzeniePodatkowe,
+    zusPracodawcy,
   };
 }
 
@@ -355,6 +375,8 @@ export function podatkiRoku(data: WorkspaceData): PodatkiMiesiaca[] {
       vatDoZaplaty,
       przychodNetto: p.sprzedazNetto,
       kosztyPodatkowe: p.kosztyPodatkowe,
+      wynagrodzeniePodatkowe: p.wynagrodzeniePodatkowe,
+      zusPracodawcy: p.zusPracodawcy,
       dochod: p.dochod,
       dochodYtd,
       pitYtd: pitNarastajaco,

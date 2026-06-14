@@ -45,7 +45,9 @@ export function PodatkiCard({
   const nadwyzka = p.vatDoZaplaty < 0;
   const strata = p.dochod < 0;
   const kosztyOperacyjne =
-    wynik.wynagrodzeniePracownika + wynik.paliwo + wynik.inne + wynik.leasing;
+    wynik.wynagrodzeniePracownika + wynik.zusPracodawcy + wynik.paliwo + wynik.inne + wynik.leasing;
+  // Gdy włączone oficjalne wynagrodzenie: do podatku wchodzi mniej niż realna wypłata
+  const oficjalneAktywne = p.wynagrodzeniePodatkowe !== wynik.wynagrodzeniePracownika || p.zusPracodawcy > 0;
 
   return (
     <Card>
@@ -59,7 +61,14 @@ export function PodatkiCard({
 
       {/* Koszty */}
       <p className="text-xs font-bold uppercase tracking-wider text-amber-brand mb-1">Koszty miesiąca</p>
-      <Wiersz label="Wynagrodzenie kierowcy" value={wynik.wynagrodzeniePracownika} />
+      <Wiersz
+        label="Wynagrodzenie kierowcy"
+        value={wynik.wynagrodzeniePracownika}
+        note={oficjalneAktywne ? "realna wypłata (do podatku tylko część oficjalna)" : undefined}
+      />
+      {wynik.zusPracodawcy > 0 && (
+        <Wiersz label="ZUS pracodawcy" value={wynik.zusPracodawcy} note="składki społeczne po stronie firmy" />
+      )}
       <Wiersz label="Paliwo" value={wynik.paliwo} />
       <Wiersz label="Inne koszty" value={wynik.inne} />
       <Wiersz label="Leasing" value={wynik.leasing} />
@@ -81,10 +90,21 @@ export function PodatkiCard({
         Podatek dochodowy ({taxForm === "skala" ? "skala" : "liniowy 19%"})
       </p>
       <Wiersz label="Przychód netto" value={p.przychodNetto} />
+      {oficjalneAktywne && (
+        <Wiersz
+          label="Wynagrodzenie wg umowy (do podatku)"
+          value={p.wynagrodzeniePodatkowe}
+          note="oficjalny brutto + ZUS pracodawcy; realna nadwyżka nie pomniejsza podatku"
+        />
+      )}
       <Wiersz
         label="Koszty podatkowe"
         value={p.kosztyPodatkowe}
-        note="tylko koszty z włączonym rozliczeniem podatkowym + wynagrodzenie + leasing"
+        note={
+          oficjalneAktywne
+            ? "koszty z dokumentem + wynagrodzenie oficjalne + leasing"
+            : "tylko koszty z włączonym rozliczeniem podatkowym + wynagrodzenie + leasing"
+        }
       />
       {strata ? (
         <Wiersz label="Strata podatkowa" value={-p.dochod} klasa="text-red-300" bold />

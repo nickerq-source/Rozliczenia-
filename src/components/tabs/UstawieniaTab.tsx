@@ -242,6 +242,57 @@ export function UstawieniaTab({ ustawienia: u, onUpdate, token, userName }: Prop
           />
         </div>
       </Card>
+
+      {/* ── WYNAGRODZENIE PRACOWNIKA (OFICJALNE) ─────────────────────────── */}
+      <Card>
+        <CardTitle>Wynagrodzenie pracownika (oficjalne)</CardTitle>
+        <p className="text-xs text-dim mb-3">
+          Gdy włączone — do podatku dochodowego wchodzi tylko oficjalny brutto z
+          umowy + ZUS pracodawcy (stałe co miesiąc), zamiast realnej wypłaty
+          kierowcy. Realna nadwyżka pomniejsza zysk, ale nie podatek.
+        </p>
+        <div className={rowCls}>
+          <span className={labelCls}>Rozliczaj podatkowo wg umowy</span>
+          <input
+            type="checkbox"
+            checked={u.pracownikOficjalnyEnabled}
+            onChange={(e) =>
+              zmien(
+                { pracownikOficjalnyEnabled: e.target.checked },
+                `${e.target.checked ? "włączył" : "wyłączył"} rozliczanie podatkowe wg oficjalnej pensji`
+              )
+            }
+            className="accent-[#f5a524] w-4 h-4"
+          />
+        </div>
+        <div className={rowCls}>
+          <span className={labelCls}>Oficjalny brutto / mies. (umowa)</span>
+          <div className="w-32">
+            <NumInput
+              value={u.pracownikBruttoMies}
+              onChange={(v) => zmien({ pracownikBruttoMies: v }, `zmienił oficjalny brutto pracownika na ${v} zł`)}
+              className="!py-1.5 !text-sm"
+            />
+          </div>
+        </div>
+        <div className={rowCls}>
+          <span className={labelCls}>
+            ZUS pracodawcy / mies.
+            <span className="block text-[10px] text-dim/60">składki społeczne po stronie firmy — kwota od księgowej</span>
+          </span>
+          <div className="w-32">
+            <NumInput
+              value={u.pracownikZusPracodawcyMies}
+              onChange={(v) => zmien({ pracownikZusPracodawcyMies: v }, `zmienił ZUS pracodawcy na ${v} zł`)}
+              className="!py-1.5 !text-sm"
+            />
+          </div>
+        </div>
+        <p className="text-[11px] text-dim/60 mt-2">
+          ZUS i zaliczka PIT pracownika są wliczone w brutto — rozlicza je
+          księgowa. Tu podajesz tylko stałe kwoty miesięczne.
+        </p>
+      </Card>
     </div>
   );
 }

@@ -212,6 +212,10 @@ export interface UstawieniaPodatkowe {
   healthRateLiniowy: number; // 0.049
   healthMinMonthly: number; // 0
   healthMinEnabled: boolean; // true
+  // Wynagrodzenie pracownika (oficjalne, na umowie)
+  pracownikOficjalnyEnabled: boolean; // do podatków liczy oficjalny brutto + ZUS zamiast realnej wypłaty
+  pracownikBruttoMies: number; // oficjalny brutto/mies. wg umowy (np. 1255)
+  pracownikZusPracodawcyMies: number; // składki ZUS po stronie pracodawcy/mies. (kwota od księgowej)
 }
 
 export interface WorkspaceData {
@@ -229,7 +233,8 @@ export interface WorkspaceState {
 // Wynik obliczeń dla miesiąca
 export interface WynikMiesiaca {
   przychod: number;
-  wynagrodzeniePracownika: number;
+  wynagrodzeniePracownika: number; // realna wypłata kierowcy (dniówki + premia)
+  zusPracodawcy: number; // składki ZUS pracodawcy (gdy włączone oficjalne wynagrodzenie)
   paliwo: number;
   inne: number;
   leasing: number;
