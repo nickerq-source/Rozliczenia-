@@ -281,3 +281,12 @@ export function IconChevronDown(props: IconProps) {
     </svg>
   );
 }
+
+export function IconCamera(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M5 7h2l2 -2h6l2 2h2a1 1 0 0 1 1 1v11a1 1 0 0 1 -1 1h-14a1 1 0 0 1 -1 -1v-11a1 1 0 0 1 1 -1" />
+      <circle cx="12" cy="13" r="3" />
+    </svg>
+  );
+}

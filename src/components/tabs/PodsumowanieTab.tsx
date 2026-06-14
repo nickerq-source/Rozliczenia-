@@ -13,12 +13,13 @@ import {
   WpisInnegoKosztu,
   WpisTankowania,
 } from "@/lib/types";
-import { obliczWynikMiesiaca, formatZl, formatZlCaly } from "@/lib/business-logic";
+import { obliczWynikMiesiaca, formatZl, formatZlCaly, sumaObciazen } from "@/lib/business-logic";
 import { POLSKIE_MIESIACE } from "@/lib/dates";
 import { Card } from "../ui/Card";
 import { NotatkiPanel } from "../panels/NotatkiPanel";
 import { PowiadomieniaPanel } from "../panels/PowiadomieniaPanel";
 import { PodatkiCard } from "../PodatkiCard";
+import { ObciazeniaSekcja } from "../ObciazeniaSekcja";
 import { kategoriaLabel, PodatkiMiesiaca, rozbijWpis } from "@/lib/tax";
 import { logChange } from "@/lib/audit";
 import {
@@ -124,6 +125,10 @@ export function PodsumowanieTab({
 
   const wyplata = dane.wyplata ?? { status: "niewypłacone" as const };
   const wyplacone = wyplata.status === "wypłacone";
+
+  // Wypłata do ręki = wynagrodzenie (dniówki + premia) − obciążenia
+  const obciazeniaSuma = sumaObciazen(dane.obciazenia);
+  const doWyplaty = wynik.wynagrodzeniePracownika - obciazeniaSuma;
   const kosztyEksport = useMemo(() => {
     if (!ustawienia) return [];
     const wpisy: {
@@ -476,31 +481,71 @@ export function PodsumowanieTab({
               {POLSKIE_MIESIACE[miesiac]} 2026 — Wypłata kierowcy
             </h3>
           </div>
-          <div className="flex items-center justify-between gap-3 flex-wrap">
-            <div>
-              <p className="text-xl font-extrabold text-white tabular-nums">
-                {formatZlCaly(wynik.wynagrodzeniePracownika)}
-              </p>
-              <p className={cn("text-xs mt-0.5 flex items-center gap-1.5", wyplacone ? "text-green-300" : "text-dim")}>
-                <span className={cn("w-1.5 h-1.5 rounded-full", wyplacone ? "bg-green-400" : "bg-amber-brand")} />
-                {wyplacone
-                  ? `Wypłacone${wyplata.paidAt ? ` — ${new Date(wyplata.paidAt).toLocaleDateString("pl-PL")}` : ""}${wyplata.paidBy ? ` (${wyplata.paidBy})` : ""}`
-                  : "Niewypłacone"}
-              </p>
+          {/* Rozbicie: zarobek + premia − obciążenia = do wypłaty */}
+          <div className="rounded-xl bg-surface2 border border-line p-3 mb-3 text-sm tabular-nums">
+            <div className="flex justify-between py-0.5">
+              <span className="text-dim">Zarobek z kółek + dodatki</span>
+              <span className="text-ink">{formatZlCaly(wynik.sumaDniowek)}</span>
             </div>
-            <button
-              onClick={oznaczWyplate}
-              className={cn(
-                "px-4 py-2 min-h-[40px] rounded-xl text-sm font-bold transition-all duration-150",
-                wyplacone
-                  ? "border border-line text-dim hover:text-ink"
-                  : "bg-amber-brand text-amber-ink hover:bg-[#e09420]"
-              )}
-            >
-              {wyplacone ? "Cofnij oznaczenie" : "Oznacz jako wypłacone"}
-            </button>
+            {wynik.premia > 0 && (
+              <div className="flex justify-between py-0.5">
+                <span className="text-dim">Premia sobotnia</span>
+                <span className="text-amber-brand">+ {formatZlCaly(wynik.premia)}</span>
+              </div>
+            )}
+            {obciazeniaSuma > 0 && (
+              <div className="flex justify-between py-0.5">
+                <span className="text-dim">Obciążenia</span>
+                <span className="text-red-300">− {formatZlCaly(obciazeniaSuma)}</span>
+              </div>
+            )}
+            <div className="flex justify-between pt-1.5 mt-1 border-t border-line font-bold">
+              <span className="text-white">Do wypłaty</span>
+              <span className="text-white text-lg">{formatZlCaly(doWyplaty)}</span>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <p className={cn("text-xs flex items-center gap-1.5", wyplacone ? "text-green-300" : "text-dim")}>
+              <span className={cn("w-1.5 h-1.5 rounded-full", wyplacone ? "bg-green-400" : "bg-amber-brand")} />
+              {wyplacone
+                ? `Wypłacone${wyplata.paidAt ? ` — ${new Date(wyplata.paidAt).toLocaleDateString("pl-PL")}` : ""}${wyplata.paidBy ? ` (${wyplata.paidBy})` : ""}`
+                : "Niewypłacone"}
+            </p>
+            <div className="flex items-center gap-2">
+              <a
+                href={`/api/payroll-pdf/${miesiac}`}
+                className="px-3 py-2 min-h-[40px] inline-flex items-center gap-1.5 rounded-xl border border-line text-sm text-dim hover:text-ink hover:border-dim transition-all duration-150"
+                title="Pobierz PDF wypłaty"
+              >
+                📄 PDF
+              </a>
+              <button
+                onClick={oznaczWyplate}
+                className={cn(
+                  "px-4 py-2 min-h-[40px] rounded-xl text-sm font-bold transition-all duration-150",
+                  wyplacone
+                    ? "border border-line text-dim hover:text-ink"
+                    : "bg-amber-brand text-amber-ink hover:bg-[#e09420]"
+                )}
+              >
+                {wyplacone ? "Cofnij oznaczenie" : "Oznacz jako wypłacone"}
+              </button>
+            </div>
           </div>
         </Card>
+      )}
+
+      {/* Obciążenia kierowcy (admin: edycja) */}
+      {isAdmin && (
+        <ObciazeniaSekcja
+          miesiac={miesiac}
+          obciazenia={dane.obciazenia ?? []}
+          editable={!!onUpdate}
+          onUpdate={onUpdate}
+          token={token}
+          userName={userName}
+        />
       )}
 
       {/* Podatki — szacunek (tylko admin) */}

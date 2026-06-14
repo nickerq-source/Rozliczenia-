@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 import {
   DaneMiesiaca,
+  DayType,
   DocumentStatus,
   KategoriaKosztu,
   KosztVatInfo,
@@ -17,6 +18,7 @@ import {
   ZgloszenieDnia,
 } from "@/lib/types";
 import { kategoriaLabel, domyslnyVatKategorii } from "@/lib/tax";
+import { TYP_DNIA_LABEL, TYPY_DNIA, typDniaMeta } from "@/lib/day-type";
 import { kategoryzujLokalnie } from "@/lib/categorize";
 import {
   KategoriaBadge,
@@ -30,6 +32,7 @@ import {
   obliczInneKoszty,
   formatZlCaly,
   parseNum,
+  liczDniWgTypu,
 } from "@/lib/business-logic";
 import {
   getDniMiesiaca,
@@ -53,6 +56,7 @@ import {
   IconPaperclip,
 } from "../ui/icons";
 import { logChange } from "@/lib/audit";
+import { SkanParagonu } from "../SkanParagonu";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -718,6 +722,38 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
     [onUpdate]
   );
 
+  // Typ dnia (część E): wolne/urlop/L4 zerują kółka i dniówkę
+  function setDayType(iso: string, dayType: DayType) {
+    const stary = dane.dni[iso]?.dayType ?? "pracujacy";
+    if (stary === dayType) return;
+    onUpdate((prev) => {
+      const base = prev.dni[iso] ?? { data: iso, kolka: 0, szkolenie: 0 };
+      const wolny = dayType !== "pracujacy";
+      return {
+        ...prev,
+        dni: {
+          ...prev.dni,
+          [iso]: {
+            ...base,
+            dayType,
+            kolka: wolny ? 0 : base.kolka,
+            szkolenie: wolny ? 0 : base.szkolenie,
+          },
+        },
+      };
+    });
+    logChange({
+      workspaceId: token,
+      userName,
+      action: "typ_dnia",
+      entity: "driver_day",
+      entityId: iso,
+      oldValue: { dayType: stary },
+      newValue: { dayType },
+      description: `${userName} ustawił dzień ${iso.slice(8)}.${String(miesiac).padStart(2, "0")} jako ${TYP_DNIA_LABEL[dayType]}`,
+    });
+  }
+
   function startDayEdit(iso: string, field: "kolka" | "szkolenie", value: number) {
     dayEditStart.current[`${iso}:${field}`] = parseNum(value);
   }
@@ -754,6 +790,26 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
         { id: uuidv4(), data: "", koszt: 0 },
       ],
     }));
+  }
+
+  // Dodanie gotowego kosztu ze skanu paragonu (część B) + audit/push
+  function dodajZeSkanu(wpis: WpisInnegoKosztu | WpisTankowania, typ: "inne" | "tankowanie") {
+    onUpdate((prev) =>
+      typ === "tankowanie"
+        ? { ...prev, tankowanie: [...prev.tankowanie, wpis as WpisTankowania] }
+        : { ...prev, inneKoszty: [...prev.inneKoszty, wpis as WpisInnegoKosztu] }
+    );
+    const nazwa = typ === "tankowanie" ? "paliwo" : (wpis as WpisInnegoKosztu).nazwa;
+    logChange({
+      workspaceId: token,
+      userName,
+      action: "koszt_skan",
+      entity: "cost",
+      entityId: wpis.id,
+      newValue: { nazwa, koszt: wpis.koszt, kategoria: wpis.kategoria, vat: wpis.vatRate },
+      description: `${userName} dodał koszt ze zdjęcia: ${nazwa} ${formatZlCaly(wpis.koszt)}`,
+      url: `/admin?miesiac=${miesiac}&zakladka=koszty`,
+    });
   }
 
   function updateTankowanie(id: string, patch: Partial<WpisTankowania>) {
@@ -930,6 +986,9 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
             const aktywna = kolka > 0;
             const zglDnia = zglPerDay.get(iso);
             const sporny = zglDnia?.status === "zgloszony";
+            const typDnia = dzien.dayType ?? "pracujacy";
+            const wolny = typDnia !== "pracujacy";
+            const meta = typDniaMeta(typDnia);
 
             const separator =
               dayIdx > 0 && getDayOfWeek(iso) === 1 ? <WeekSeparator n={++weekNum} /> : null;
@@ -951,41 +1010,61 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
                       : undefined
                   }
                 >
-                  {/* Data */}
-                  <div className="text-sm tabular-nums">
+                  {/* Data + typ dnia */}
+                  <div className="text-sm tabular-nums flex items-center gap-1.5 flex-wrap">
                     <span className={cn("font-bold", aktywna && (sob || nie) ? "text-white" : "text-ink")}>
                       {nrDnia(iso)}
                     </span>
                     <span className={cn(
-                      "ml-1.5 text-xs",
+                      "text-xs",
                       aktywna && (sob || nie)
                         ? "text-white/70"
                         : sob ? "text-green-400" : nie ? "text-yellow-400" : "text-dim"
                     )}>
                       {nazwaSkrotDnia(iso)}
                     </span>
+                    <select
+                      value={typDnia}
+                      onChange={(e) => setDayType(iso, e.target.value as DayType)}
+                      title="Typ dnia"
+                      className={cn("rounded-full border px-1.5 py-0.5 text-[10px] font-bold", meta.chipCls)}
+                    >
+                      {TYPY_DNIA.map((t) => (
+                        <option key={t.id} value={t.id}>{t.krotki}</option>
+                      ))}
+                    </select>
                   </div>
 
-                  {/* Kółka */}
-                  <NumInput
-                    value={dzien.kolka || ""}
-                    onChange={(v) => setKolka(iso, v)}
-                    onFocus={() => startDayEdit(iso, "kolka", dzien.kolka)}
-                    onBlur={(e) => finishDayEdit(iso, "kolka", parseNum(e.currentTarget.value))}
-                    placeholder="0"
-                    className="!py-1.5 !px-2 !text-sm !text-center !w-16"
-                  />
-
-                  {/* Szkolenie (tylko czerwiec) */}
-                  {miesiac === 6 && (
+                  {/* Kółka — zablokowane gdy dzień wolny/urlop/L4 */}
+                  {wolny ? (
+                    <span className={cn("flex items-center justify-center rounded-lg border px-1 py-1.5 text-[10px] font-bold !w-16", meta.chipCls)}>
+                      {meta.krotki}
+                    </span>
+                  ) : (
                     <NumInput
-                      value={dzien.szkolenie || ""}
-                      onChange={(v) => setSzkolenie(iso, v)}
-                      onFocus={() => startDayEdit(iso, "szkolenie", dzien.szkolenie)}
-                      onBlur={(e) => finishDayEdit(iso, "szkolenie", parseNum(e.currentTarget.value))}
+                      value={dzien.kolka || ""}
+                      onChange={(v) => setKolka(iso, v)}
+                      onFocus={() => startDayEdit(iso, "kolka", dzien.kolka)}
+                      onBlur={(e) => finishDayEdit(iso, "kolka", parseNum(e.currentTarget.value))}
                       placeholder="0"
                       className="!py-1.5 !px-2 !text-sm !text-center !w-16"
                     />
+                  )}
+
+                  {/* Szkolenie (tylko czerwiec) */}
+                  {miesiac === 6 && (
+                    wolny ? (
+                      <span className="flex items-center justify-center text-dim/40 text-sm !w-16">—</span>
+                    ) : (
+                      <NumInput
+                        value={dzien.szkolenie || ""}
+                        onChange={(v) => setSzkolenie(iso, v)}
+                        onFocus={() => startDayEdit(iso, "szkolenie", dzien.szkolenie)}
+                        onBlur={(e) => finishDayEdit(iso, "szkolenie", parseNum(e.currentTarget.value))}
+                        placeholder="0"
+                        className="!py-1.5 !px-2 !text-sm !text-center !w-16"
+                      />
+                    )
                   )}
 
                   {/* Dniówka */}
@@ -1003,6 +1082,19 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
             );
           })}
         </div>
+
+        {/* Liczniki dni wg typu */}
+        {(() => {
+          const c = liczDniWgTypu(dane.dni);
+          return (
+            <p className="mt-3 text-xs text-dim flex flex-wrap gap-x-3 gap-y-1">
+              <span>Pracujące: <b className="text-ink">{c.pracujace}</b></span>
+              <span>Wolne: <b className="text-zinc-300">{c.wolne}</b></span>
+              <span>Urlop: <b className="text-blue-300">{c.urlop}</b></span>
+              <span>L4: <b className="text-purple-300">{c.chorobowe}</b></span>
+            </p>
+          );
+        })()}
 
         {/* Podsumowanie wynagrodzenia */}
         <div className="mt-4 rounded-2xl bg-surface2 border border-line p-4 space-y-1.5">
@@ -1097,6 +1189,11 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
         >
           + Dodaj tankowanie
         </button>
+        <SkanParagonu
+          typ="tankowanie"
+          ustawienia={ustawienia}
+          onZapisz={(w) => dodajZeSkanu(w, "tankowanie")}
+        />
         {dane.tankowanie.length > 0 && (
           <div className="flex items-center gap-2 mt-3 rounded-2xl bg-surface2 border border-line px-4 py-3">
             <IconGasStation size={18} className="text-amber-brand" />
@@ -1192,6 +1289,11 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
         >
           + Dodaj koszt
         </button>
+        <SkanParagonu
+          typ="inne"
+          ustawienia={ustawienia}
+          onZapisz={(w) => dodajZeSkanu(w, "inne")}
+        />
         {dane.inneKoszty.length > 0 && (
           <div className="flex items-center gap-2 mt-3 rounded-2xl bg-surface2 border border-line px-4 py-3">
             <IconPackage size={18} className="text-amber-brand" />

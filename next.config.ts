@@ -13,6 +13,8 @@ const nextConfig: NextConfig = {
       // Worker ładowany dynamicznie — nft go nie śledzi; wymuś jego wdrożenie
       "./node_modules/pdfjs-dist/legacy/build/pdf.worker.js",
     ],
+    // PDF wypłaty czyta fonty z dysku w runtime — wymuś ich wdrożenie
+    "/api/payroll-pdf/[month]": ["./public/fonts/*.ttf"],
   },
   webpack: (config) => {
     // pdf-parse/pdfjs-dist próbuje załadować moduł canvas (tylko do renderowania).

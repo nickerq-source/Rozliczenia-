@@ -18,7 +18,8 @@ import {
   IconLock,
 } from "./ui/icons";
 import { cn } from "@/lib/utils";
-import type { WeryfikacjaStatus } from "@/lib/types";
+import type { WeryfikacjaStatus, DayType } from "@/lib/types";
+import { typDniaMeta } from "@/lib/day-type";
 
 interface DzienRozbicie {
   data: string;
@@ -26,6 +27,7 @@ interface DzienRozbicie {
   skrotDnia: string;
   sobota: boolean;
   niedziela: boolean;
+  dayType: DayType;
   kolka: number;
   szkolenie: number;
   dniowka: number;
@@ -43,17 +45,30 @@ interface Zgloszenie {
   rozwiazano?: string;
 }
 
+interface Obciazenie {
+  id: string;
+  data?: string;
+  nazwa: string;
+  kwota: number;
+  notatka?: string;
+}
+
 interface MiesiacWyplata {
   miesiac: number;
   nazwa: string;
   wynagrodzenie: number;
+  sumaDniowek: number;
+  premia: number;
+  obciazeniaSuma: number;
+  doWyplaty: number;
   dniPracy: number;
   kolka: number;
   liczbaSobot: number;
-  premia: number;
+  liczbyDni: { pracujace: number; wolne: number; urlop: number; chorobowe: number };
   wyplata: { status: "niewypłacone" | "wypłacone"; paidAt?: string };
   zamkniety: boolean;
   dni: DzienRozbicie[];
+  obciazenia: Obciazenie[];
   zgloszenia: Zgloszenie[];
 }
 
@@ -230,14 +245,61 @@ function MiesiacKarta({
       </button>
 
       <p className="text-2xl font-extrabold text-amber-brand tabular-nums mt-1">
-        {formatZlCaly(m.wynagrodzenie)}
+        {formatZlCaly(m.doWyplaty)}
       </p>
+      {aktywny && m.obciazeniaSuma > 0 && (
+        <p className="text-[11px] text-dim mt-0.5">
+          zarobek {formatZlCaly(m.wynagrodzenie)} − obciążenia {formatZlCaly(m.obciazeniaSuma)}
+        </p>
+      )}
 
       {aktywny && (
         <p className="text-xs text-dim mt-0.5">
           {m.dniPracy} dni pracy · {m.kolka} kółek · soboty {m.liczbaSobot}/4
           {m.premia > 0 && <span className="text-amber-brand"> · premia +{formatZlCaly(m.premia)}</span>}
         </p>
+      )}
+
+      {aktywny && (m.liczbyDni.wolne + m.liczbyDni.urlop + m.liczbyDni.chorobowe) > 0 && (
+        <p className="text-[11px] text-dim mt-0.5 flex flex-wrap gap-x-2.5">
+          <span>Pracujące: <b className="text-ink">{m.liczbyDni.pracujace}</b></span>
+          {m.liczbyDni.wolne > 0 && <span>Wolne: <b className="text-zinc-300">{m.liczbyDni.wolne}</b></span>}
+          {m.liczbyDni.urlop > 0 && <span>Urlop: <b className="text-blue-300">{m.liczbyDni.urlop}</b></span>}
+          {m.liczbyDni.chorobowe > 0 && <span>L4: <b className="text-purple-300">{m.liczbyDni.chorobowe}</b></span>}
+        </p>
+      )}
+
+      {aktywny && (
+        <a
+          href={`/api/payroll-pdf/${m.miesiac}`}
+          className="mt-2 inline-flex items-center gap-1.5 text-xs text-amber-brand border border-amber-brand/40 rounded-lg px-2.5 py-1 hover:bg-amber-brand/10 transition-colors"
+          onClick={(e) => e.stopPropagation()}
+        >
+          📄 Pobierz PDF wypłaty
+        </a>
+      )}
+
+      {/* Obciążenia (readonly) */}
+      {aktywny && otwarty && m.obciazenia.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-line">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-dim mb-1.5">Obciążenia</p>
+          <div className="space-y-1">
+            {m.obciazenia.map((o) => (
+              <div key={o.id} className="flex items-start justify-between gap-2 text-xs">
+                <span className="text-ink min-w-0">
+                  {o.nazwa}
+                  {o.data && <span className="text-dim/50 ml-1">{o.data}</span>}
+                  {o.notatka && <span className="block text-dim/60 italic">„{o.notatka}”</span>}
+                </span>
+                <span className="shrink-0 text-red-300 font-semibold tabular-nums">− {formatZlCaly(o.kwota)}</span>
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-between text-xs font-bold pt-1.5 mt-1.5 border-t border-line">
+            <span className="text-white">Do wypłaty</span>
+            <span className="text-white tabular-nums">{formatZlCaly(m.doWyplaty)}</span>
+          </div>
+        </div>
       )}
 
       {/* Przypomnienie o weryfikacji */}
@@ -316,6 +378,8 @@ function DzienWiersz({
   }
 
   const st = zgloszenie?.status;
+  const wolny = d.dayType !== "pracujacy";
+  const meta = typDniaMeta(d.dayType);
   const tlo = d.sobota
     ? "var(--sat-bg)"
     : d.niedziela
@@ -338,24 +402,32 @@ function DzienWiersz({
           </span>
         </div>
 
-        {/* Kółka + dniówka */}
+        {/* Kółka + dniówka / typ dnia */}
         <div className="flex-1 min-w-0">
-          <p className="text-sm text-ink">
-            <span className="font-semibold text-white">{d.kolka}</span> kółek
-            {d.dodatekNiedzielny > 0 && (
-              <span className="text-yellow-300 text-xs"> · +niedziela</span>
-            )}
-            {d.szkolenie > 0 && <span className="text-blue-300 text-xs"> · szkolenie</span>}
-          </p>
+          {wolny ? (
+            <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-bold", meta.chipCls)}>
+              {meta.label}
+            </span>
+          ) : (
+            <p className="text-sm text-ink">
+              <span className="font-semibold text-white">{d.kolka}</span> kółek
+              {d.dodatekNiedzielny > 0 && (
+                <span className="text-yellow-300 text-xs"> · +niedziela</span>
+              )}
+              {d.szkolenie > 0 && <span className="text-blue-300 text-xs"> · szkolenie</span>}
+            </p>
+          )}
         </div>
 
         {/* Kwota */}
-        <span className="shrink-0 text-sm font-bold text-amber-brand tabular-nums">
-          {formatZlCaly(d.dniowka)}
-        </span>
+        {!wolny && (
+          <span className="shrink-0 text-sm font-bold text-amber-brand tabular-nums">
+            {formatZlCaly(d.dniowka)}
+          </span>
+        )}
 
-        {/* Akcje / status */}
-        {!readonly && (
+        {/* Akcje / status — tylko dla dni pracujących */}
+        {!readonly && !wolny && (
           <div className="shrink-0 flex items-center gap-1">
             {st === "zaakceptowany" ? (
               <span title="Potwierdzone przez Ciebie" className="text-green-400">

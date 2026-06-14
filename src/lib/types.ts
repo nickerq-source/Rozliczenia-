@@ -53,10 +53,14 @@ export interface MonthLock {
   lockedAt?: string;
 }
 
+/** Typ dnia pracy kierowcy */
+export type DayType = "pracujacy" | "wolne" | "urlop" | "chorobowe";
+
 export interface DzienKierowcy {
   data: string; // "2026-06-01" ISO format
   kolka: number; // liczba kółek (tras)
   szkolenie: number; // tylko czerwiec, w zł (0 lub 150)
+  dayType?: DayType; // domyślnie "pracujacy"
 }
 
 // ─── KATEGORIE I VAT KOSZTÓW ─────────────────────────────────────────────────
@@ -146,6 +150,17 @@ export interface ZgloszenieDnia {
   rozwiazano?: string; // ISO datetime — gdy admin rozstrzygnął
 }
 
+/** Obciążenie kierowcy — potrącenie z wypłaty (mandat z winy, szkoda, zaliczka) */
+export interface Obciazenie {
+  id: string;
+  data?: string; // ISO "YYYY-MM-DD"
+  nazwa: string;
+  kwota: number;
+  notatka?: string;
+  autor: string;
+  utworzono: string; // ISO datetime
+}
+
 export interface DaneMiesiaca {
   faktury: FakturaWeek[];
   dni: Record<string, DzienKierowcy>; // klucz: "2026-06-01"
@@ -155,6 +170,7 @@ export interface DaneMiesiaca {
   wyplata?: WyplataInfo;
   zamkniety?: MonthLock;
   zgloszenia?: ZgloszenieDnia[]; // weryfikacje dni przez kierowcę
+  obciazenia?: Obciazenie[]; // potrącenia z wypłaty kierowcy
 }
 
 /** Notatka przypięta do workspace + miesiąca */

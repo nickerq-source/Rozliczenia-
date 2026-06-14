@@ -53,6 +53,11 @@ export function obliczDniowke(
   dniMap: Record<string, DzienKierowcy>,
   miesiac: number
 ): DniowkaInfo {
+  // Dzień nie-pracujący (wolne/urlop/L4) → zero dniówki, zero kółek
+  if (dzien.dayType && dzien.dayType !== "pracujacy") {
+    return { kwotaKolek: 0, szkolenie: 0, dodatekNiedzielny: 0, dniowka: 0 };
+  }
+
   const kolka = parseNum(dzien.kolka);
   const kwotaKolek = kolka * 100;
 
@@ -100,7 +105,8 @@ export function obliczWynagrodzenie(
     dniowki[iso] = info;
     sumaDniowek += info.dniowka;
 
-    if (isSobota(iso) && parseNum(dzien.kolka) > 0) {
+    const pracujacy = !dzien.dayType || dzien.dayType === "pracujacy";
+    if (pracujacy && isSobota(iso) && parseNum(dzien.kolka) > 0) {
       liczbaSobot++;
     }
   }
@@ -126,6 +132,30 @@ export function obliczKosztPaliwa(tankowanie: DaneMiesiaca["tankowanie"]): numbe
 
 export function obliczInneKoszty(inne: DaneMiesiaca["inneKoszty"]): number {
   return inne.reduce((sum, t) => sum + parseNum(t.koszt), 0);
+}
+
+// ─── OBCIĄŻENIA KIEROWCY ───────────────────────────────────────────────────────
+
+/** Suma obciążeń (potrąceń) kierowcy w miesiącu */
+export function sumaObciazen(obciazenia?: DaneMiesiaca["obciazenia"]): number {
+  return (obciazenia ?? []).reduce((sum, o) => sum + parseNum(o.kwota), 0);
+}
+
+// ─── TYPY DNI ──────────────────────────────────────────────────────────────────
+
+/** Liczniki dni: pracujące (przepracowane, kółka>0), wolne, urlop, chorobowe */
+export function liczDniWgTypu(dni: Record<string, DzienKierowcy>): {
+  pracujace: number; wolne: number; urlop: number; chorobowe: number;
+} {
+  let pracujace = 0, wolne = 0, urlop = 0, chorobowe = 0;
+  for (const d of Object.values(dni)) {
+    const typ = d.dayType ?? "pracujacy";
+    if (typ === "wolne") wolne++;
+    else if (typ === "urlop") urlop++;
+    else if (typ === "chorobowe") chorobowe++;
+    else if (parseNum(d.kolka) > 0) pracujace++;
+  }
+  return { pracujace, wolne, urlop, chorobowe };
 }
 
 // ─── WYNIK MIESIĄCA ───────────────────────────────────────────────────────────
