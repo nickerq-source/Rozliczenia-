@@ -2,9 +2,10 @@
 
 // Tankowanie w panelu kierowcy: kierowca wpisuje litry + cenę (lub kwotę),
 // albo robi zdjęcie paragonu i AI uzupełnia dane. Wpis trafia przez
-// /api/driver/fuel do kosztów admina (rubryka „Tankowanie").
+// /api/driver/fuel do kosztów admina (rubryka „Tankowanie"). Kierowca widzi
+// też listę swoich tankowań i może je usunąć (z potwierdzeniem).
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Card } from "./ui/Card";
 import { imageToCompressedDataUrl } from "@/lib/image";
 import { formatZlCaly } from "@/lib/business-logic";
@@ -15,6 +16,8 @@ import {
   IconCheck,
   IconX,
   IconPlus,
+  IconTrash,
+  IconLock,
 } from "./ui/icons";
 
 interface OdczytParagonu {
@@ -28,19 +31,33 @@ interface OdczytParagonu {
   _noKey?: boolean;
 }
 
+interface WpisListy {
+  id: string;
+  data: string;
+  koszt: number;
+  litry?: number;
+  miesiac: number;
+  nazwaMiesiaca: string;
+  zamkniety: boolean;
+}
+
 function todayISO(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 const num = (s: string): number => parseFloat(s.replace(",", "."));
+const ddmm = (iso: string): string => `${iso.slice(8, 10)}.${iso.slice(5, 7)}`;
 
 export function TankowanieKierowcy() {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [scanInfo, setScanInfo] = useState<null | "ok" | "manual">(null);
   const [blad, setBlad] = useState<string | null>(null);
-  const [ostatnie, setOstatnie] = useState<string[]>([]);
+
+  const [lista, setLista] = useState<WpisListy[]>([]);
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [delBusyId, setDelBusyId] = useState<string | null>(null);
 
   // Pola
   const [fData, setFData] = useState(todayISO());
@@ -50,6 +67,21 @@ export function TankowanieKierowcy() {
   const [fSprzedawca, setFSprzedawca] = useState("");
   const [fNip, setFNip] = useState("");
   const [fZalacznik, setFZalacznik] = useState<string | null>(null);
+
+  const wczytaj = useCallback(async () => {
+    try {
+      const r = await fetch("/api/driver/fuel");
+      if (!r.ok) return;
+      const j = await r.json();
+      setLista(j.tankowania ?? []);
+    } catch {
+      /* lista nieobowiązkowa */
+    }
+  }, []);
+
+  useEffect(() => {
+    wczytaj();
+  }, [wczytaj]);
 
   function reset() {
     setFData(todayISO());
@@ -95,7 +127,6 @@ export function TankowanieKierowcy() {
       setFNip(o.nip ?? "");
       setFKwota(o.kwotaBrutto != null ? String(o.kwotaBrutto) : "");
       setFLitry(o.litry != null ? String(o.litry) : "");
-      // Cena za litr z odczytu (gdy mamy oba)
       if (o.kwotaBrutto != null && o.litry != null && o.litry > 0) {
         setFCena(String(Math.round((o.kwotaBrutto / o.litry) * 100) / 100));
       } else {
@@ -138,14 +169,32 @@ export function TankowanieKierowcy() {
         setBlad(json.error ?? "Nie udało się zapisać tankowania.");
         return;
       }
-      const litryTxt = isFinite(litry) && litry > 0 ? ` · ${litry} l` : "";
-      setOstatnie((p) => [`${formatZlCaly(kwota)}${litryTxt}`, ...p].slice(0, 5));
       reset();
       setOpen(false);
+      await wczytaj();
     } catch {
       setBlad("Błąd połączenia. Spróbuj ponownie.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function usun(w: WpisListy) {
+    setDelBusyId(w.id);
+    try {
+      const res = await fetch("/api/driver/fuel", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: w.id, miesiac: w.miesiac }),
+      });
+      if (res.ok) {
+        setConfirmId(null);
+        await wczytaj();
+      }
+    } catch {
+      /* zostaw — kierowca spróbuje ponownie */
+    } finally {
+      setDelBusyId(null);
     }
   }
 
@@ -161,17 +210,6 @@ export function TankowanieKierowcy() {
       <p className="text-xs text-dim mt-1">
         Wpisz litry i cenę albo zrób zdjęcie paragonu — reszta sama trafi do rozliczenia.
       </p>
-
-      {/* Potwierdzenia ostatnio dodanych w tej sesji */}
-      {ostatnie.length > 0 && (
-        <div className="mt-2 space-y-1">
-          {ostatnie.map((t, i) => (
-            <p key={i} className="flex items-center gap-1.5 text-xs text-green-300">
-              <IconCheck size={13} /> Dodano: {t}
-            </p>
-          ))}
-        </div>
-      )}
 
       {!open ? (
         <div className="mt-3 grid grid-cols-2 gap-2">
@@ -288,6 +326,61 @@ export function TankowanieKierowcy() {
               {busy ? <IconLoader size={14} /> : <IconCheck size={14} />}
               Zapisz tankowanie
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Lista własnych tankowań kierowcy — z usuwaniem */}
+      {lista.length > 0 && (
+        <div className="mt-4 pt-3 border-t border-line/60">
+          <p className="text-[11px] font-semibold text-dim uppercase tracking-wide mb-1">Twoje tankowania</p>
+          <div className="divide-y divide-line/40">
+            {lista.map((w) => (
+              <div key={w.id} className="flex items-center gap-2 py-2">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-ink tabular-nums">
+                    {formatZlCaly(w.koszt)}
+                    {w.litry ? <span className="text-dim"> · {w.litry} l</span> : null}
+                  </p>
+                  <p className="text-[11px] text-dim">{ddmm(w.data)} · {w.nazwaMiesiaca}</p>
+                </div>
+
+                {w.zamkniety ? (
+                  <span className="shrink-0 flex items-center gap-1 text-[10px] text-dim">
+                    <IconLock size={12} /> zamknięty
+                  </span>
+                ) : confirmId === w.id ? (
+                  <div className="shrink-0 flex items-center gap-1.5">
+                    <span className="text-[11px] text-dim">Na pewno?</span>
+                    <button
+                      type="button"
+                      onClick={() => usun(w)}
+                      disabled={delBusyId === w.id}
+                      className="px-2 py-1 rounded-lg bg-red-500/90 hover:bg-red-500 text-white text-[11px] font-bold disabled:opacity-50 flex items-center gap-1"
+                    >
+                      {delBusyId === w.id ? <IconLoader size={11} /> : null} Usuń
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmId(null)}
+                      disabled={delBusyId === w.id}
+                      className="px-2 py-1 rounded-lg border border-line text-dim text-[11px] hover:text-ink"
+                    >
+                      Nie
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmId(w.id)}
+                    title="Usuń tankowanie"
+                    className="shrink-0 p-2 rounded-lg text-red-400 hover:bg-red-soft transition-colors"
+                  >
+                    <IconTrash size={16} />
+                  </button>
+                )}
+              </div>
+            ))}
           </div>
         </div>
       )}
