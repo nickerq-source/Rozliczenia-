@@ -279,25 +279,43 @@ function MiesiacKarta({
         </a>
       )}
 
-      {/* Obciążenia (readonly) */}
-      {aktywny && otwarty && m.obciazenia.length > 0 && (
-        <div className="mt-3 pt-3 border-t border-line">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-dim mb-1.5">Obciążenia</p>
-          <div className="space-y-1">
-            {m.obciazenia.map((o) => (
-              <div key={o.id} className="flex items-start justify-between gap-2 text-xs">
-                <span className="text-ink min-w-0">
-                  {o.nazwa}
-                  {o.data && <span className="text-dim/50 ml-1">{o.data}</span>}
-                  {o.notatka && <span className="block text-dim/60 italic">„{o.notatka}”</span>}
-                </span>
-                <span className="shrink-0 text-red-300 font-semibold tabular-nums">− {formatZlCaly(o.kwota)}</span>
-              </div>
-            ))}
+      {/* Rozliczenie wypłaty (z obciążeniami) — widoczne po rozwinięciu */}
+      {aktywny && otwarty && (
+        <div className="mt-3 rounded-xl bg-surface2 border border-line p-3 text-sm tabular-nums">
+          <p className="text-[11px] font-bold uppercase tracking-wider text-dim mb-2">Rozliczenie wypłaty</p>
+          <div className="flex justify-between py-0.5">
+            <span className="text-dim">Zarobek z kółek + dodatki</span>
+            <span className="text-ink">{formatZlCaly(m.sumaDniowek)}</span>
           </div>
-          <div className="flex justify-between text-xs font-bold pt-1.5 mt-1.5 border-t border-line">
+          {m.premia > 0 && (
+            <div className="flex justify-between py-0.5">
+              <span className="text-dim">Premia sobotnia</span>
+              <span className="text-amber-brand">+ {formatZlCaly(m.premia)}</span>
+            </div>
+          )}
+
+          {/* Obciążenia */}
+          <div className="mt-1.5 pt-1.5 border-t border-line">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-dim mb-1">Obciążenia</p>
+            {m.obciazenia.length === 0 ? (
+              <p className="text-xs text-dim/60">Brak obciążeń w tym miesiącu.</p>
+            ) : (
+              m.obciazenia.map((o) => (
+                <div key={o.id} className="flex items-start justify-between gap-2 text-xs py-0.5">
+                  <span className="text-ink min-w-0">
+                    {o.nazwa}
+                    {o.data && <span className="text-dim/50 ml-1">{o.data}</span>}
+                    {o.notatka && <span className="block text-dim/60 italic">„{o.notatka}”</span>}
+                  </span>
+                  <span className="shrink-0 text-red-300 font-semibold tabular-nums">− {formatZlCaly(o.kwota)}</span>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="flex justify-between font-bold pt-2 mt-1.5 border-t border-line">
             <span className="text-white">Do wypłaty</span>
-            <span className="text-white tabular-nums">{formatZlCaly(m.doWyplaty)}</span>
+            <span className="text-white text-base">{formatZlCaly(m.doWyplaty)}</span>
           </div>
         </div>
       )}
