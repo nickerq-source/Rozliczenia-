@@ -7,9 +7,10 @@ export const runtime = "nodejs";
 export const maxDuration = 60;
 
 /**
- * OCR paragonu/faktury ze zdjęcia (część B). Admin-only.
- * Przyjmuje obraz (base64 dataUrl), pyta Claude o dane, zwraca JSON do modala.
- * AI nigdy nie zapisuje kosztu — to robi użytkownik po sprawdzeniu.
+ * OCR paragonu/faktury ze zdjęcia (część B). Dla admina (koszty) i kierowcy
+ * (tankowanie). Przyjmuje obraz (base64 dataUrl), pyta Claude o dane, zwraca
+ * JSON do modala. AI nigdy nie zapisuje kosztu — to robi użytkownik po
+ * sprawdzeniu (admin bezpośrednio, kierowca przez /api/driver/fuel).
  * ANTHROPIC_API_KEY wyłącznie server-side.
  */
 
@@ -22,10 +23,11 @@ interface OdczytParagonu {
   kwotaBrutto: number | null;
   vatRate: VatRate | null;
   nazwa: string | null;
+  litry: number | null; // liczba litrów paliwa (gdy to paragon za paliwo)
 }
 
 const PUSTY: OdczytParagonu = {
-  sprzedawca: null, nip: null, data: null, kwotaBrutto: null, vatRate: null, nazwa: null,
+  sprzedawca: null, nip: null, data: null, kwotaBrutto: null, vatRate: null, nazwa: null, litry: null,
 };
 
 const PROMPT = `Odczytaj dane z tego paragonu lub faktury. Zwróć WYŁĄCZNIE JSON, bez komentarzy:
@@ -34,7 +36,8 @@ const PROMPT = `Odczytaj dane z tego paragonu lub faktury. Zwróć WYŁĄCZNIE J
  "data": "YYYY-MM-DD lub null",
  "kwotaBrutto": liczba (suma do zapłaty, brutto) lub null,
  "vatRate": jedna z "0","0.05","0.08","0.23","zw","np" — dominująca stawka VAT, lub null,
- "nazwa": "krótka nazwa zakupu, max 40 znaków (np. 'Paliwo Orlen', 'Olej silnikowy') lub null"}
+ "nazwa": "krótka nazwa zakupu, max 40 znaków (np. 'Paliwo Orlen', 'Olej silnikowy') lub null",
+ "litry": liczba zatankowanych litrów paliwa (np. 45.32) lub null jeśli to nie paliwo}
 Jeśli czegoś nie ma lub nie jesteś pewny — wpisz null. Nie zgaduj.`;
 
 /** Wyciąga media_type i czyste base64 z dataUrl */
@@ -61,6 +64,10 @@ function waliduj(raw: unknown): OdczytParagonu {
     typeof o.kwotaBrutto === "number" && isFinite(o.kwotaBrutto) && o.kwotaBrutto > 0
       ? Math.round(o.kwotaBrutto * 100) / 100
       : null;
+  const litry =
+    typeof o.litry === "number" && isFinite(o.litry) && o.litry > 0
+      ? Math.round(o.litry * 100) / 100
+      : null;
   return {
     sprzedawca: typeof o.sprzedawca === "string" ? o.sprzedawca.slice(0, 120) : null,
     nip: typeof o.nip === "string" ? o.nip.replace(/[^0-9]/g, "").slice(0, 15) || null : null,
@@ -68,14 +75,15 @@ function waliduj(raw: unknown): OdczytParagonu {
     kwotaBrutto: kwota,
     vatRate: walidujVat(o.vatRate),
     nazwa: typeof o.nazwa === "string" ? o.nazwa.slice(0, 60) : null,
+    litry,
   };
 }
 
 export async function POST(req: NextRequest) {
   const profile = await getSessionProfile();
   if (!profile) return NextResponse.json({ error: "Brak sesji" }, { status: 401 });
-  if (profile.role !== "admin") {
-    return NextResponse.json({ error: "Tylko dla administratora" }, { status: 403 });
+  if (profile.role !== "admin" && profile.role !== "driver") {
+    return NextResponse.json({ error: "Brak dostępu" }, { status: 403 });
   }
 
   let body: { image?: string };

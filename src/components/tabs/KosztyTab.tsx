@@ -1155,6 +1155,16 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
                   <IconX size={16} />
                 </button>
               </div>
+              {(t.litry || t.dodaneBy) && (
+                <p className="mt-1 text-[11px] text-dim flex items-center gap-1.5 flex-wrap">
+                  {t.litry ? <span className="tabular-nums">{t.litry} l</span> : null}
+                  {t.dodaneBy ? (
+                    <span className="px-1.5 py-0.5 rounded-full bg-amber-brand/10 border border-amber-brand/30 text-amber-brand">
+                      od kierowcy: {t.dodaneBy}
+                    </span>
+                  ) : null}
+                </p>
+              )}
               <div className="mt-1.5">
                 <RozliczeniePodatkoweButton
                   checked={czyRozliczanyPodatkowo(t)}

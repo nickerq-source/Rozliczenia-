@@ -122,6 +122,8 @@ export interface WpisTankowania extends KosztVatInfo {
   id: string;
   data: string;
   koszt: number;
+  litry?: number; // liczba zatankowanych litrów (opcjonalnie, np. wpis od kierowcy)
+  dodaneBy?: string; // kto dodał wpis (imię kierowcy, gdy z panelu kierowcy)
 }
 
 export interface WpisInnegoKosztu extends KosztVatInfo {
