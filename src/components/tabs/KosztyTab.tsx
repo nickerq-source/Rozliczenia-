@@ -305,11 +305,41 @@ function DokumentyKosztu({
   );
 }
 
+// Paginacja list kosztów — ile pozycji na stronę
+const KOSZTY_NA_STRONE = 7;
+
+/** Numerowany pager (np. dla list kosztów). Ukrywa się przy jednej stronie. */
+function Pager({ strona, total, onZmiana }: { strona: number; total: number; onZmiana: (s: number) => void }) {
+  if (total <= 1) return null;
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-1.5 mt-3">
+      {Array.from({ length: total }, (_, i) => i + 1).map((n) => (
+        <button
+          key={n}
+          type="button"
+          onClick={() => onZmiana(n)}
+          className={cn(
+            "min-w-[36px] h-9 px-2 rounded-lg text-sm font-semibold border transition-colors",
+            n === strona
+              ? "bg-amber-brand text-amber-ink border-amber-brand"
+              : "border-line text-dim hover:text-ink"
+          )}
+        >
+          {n}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia, focusZgloszenieId }: Props) {
   // Rozwinięte panele szczegółów VAT (klucz: id wpisu)
   const [rozwiniete, setRozwiniete] = useState<Record<string, boolean>>({});
   const [autoBusyId, setAutoBusyId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  // Paginacja list kosztów (1-indeksowana)
+  const [stronaTank, setStronaTank] = useState(1);
+  const [stronaInne, setStronaInne] = useState(1);
   // Id wpisów już objętych automatycznym backfillem (żeby nie powtarzać AI)
   const backfillDone = useRef<Set<string>>(new Set());
   const notifiedCostValues = useRef<Record<string, string>>({});
@@ -830,6 +860,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
         { id: uuidv4(), data: "", koszt: 0 },
       ],
     }));
+    setStronaTank(Math.ceil((dane.tankowanie.length + 1) / KOSZTY_NA_STRONE));
   }
 
   // Dodanie gotowego kosztu ze skanu paragonu (część B) + audit/push
@@ -839,6 +870,8 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
         ? { ...prev, tankowanie: [...prev.tankowanie, wpis as WpisTankowania] }
         : { ...prev, inneKoszty: [...prev.inneKoszty, wpis as WpisInnegoKosztu] }
     );
+    if (typ === "tankowanie") setStronaTank(Math.ceil((dane.tankowanie.length + 1) / KOSZTY_NA_STRONE));
+    else setStronaInne(Math.ceil((dane.inneKoszty.length + 1) / KOSZTY_NA_STRONE));
     const nazwa = typ === "tankowanie" ? "paliwo" : (wpis as WpisInnegoKosztu).nazwa;
     logChange({
       workspaceId: token,
@@ -906,6 +939,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
         { id: uuidv4(), data: "", nazwa: "", koszt: 0 },
       ],
     }));
+    setStronaInne(Math.ceil((dane.inneKoszty.length + 1) / KOSZTY_NA_STRONE));
   }
 
   function updateInny(id: string, patch: Partial<WpisInnegoKosztu>) {
@@ -923,6 +957,15 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
 
   const sumaFuel = obliczKosztPaliwa(dane.tankowanie);
   const sumaInne = obliczInneKoszty(dane.inneKoszty);
+
+  // Paginacja: tyle stron ile trzeba, po KOSZTY_NA_STRONE pozycji.
+  // Stronę klampujemy, żeby po usunięciu wpisów nie wisieć na nieistniejącej.
+  const tankTotalStron = Math.max(1, Math.ceil(dane.tankowanie.length / KOSZTY_NA_STRONE));
+  const tankStrona = Math.min(stronaTank, tankTotalStron);
+  const tankowanieWidoczne = dane.tankowanie.slice((tankStrona - 1) * KOSZTY_NA_STRONE, tankStrona * KOSZTY_NA_STRONE);
+  const inneTotalStron = Math.max(1, Math.ceil(dane.inneKoszty.length / KOSZTY_NA_STRONE));
+  const inneStrona = Math.min(stronaInne, inneTotalStron);
+  const inneWidoczne = dane.inneKoszty.slice((inneStrona - 1) * KOSZTY_NA_STRONE, inneStrona * KOSZTY_NA_STRONE);
 
   // Numer tygodnia rośnie przy każdym poniedziałku (poza pierwszym dniem)
   let weekNum = 1;
@@ -1165,7 +1208,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
       <Card>
         <CardTitle>Tankowanie</CardTitle>
         <div className="space-y-2">
-          {dane.tankowanie.map((t) => (
+          {tankowanieWidoczne.map((t) => (
             <div key={t.id}>
               <div className="flex gap-2 items-center">
                 <DatePill
@@ -1233,6 +1276,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
             </div>
           ))}
         </div>
+        <Pager strona={tankStrona} total={tankTotalStron} onZmiana={setStronaTank} />
         <button
           onClick={addTankowanie}
           className="mt-3 w-full py-2.5 min-h-[44px] rounded-xl border border-dashed border-amber-brand/50 text-sm text-amber-brand hover:bg-amber-brand/10 transition-all duration-150"
@@ -1257,7 +1301,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
       <Card>
         <CardTitle>Inne koszty</CardTitle>
         <div className="space-y-2">
-          {dane.inneKoszty.map((k) => (
+          {inneWidoczne.map((k) => (
             <div key={k.id} className="rounded-xl border border-line/60 p-2 space-y-1.5">
               <div className="flex gap-2 items-center flex-wrap sm:flex-nowrap">
                 <DatePill
@@ -1333,6 +1377,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
             </div>
           ))}
         </div>
+        <Pager strona={inneStrona} total={inneTotalStron} onZmiana={setStronaInne} />
         <button
           onClick={addInny}
           className="mt-3 w-full py-2.5 min-h-[44px] rounded-xl border border-dashed border-amber-brand/50 text-sm text-amber-brand hover:bg-amber-brand/10 transition-all duration-150"
