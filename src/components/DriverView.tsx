@@ -21,6 +21,8 @@ import { cn } from "@/lib/utils";
 import type { WeryfikacjaStatus, DayType } from "@/lib/types";
 import { typDniaMeta } from "@/lib/day-type";
 import { TankowanieKierowcy } from "./TankowanieKierowcy";
+import { WiadomosciKierowcy } from "./WiadomosciKierowcy";
+import { PowiadomieniaKierowcy } from "./PowiadomieniaKierowcy";
 
 interface DzienRozbicie {
   data: string;
@@ -162,7 +164,11 @@ export function DriverView({ name }: { name: string }) {
             <span className="text-red-400 font-semibold">✗</span> i podaj poprawną liczbę kółek.
           </p>
 
+          <PowiadomieniaKierowcy />
+
           <TankowanieKierowcy />
+
+          <WiadomosciKierowcy />
 
           {error ? (
             <Card>
