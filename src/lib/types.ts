@@ -176,6 +176,9 @@ export interface DaneMiesiaca {
   obciazenia?: Obciazenie[]; // potrącenia z wypłaty kierowcy
 }
 
+/** Kanał notatki: wewnętrzny (tylko admini) lub wspólny wątek z kierowcą */
+export type NotatkaKanal = "admin" | "kierowca";
+
 /** Notatka przypięta do workspace + miesiąca */
 export interface Notatka {
   id: string;
@@ -184,6 +187,8 @@ export interface Notatka {
   dataWydarzenia?: string; // ISO "YYYY-MM-DD" — termin/przypomnienie
   autor: string;
   miesiac: number;
+  kanal?: NotatkaKanal; // domyślnie "admin" (notatki sprzed podziału = wewnętrzne)
+  odKierowcy?: boolean; // true gdy notatkę w kanale "kierowca" napisał kierowca
 }
 
 /** Ustawienia podatkowe workspace (przechowywane w workspaces.data) */

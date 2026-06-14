@@ -10,7 +10,7 @@ import { PodsumowanieTab } from "./tabs/PodsumowanieTab";
 import { ZarobekTab } from "./tabs/ZarobekTab";
 import { KosztyTab } from "./tabs/KosztyTab";
 import { RaportTab } from "./tabs/RaportTab";
-import { HistoriaTab } from "./tabs/HistoriaTab";
+import { WiadomosciTab } from "./tabs/WiadomosciTab";
 import { UstawieniaTab } from "./tabs/UstawieniaTab";
 import { getUstawienia, podatkiMiesiaca } from "@/lib/tax";
 import { UserNameModal } from "./UserNameModal";
@@ -196,8 +196,9 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
     if (MIESIACE_ZAKRESU.includes(m as (typeof MIESIACE_ZAKRESU)[number])) {
       setAktywnyMiesiac(m as MiesiącId);
     }
-    if (z === "podsumowanie" || z === "zarobek" || z === "koszty" || z === "raport" || z === "historia" || z === "ustawienia") {
-      setAktywnaZakladka(z as TabName);
+    const zNorm = z === "historia" ? "wiadomosci" : z; // alias starych linków
+    if (zNorm === "podsumowanie" || zNorm === "zarobek" || zNorm === "koszty" || zNorm === "raport" || zNorm === "wiadomosci" || zNorm === "ustawienia") {
+      setAktywnaZakladka(zNorm as TabName);
     }
     if (zgl) setFocusZgloszenie(zgl);
     // Wyczyść query, żeby odświeżenie nie wracało do deep-linku
@@ -293,7 +294,7 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
           ) : (
             <>
               {/* Baner zamkniętego miesiąca */}
-              {monthLocked && aktywnaZakladka !== "raport" && aktywnaZakladka !== "historia" && aktywnaZakladka !== "ustawienia" && (
+              {monthLocked && aktywnaZakladka !== "raport" && aktywnaZakladka !== "wiadomosci" && aktywnaZakladka !== "ustawienia" && (
                 <div className="flex items-center gap-2 rounded-xl bg-surface2 border border-line px-4 py-2.5 text-sm text-dim">
                   <IconLock size={15} className="text-amber-brand" />
                   Miesiąc {POLSKIE_MIESIACE[aktywnyMiesiac]} 2026 jest zamknięty — tylko do odczytu.
@@ -309,8 +310,6 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
                       dane={daneMiesiaca}
                       token={token}
                       userName={userName ?? ""}
-                      notatki={data.notatki ?? []}
-                      onUpdateNotatki={updateNotatki}
                       onUpdate={handleUpdateMiesiac}
                       isAdmin={isAdmin}
                       podatki={podatki}
@@ -342,7 +341,15 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
               </fieldset>
 
               {aktywnaZakladka === "raport" && <RaportTab data={data} />}
-              {aktywnaZakladka === "historia" && isAdmin && <HistoriaTab token={token} />}
+              {aktywnaZakladka === "wiadomosci" && isAdmin && (
+                <WiadomosciTab
+                  token={token}
+                  miesiac={aktywnyMiesiac}
+                  notatki={data.notatki ?? []}
+                  userName={userName ?? ""}
+                  onUpdateNotatki={updateNotatki}
+                />
+              )}
               {aktywnaZakladka === "ustawienia" && isAdmin && (
                 <UstawieniaTab
                   ustawienia={ustawienia}
@@ -353,7 +360,7 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
               )}
 
               {/* Zamknięcie / odblokowanie miesiąca (poza fieldsetem) */}
-              {isAdmin && aktywnaZakladka !== "raport" && aktywnaZakladka !== "historia" && aktywnaZakladka !== "ustawienia" && (
+              {isAdmin && aktywnaZakladka !== "raport" && aktywnaZakladka !== "wiadomosci" && aktywnaZakladka !== "ustawienia" && (
                 <div className="space-y-2">
                   <div className="rounded-2xl border border-line bg-surface p-4">
                     <p className="mb-2 text-xs font-bold uppercase tracking-wider text-dim">

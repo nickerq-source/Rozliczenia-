@@ -8,7 +8,6 @@ import {
   DocumentStatus,
   KosztVatInfo,
   MiesiącId,
-  Notatka,
   UstawieniaPodatkowe,
   WpisInnegoKosztu,
   WpisTankowania,
@@ -16,8 +15,6 @@ import {
 import { obliczWynikMiesiaca, formatZl, formatZlCaly, sumaObciazen } from "@/lib/business-logic";
 import { POLSKIE_MIESIACE } from "@/lib/dates";
 import { Card } from "../ui/Card";
-import { NotatkiPanel } from "../panels/NotatkiPanel";
-import { PowiadomieniaPanel } from "../panels/PowiadomieniaPanel";
 import { PodatkiCard } from "../PodatkiCard";
 import { ObciazeniaSekcja } from "../ObciazeniaSekcja";
 import { kategoriaLabel, PodatkiMiesiaca, rozbijWpis } from "@/lib/tax";
@@ -62,8 +59,6 @@ interface PodsumowanieProps {
   dane: DaneMiesiaca;
   token: string;
   userName: string;
-  notatki: Notatka[];
-  onUpdateNotatki: (updater: (prev: Notatka[]) => Notatka[]) => void;
   onUpdate?: (updater: (prev: DaneMiesiaca) => DaneMiesiaca) => void;
   isAdmin?: boolean;
   // Szacunek podatkowy miesiąca (tylko admin)
@@ -112,8 +107,6 @@ export function PodsumowanieTab({
   dane,
   token,
   userName,
-  notatki,
-  onUpdateNotatki,
   onUpdate,
   isAdmin = false,
   podatki,
@@ -625,18 +618,6 @@ export function PodsumowanieTab({
 
       {/* Podatki — szacunek (tylko admin) */}
       {isAdmin && podatki && <PodatkiCard p={podatki} taxForm={taxForm} wynik={wynik} />}
-
-      {/* Notatki + Powiadomienia: 2 kolumny na desktop, stack na mobile */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
-        <NotatkiPanel
-          token={token}
-          miesiac={miesiac}
-          notatki={notatki}
-          userName={userName}
-          onUpdate={onUpdateNotatki}
-        />
-        <PowiadomieniaPanel token={token} userName={userName} />
-      </div>
 
       {/* Statystyki — pille */}
       <Card>

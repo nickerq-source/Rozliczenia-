@@ -4,8 +4,9 @@
 
 import { useState } from "react";
 import { v4 as uuidv4 } from "uuid";
-import { Notatka } from "@/lib/types";
-import { sendPushEvent } from "@/lib/push";
+import { Notatka, NotatkaKanal } from "@/lib/types";
+import { logChange } from "@/lib/audit";
+import { POLSKIE_MIESIACE } from "@/lib/dates";
 import { Card } from "../ui/Card";
 import { IconNotes, IconCalendar, IconTrash, IconPlus } from "../ui/icons";
 import { cn } from "@/lib/utils";
@@ -16,6 +17,8 @@ interface Props {
   notatki: Notatka[];
   userName: string;
   onUpdate: (updater: (prev: Notatka[]) => Notatka[]) => void;
+  kanal?: NotatkaKanal; // domyślnie "admin"; filtruje listę i ustawia na nowych
+  wszystkieMiesiace?: boolean; // pokaż notatki kanału ze wszystkich miesięcy
 }
 
 function formatDataPL(iso: string): string {
@@ -28,14 +31,17 @@ function formatCzas(isoDateTime: string): string {
   return `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
-export function NotatkiPanel({ token, miesiac, notatki, userName, onUpdate }: Props) {
+export function NotatkiPanel({ token, miesiac, notatki, userName, onUpdate, kanal = "admin", wszystkieMiesiace = false }: Props) {
   const [formOpen, setFormOpen] = useState(false);
   const [tresc, setTresc] = useState("");
   const [dataWydarzenia, setDataWydarzenia] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
 
-  const widoczne = notatki.filter((n) => n.miesiac === miesiac);
+  const doKierowcy = kanal === "kierowca";
+  const widoczne = notatki.filter(
+    (n) => (n.kanal ?? "admin") === kanal && (wszystkieMiesiace || n.miesiac === miesiac)
+  );
 
   function addNotatka() {
     const trimmed = tresc.trim();
@@ -48,13 +54,20 @@ export function NotatkiPanel({ token, miesiac, notatki, userName, onUpdate }: Pr
       dataWydarzenia: dataWydarzenia || undefined,
       autor: userName,
       miesiac,
+      kanal,
     };
     onUpdate((prev) => [nowa, ...prev]);
-    sendPushEvent({
-      token,
-      author: userName,
-      eventType: "notatka",
-      body: `${userName} dodał notatkę: ${trimmed.slice(0, 60)}${trimmed.length > 60 ? "…" : ""}`,
+    // Kanał "kierowca" → powiadomienie do kierowcy (akcja notatka_kierowca,
+    // którą filtruje /api/driver/notifications). Wewnętrzne → zwykła notatka.
+    logChange({
+      workspaceId: token,
+      userName,
+      action: doKierowcy ? "notatka_kierowca" : "notatka",
+      entity: "note",
+      entityId: nowa.id,
+      description: doKierowcy
+        ? `${userName} napisał do kierowcy: ${trimmed.slice(0, 60)}${trimmed.length > 60 ? "…" : ""}`
+        : `${userName} dodał notatkę: ${trimmed.slice(0, 60)}${trimmed.length > 60 ? "…" : ""}`,
     });
 
     setTresc("");
@@ -88,7 +101,7 @@ export function NotatkiPanel({ token, miesiac, notatki, userName, onUpdate }: Pr
       <div className="flex items-center gap-2 mb-3">
         <IconNotes size={18} className="text-amber-brand" />
         <h3 className="text-sm font-bold uppercase tracking-wider text-dim flex-1">
-          Notatki
+          {doKierowcy ? "Wątek z kierowcą" : "Notatki wewnętrzne"}
         </h3>
         <button
           onClick={() => setFormOpen((v) => !v)}
@@ -107,7 +120,7 @@ export function NotatkiPanel({ token, miesiac, notatki, userName, onUpdate }: Pr
             onChange={(e) => setTresc(e.target.value)}
             rows={3}
             autoFocus
-            placeholder="Treść notatki…"
+            placeholder={doKierowcy ? "Wiadomość do kierowcy…" : "Treść notatki…"}
             className="w-full bg-input border border-line rounded-[10px] px-3 py-2 text-[15px] text-ink placeholder:text-dim/50 resize-y"
           />
           <div>
@@ -180,6 +193,16 @@ export function NotatkiPanel({ token, miesiac, notatki, userName, onUpdate }: Pr
                   <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-brand/10 border border-amber-brand/40 text-[11px] text-amber-brand tabular-nums">
                     <IconCalendar size={12} />
                     {formatDataPL(n.dataWydarzenia)}
+                  </span>
+                )}
+                {n.odKierowcy && (
+                  <span className="px-1.5 py-0.5 rounded-full bg-green-soft border border-green-500/40 text-[10px] text-green-300">
+                    od kierowcy
+                  </span>
+                )}
+                {wszystkieMiesiace && (
+                  <span className="px-1.5 py-0.5 rounded-full bg-surface border border-line text-[10px] text-dim">
+                    {POLSKIE_MIESIACE[n.miesiac]}
                   </span>
                 )}
                 <span className={cn("text-[11px] text-dim/60 flex-1")}>
