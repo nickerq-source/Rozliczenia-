@@ -95,21 +95,38 @@ export function SkanParagonu({ typ, ustawienia, onZapisz, disabled }: Props) {
     }
   }
 
-  function zapisz() {
+  async function zapisz() {
     const kwota = parseFloat(fKwota.replace(",", "."));
     if (!isFinite(kwota) || kwota <= 0) {
       alert("Podaj kwotę brutto.");
       return;
     }
+    setBusy(true);
+    // Zdjęcie ląduje w Storage; w JSONB zapisujemy tylko ścieżkę
+    let zalacznik: KosztZalacznik | undefined;
+    try {
+      const up = await fetch("/api/attachments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: modal!.dataUrl }),
+      });
+      if (up.ok) {
+        const { path } = await up.json();
+        zalacznik = {
+          id: uuidv4(),
+          typ: "dokument",
+          nazwa: "paragon.jpg",
+          mime: "image/jpeg",
+          storagePath: path,
+          createdAt: new Date().toISOString(),
+        };
+      }
+    } catch {
+      // Bez załącznika — koszt i tak zapisujemy
+    } finally {
+      setBusy(false);
+    }
     const defVat = domyslnyVatKategorii(fKat, ustawienia);
-    const zalacznik: KosztZalacznik = {
-      id: uuidv4(),
-      typ: "dokument",
-      nazwa: "paragon.jpg",
-      mime: "image/jpeg",
-      dataUrl: modal!.dataUrl,
-      createdAt: new Date().toISOString(),
-    };
     const wspolne = {
       id: uuidv4(),
       data: fData || "",
@@ -127,7 +144,7 @@ export function SkanParagonu({ typ, ustawienia, onZapisz, disabled }: Props) {
       kategoriaZrodlo: "ai" as const,
       kategoriaPotwierdzona: true, // użytkownik sprawdził w modalu
       vatZrodlo: "ai" as const,
-      zalaczniki: [zalacznik],
+      zalaczniki: zalacznik ? [zalacznik] : [],
     };
 
     if (typ === "tankowanie") {
@@ -212,8 +229,11 @@ export function SkanParagonu({ typ, ustawienia, onZapisz, disabled }: Props) {
             </div>
 
             <div className="flex gap-2 pt-1">
-              <button onClick={() => setModal(null)} className="flex-1 py-2 rounded-xl border border-line text-dim text-sm hover:text-ink">Anuluj</button>
-              <button onClick={zapisz} className="flex-1 py-2 rounded-xl bg-amber-brand text-amber-ink font-bold text-sm hover:bg-[#e09420]">Zapisz koszt</button>
+              <button onClick={() => setModal(null)} disabled={busy} className="flex-1 py-2 rounded-xl border border-line text-dim text-sm hover:text-ink disabled:opacity-50">Anuluj</button>
+              <button onClick={zapisz} disabled={busy} className="flex-1 py-2 rounded-xl bg-amber-brand text-amber-ink font-bold text-sm hover:bg-[#e09420] disabled:opacity-50 flex items-center justify-center gap-1.5">
+                {busy ? <IconLoader size={14} /> : null}
+                Zapisz koszt
+              </button>
             </div>
           </div>
         </div>

@@ -173,12 +173,20 @@ async function imageToCompressedDataUrl(file: File): Promise<string> {
 }
 
 async function fileToZalacznik(file: File, typ: KosztZalacznik["typ"]): Promise<KosztZalacznik> {
+  const dataUrl = await imageToCompressedDataUrl(file);
+  const res = await fetch("/api/attachments", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ image: dataUrl }),
+  });
+  if (!res.ok) throw new Error("Nie udało się wgrać załącznika");
+  const { path } = (await res.json()) as { path: string };
   return {
     id: uuidv4(),
     typ,
     nazwa: file.name,
     mime: file.type || "image/jpeg",
-    dataUrl: await imageToCompressedDataUrl(file),
+    storagePath: path,
     createdAt: new Date().toISOString(),
   };
 }
@@ -198,6 +206,25 @@ function DokumentyKosztu({
 }) {
   const status = statusDokumentu(wpis);
   const zalaczniki = wpis.zalaczniki ?? [];
+
+  // Podgląd: legacy base64 otwieramy wprost; Storage → krótkotrwały podpisany URL.
+  // Okno otwieramy synchronicznie (gest użytkownika), potem ustawiamy adres.
+  async function otworzZalacznik(z: KosztZalacznik) {
+    if (z.dataUrl) {
+      window.open(z.dataUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
+    if (!z.storagePath) return;
+    const w = window.open("", "_blank", "noopener,noreferrer");
+    try {
+      const res = await fetch(`/api/attachments/url?path=${encodeURIComponent(z.storagePath)}`);
+      const json = (await res.json()) as { url?: string };
+      if (res.ok && json.url && w) w.location.href = json.url;
+      else w?.close();
+    } catch {
+      w?.close();
+    }
+  }
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
@@ -258,7 +285,7 @@ function DokumentyKosztu({
         >
           <button
             type="button"
-            onClick={() => window.open(z.dataUrl, "_blank", "noopener,noreferrer")}
+            onClick={() => otworzZalacznik(z)}
             className="max-w-[92px] truncate hover:text-amber-brand"
             title={z.nazwa}
           >
@@ -575,10 +602,20 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
   ) {
     const lista = kosztTyp === "tankowanie" ? dane.tankowanie : dane.inneKoszty;
     const wpis = lista.find((w) => w.id === id);
+    const usuwany = (wpis?.zalaczniki ?? []).find((z) => z.id === zalacznikId);
     const next = (wpis?.zalaczniki ?? []).filter((z) => z.id !== zalacznikId);
     const patch: Partial<KosztVatInfo> = { zalaczniki: next };
     if (kosztTyp === "tankowanie") updateTankowanie(id, patch);
     else updateInny(id, patch);
+
+    // Sprzątanie pliku w Storage (best-effort; nie blokuje usunięcia z danych)
+    if (usuwany?.storagePath) {
+      fetch("/api/attachments", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: usuwany.storagePath }),
+      }).catch(() => {});
+    }
   }
 
   // ─── AUTO-BACKFILL KATEGORII ────────────────────────────────────────────────

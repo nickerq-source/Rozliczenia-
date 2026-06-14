@@ -3,6 +3,7 @@ import { getSessionProfile } from "@/lib/supabase-server";
 import { getAdminSupabase } from "@/lib/supabase-admin";
 import { getWebPush } from "@/lib/webpush";
 import { getUstawienia } from "@/lib/tax";
+import { uploadParagon } from "@/lib/storage";
 import { formatZlCaly } from "@/lib/business-logic";
 import { MIESIACE_ZAKRESU, ROK } from "@/lib/dates";
 import {
@@ -99,19 +100,22 @@ export async function POST(req: NextRequest) {
 
   const ustawienia = getUstawienia(wsData);
 
-  // Załącznik (zdjęcie paragonu) — opcjonalny
+  // Załącznik (zdjęcie paragonu) — opcjonalny; ląduje w Storage, w JSONB tylko ścieżka
   let zalaczniki: KosztZalacznik[] | undefined;
   if (typeof body.zalacznik === "string" && body.zalacznik.startsWith("data:image/")) {
-    zalaczniki = [
-      {
-        id: crypto.randomUUID(),
-        typ: "dokument",
-        nazwa: "paragon.jpg",
-        mime: "image/jpeg",
-        dataUrl: body.zalacznik,
-        createdAt: new Date().toISOString(),
-      },
-    ];
+    const up = await uploadParagon(profile.workspace_id, body.zalacznik);
+    if (up) {
+      zalaczniki = [
+        {
+          id: crypto.randomUUID(),
+          typ: "dokument",
+          nazwa: "paragon.jpg",
+          mime: up.mime,
+          storagePath: up.path,
+          createdAt: new Date().toISOString(),
+        },
+      ];
+    }
   }
 
   const wpis: WpisTankowania = {

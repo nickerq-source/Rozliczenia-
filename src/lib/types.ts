@@ -94,7 +94,8 @@ export interface KosztZalacznik {
   typ: "dokument" | "licznik";
   nazwa: string;
   mime: string;
-  dataUrl: string;
+  storagePath?: string; // ścieżka w buckecie `paragony` (nowe wpisy)
+  dataUrl?: string; // legacy: base64 zapisane w JSONB (stare wpisy przed migracją na Storage)
   createdAt: string;
 }
 
