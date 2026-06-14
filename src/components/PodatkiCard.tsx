@@ -48,6 +48,9 @@ export function PodatkiCard({
     wynik.wynagrodzeniePracownika + wynik.zusPracodawcy + wynik.paliwo + wynik.inne + wynik.leasing;
   // Gdy włączone oficjalne wynagrodzenie: do podatku wchodzi mniej niż realna wypłata
   const oficjalneAktywne = p.wynagrodzeniePodatkowe !== wynik.wynagrodzeniePracownika || p.zusPracodawcy > 0;
+  // Rozbicie kosztów pracownika: oficjalny brutto (do podatku) vs nieoficjalna nadwyżka (poza podatkiem)
+  const oficjalnyBrutto = Math.max(0, p.wynagrodzeniePodatkowe - p.zusPracodawcy);
+  const nieoficjalne = Math.max(0, wynik.wynagrodzeniePracownika - oficjalnyBrutto);
 
   return (
     <Card>
@@ -85,18 +88,32 @@ export function PodatkiCard({
         <Wiersz label="VAT do zapłaty" value={p.vatDoZaplaty} klasa="text-red-300" bold />
       )}
 
+      {/* Koszty pracownika — oficjalne vs nieoficjalne */}
+      {oficjalneAktywne && (
+        <>
+          <p className="text-xs font-bold uppercase tracking-wider text-amber-brand mb-1 mt-4">Koszty pracownika</p>
+          <Wiersz label="Oficjalny brutto (umowa)" value={oficjalnyBrutto} />
+          {p.zusPracodawcy > 0 && <Wiersz label="ZUS pracodawcy" value={p.zusPracodawcy} />}
+          <Wiersz
+            label="Razem oficjalne (do podatku)"
+            value={p.wynagrodzeniePodatkowe}
+            klasa="text-green-300"
+            bold
+          />
+          <Wiersz
+            label="Nieoficjalne (poza podatkiem)"
+            value={nieoficjalne}
+            klasa="text-red-300"
+            note="gotówka ponad umowę — realny wydatek, nie pomniejsza podatku"
+          />
+        </>
+      )}
+
       {/* Podatek dochodowy */}
       <p className="text-xs font-bold uppercase tracking-wider text-amber-brand mb-1 mt-4">
         Podatek dochodowy ({taxForm === "skala" ? "skala" : "liniowy 19%"})
       </p>
       <Wiersz label="Przychód netto" value={p.przychodNetto} />
-      {oficjalneAktywne && (
-        <Wiersz
-          label="Wynagrodzenie wg umowy (do podatku)"
-          value={p.wynagrodzeniePodatkowe}
-          note="oficjalny brutto + ZUS pracodawcy; realna nadwyżka nie pomniejsza podatku"
-        />
-      )}
       <Wiersz
         label="Koszty podatkowe"
         value={p.kosztyPodatkowe}

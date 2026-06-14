@@ -44,10 +44,12 @@ function Row({
   label,
   value,
   note,
+  valueClass,
 }: {
   label: string;
   value: number;
   note?: string;
+  valueClass?: string;
 }) {
   return (
     <div className="flex items-center gap-2 py-2 border-b border-line last:border-0">
@@ -55,7 +57,7 @@ function Row({
         {label}
         {note && <span className="text-xs text-dim ml-1.5">{note}</span>}
       </span>
-      <span className="tabular-nums text-sm font-semibold text-ink">{formatZl(value)}</span>
+      <span className={cn("tabular-nums text-sm font-semibold", valueClass ?? "text-ink")}>{formatZl(value)}</span>
     </div>
   );
 }
@@ -101,6 +103,7 @@ export function RaportTab({ data }: Props) {
   const raport = useMemo(() => {
     const u = getUstawienia(data);
     let przychod = 0, wynagrodzenie = 0, paliwo = 0, inne = 0, leasing = 0, zusPrac = 0;
+    let oficjalnyBrutto = 0, nieoficjalne = 0;
     let aktywne = 0, kmTotal = 0, kolkaTotal = 0;
     const miesieczne: {
       m: MiesiącId;
@@ -127,6 +130,12 @@ export function RaportTab({ data }: Props) {
         przychod += wynik.przychod;
         wynagrodzenie += wynik.wynagrodzeniePracownika;
         zusPrac += wynik.zusPracodawcy;
+        // Rozbicie pensji na oficjalną (do podatku) i nieoficjalną (gotówka)
+        if (u.pracownikOficjalnyEnabled && wynik.wynagrodzeniePracownika > 0) {
+          const brutto = Math.min(u.pracownikBruttoMies, wynik.wynagrodzeniePracownika);
+          oficjalnyBrutto += brutto;
+          nieoficjalne += wynik.wynagrodzeniePracownika - brutto;
+        }
         paliwo += wynik.paliwo;
         inne += wynik.inne;
         leasing += wynik.leasing;
@@ -170,7 +179,9 @@ export function RaportTab({ data }: Props) {
     const zysk = przychod - wynagrodzenie - zusPrac - paliwo - inne - leasing;
 
     return {
-      przychod, wynagrodzenie, zusPrac, paliwo, inne, leasing, zysk,
+      przychod, wynagrodzenie, zusPrac, oficjalnyBrutto, nieoficjalne,
+      oficjalneOn: u.pracownikOficjalnyEnabled,
+      paliwo, inne, leasing, zysk,
       aktywne, kmTotal, kolkaTotal, miesieczne, sortedDesc,
     };
   }, [data]);
@@ -325,6 +336,16 @@ export function RaportTab({ data }: Props) {
           label={podatkiSuma.vatDoZaplaty >= 0 ? "VAT do zapłaty" : "Nadwyżka VAT"}
           value={Math.abs(podatkiSuma.vatDoZaplaty)}
         />
+
+        {raport.oficjalneOn && (
+          <>
+            <p className="text-xs font-bold uppercase tracking-wider text-amber-brand mb-1 mt-4">Koszty pracownika</p>
+            <Row label="Oficjalne — brutto wg umowy" value={raport.oficjalnyBrutto} />
+            {raport.zusPrac > 0 && <Row label="Oficjalne — ZUS pracodawcy" value={raport.zusPrac} />}
+            <Row label="Razem oficjalne (do podatku)" value={raport.oficjalnyBrutto + raport.zusPrac} valueClass="text-green-300" />
+            <Row label="Nieoficjalne (poza podatkiem)" value={raport.nieoficjalne} valueClass="text-red-300" />
+          </>
+        )}
 
         <p className="text-xs font-bold uppercase tracking-wider text-amber-brand mb-1 mt-4">Podatek dochodowy</p>
         <Row label="Przychód netto" value={podatkiSuma.sprzedazNetto} />
