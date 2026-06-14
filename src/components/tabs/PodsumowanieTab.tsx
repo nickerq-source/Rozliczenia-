@@ -131,6 +131,20 @@ export function PodsumowanieTab({
   const doWyplaty = wynik.wynagrodzeniePracownika - obciazeniaSuma;
   const kosztyEksport = useMemo(() => {
     if (!ustawienia) return [];
+    type EksportRow = {
+      data: string;
+      typ: string;
+      nazwa: string;
+      kategoria: string;
+      statusDokumentu: string;
+      rozliczanyPodatkowo: string;
+      zalaczniki: number;
+      kwotaBrutto: number;
+      netto: number;
+      vat: number;
+      vatDoOdliczenia: number;
+      kosztPodatkowy: number;
+    };
     const wpisy: {
       id: string;
       typ: "paliwo" | "inny";
@@ -156,7 +170,7 @@ export function PodsumowanieTab({
         wpis: k as KosztVatInfo & { koszt: number },
       })),
     ];
-    return wpisy.map((row) => {
+    const baza: EksportRow[] = wpisy.map((row) => {
       const r = rozbijWpis(row.wpis, ustawienia, row.typ === "paliwo" ? "paliwo_adblue" : "inne");
       const status = statusDokumentu(row.wpis);
       return {
@@ -174,7 +188,65 @@ export function PodsumowanieTab({
         kosztPodatkowy: r.kosztPit,
       };
     });
-  }, [dane.inneKoszty, dane.tankowanie, ustawienia]);
+
+    // Pozycje bez faktury kosztowej, ale będące kosztem podatkowym: oficjalna
+    // pensja (brutto wg umowy) + ZUS pracodawcy + leasing. Nieoficjalna nadwyżka
+    // NIE trafia do eksportu dla księgowej.
+    const dodatkowe: EksportRow[] = [];
+    const realnaPensja = wynik.wynagrodzeniePracownika;
+    if (realnaPensja > 0) {
+      const oficjalneOn = ustawienia.pracownikOficjalnyEnabled;
+      const brutto = oficjalneOn ? ustawienia.pracownikBruttoMies : realnaPensja;
+      dodatkowe.push({
+        data: "",
+        typ: "wynagrodzenie",
+        nazwa: oficjalneOn ? "Wynagrodzenie (umowa)" : "Wynagrodzenie kierowcy",
+        kategoria: "wynagrodzenie",
+        statusDokumentu: oficjalneOn ? "umowa" : "—",
+        rozliczanyPodatkowo: "tak",
+        zalaczniki: 0,
+        kwotaBrutto: brutto,
+        netto: brutto,
+        vat: 0,
+        vatDoOdliczenia: 0,
+        kosztPodatkowy: brutto,
+      });
+      if (oficjalneOn && wynik.zusPracodawcy > 0) {
+        dodatkowe.push({
+          data: "",
+          typ: "zus",
+          nazwa: "ZUS pracodawcy",
+          kategoria: "ZUS",
+          statusDokumentu: "deklaracja",
+          rozliczanyPodatkowo: "tak",
+          zalaczniki: 0,
+          kwotaBrutto: wynik.zusPracodawcy,
+          netto: wynik.zusPracodawcy,
+          vat: 0,
+          vatDoOdliczenia: 0,
+          kosztPodatkowy: wynik.zusPracodawcy,
+        });
+      }
+    }
+    if (wynik.leasing > 0) {
+      dodatkowe.push({
+        data: "",
+        typ: "leasing",
+        nazwa: "Leasing",
+        kategoria: "leasing",
+        statusDokumentu: "faktura",
+        rozliczanyPodatkowo: "tak",
+        zalaczniki: 0,
+        kwotaBrutto: wynik.leasing,
+        netto: wynik.leasing,
+        vat: 0,
+        vatDoOdliczenia: 0,
+        kosztPodatkowy: wynik.leasing,
+      });
+    }
+
+    return [...baza, ...dodatkowe];
+  }, [dane.inneKoszty, dane.tankowanie, ustawienia, wynik]);
 
   const kosztyBezDokumentu = useMemo(
     () => kosztyEksport.filter((k) => k.statusDokumentu === "brak dokumentu"),
@@ -283,7 +355,7 @@ export function PodsumowanieTab({
       <h1>PapiTrans — ${POLSKIE_MIESIACE[miesiac]} 2026</h1>
       <div class="grid">
         <div class="box">Przychód: <b>${formatZl(wynik.przychod)}</b></div>
-        <div class="box">Koszty operacyjne: <b>${formatZl(wynik.wynagrodzeniePracownika + wynik.zusPracodawcy + wynik.paliwo + wynik.inne + wynik.leasing)}</b></div>
+        <div class="box">Koszty (do księgowości): <b>${formatZl(kosztyEksport.reduce((s, k) => s + k.kwotaBrutto, 0))}</b></div>
         <div class="box">VAT do zapłaty: <b>${formatZl(podatki?.vatDoZaplaty ?? 0)}</b></div>
         <div class="box">Podatek dochodowy: <b>${formatZl(podatki?.pitMiesiac ?? 0)}</b></div>
         <div class="box">Zdrowotna: <b>${formatZl(podatki?.zdrowotna ?? 0)}</b></div>
