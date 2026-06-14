@@ -444,8 +444,8 @@ function DzienWiersz({
           </span>
         )}
 
-        {/* Akcje / status — tylko dla dni pracujących */}
-        {!readonly && !wolny && (
+        {/* Akcje / status — także dla dni wolnych (kierowca może je zakwestionować) */}
+        {!readonly && (
           <div className="shrink-0 flex items-center gap-1">
             {st === "zaakceptowany" ? (
               <span title="Potwierdzone przez Ciebie" className="text-green-400">
@@ -465,7 +465,7 @@ function DzienWiersz({
                   type="button"
                   disabled={busy}
                   onClick={() => wyslij("akceptuj")}
-                  title="Wszystko się zgadza"
+                  title={wolny ? `Tak, ${meta.label} się zgadza` : "Wszystko się zgadza"}
                   className="p-1.5 rounded-lg text-green-400 hover:bg-green-soft transition-colors disabled:opacity-40"
                 >
                   <IconCheck size={18} />
@@ -474,7 +474,7 @@ function DzienWiersz({
                   type="button"
                   disabled={busy}
                   onClick={() => setZglaszam((v) => !v)}
-                  title="Zgłoś błąd"
+                  title={wolny ? "Pracowałem tego dnia — zgłoś" : "Zgłoś błąd"}
                   className="p-1.5 rounded-lg text-red-400 hover:bg-red-soft transition-colors disabled:opacity-40"
                 >
                   <IconX size={18} />
@@ -501,8 +501,13 @@ function DzienWiersz({
       {/* Formularz zgłoszenia */}
       {zglaszam && (
         <div className="mt-2 pt-2 border-t border-line/60 space-y-2">
+          {wolny && (
+            <p className="text-[11px] text-amber-brand/90">
+              Ten dzień jest oznaczony jako {meta.label}. Jeśli pracowałeś — podaj liczbę kółek.
+            </p>
+          )}
           <div className="flex items-center gap-2">
-            <label className="text-xs text-dim">Powinno być kółek:</label>
+            <label className="text-xs text-dim">{wolny ? "Pracowałem — kółek:" : "Powinno być kółek:"}</label>
             <input
               type="number"
               min={0}

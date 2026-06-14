@@ -665,7 +665,9 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
           ? { ...x, status: (przyjmij ? "przyjety" : "odrzucony") as ZgloszenieDnia["status"], rozwiazano: new Date().toISOString() }
           : x
       );
-      // Przyjęcie = wpisz proponowaną liczbę kółek do dnia
+      // Przyjęcie = wpisz proponowaną liczbę kółek do dnia.
+      // Jeśli dzień był wolny/urlop/L4, przywróć go na „pracujący", bo inaczej
+      // obliczDniowke zwraca 0 i przyjęte kółka nie zostałyby wypłacone.
       const noweDni =
         przyjmij && z.kolkaProponowane !== undefined
           ? {
@@ -673,6 +675,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
               [z.dzien]: {
                 ...(prev.dni[z.dzien] ?? { data: z.dzien, kolka: 0, szkolenie: 0 }),
                 kolka: z.kolkaProponowane,
+                dayType: "pracujacy" as const,
               },
             }
           : prev.dni;
