@@ -63,11 +63,36 @@ function toNum(v: unknown): number | null {
   return null;
 }
 
-/** Wyciąga media_type i czyste base64 z dataUrl */
-function parseDataUrl(dataUrl: string): { mediaType: string; data: string } | null {
-  const m = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+type ClaudeImageType = "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+
+/**
+ * Prawdziwy format obrazu z magic bytes (nie z prefiksu dataUrl/rozszerzenia).
+ * Kluczowe: Claude odrzuca obraz, gdy media_type nie zgadza się z bajtami
+ * (np. iPhone HEIC, plik PNG nazwany .jpg) → 400 i „nie udało się odczytać".
+ */
+function wykryjFormat(base64: string): ClaudeImageType | null {
+  let head: Buffer;
+  try {
+    head = Buffer.from(base64.slice(0, 32), "base64");
+  } catch {
+    return null;
+  }
+  if (head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff) return "image/jpeg";
+  if (head[0] === 0x89 && head[1] === 0x50 && head[2] === 0x4e && head[3] === 0x47) return "image/png";
+  if (head[0] === 0x47 && head[1] === 0x49 && head[2] === 0x46) return "image/gif";
+  if (
+    head[0] === 0x52 && head[1] === 0x49 && head[2] === 0x46 && head[3] === 0x46 &&
+    head[8] === 0x57 && head[9] === 0x45 && head[10] === 0x42 && head[11] === 0x50
+  ) return "image/webp";
+  return null; // np. HEIC/HEIF — Claude nie obsługuje
+}
+
+/** Wyciąga czyste base64 z dataUrl (media_type i tak wykrywamy z bajtów) */
+function parseDataUrl(dataUrl: string): { data: string } | null {
+  const m = dataUrl.match(/^data:image\/[a-zA-Z0-9.+-]+;base64,(.+)$/);
   if (!m) return null;
-  return { mediaType: m[1], data: m[2] };
+  // usuń ewentualne białe znaki z base64
+  return { data: m[1].replace(/\s/g, "") };
 }
 
 function walidujVat(raw: unknown): VatRate | null {
@@ -127,6 +152,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Brak prawidłowego obrazu" }, { status: 400 });
   }
 
+  // Prawdziwy format z bajtów — Claude odrzuca obraz przy niezgodnym media_type
+  const mediaType = wykryjFormat(parsed.data);
+  if (!mediaType) {
+    // np. HEIC/HEIF z iPhone'a, którego przeglądarka nie przekonwertowała
+    return NextResponse.json({ ...PUSTY, _badFormat: true });
+  }
+
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     // Brak klucza → puste pola do ręcznego wpisania (bez crasha)
@@ -146,7 +178,7 @@ export async function POST(req: NextRequest) {
               type: "image",
               source: {
                 type: "base64",
-                media_type: parsed.mediaType as "image/jpeg" | "image/png" | "image/webp" | "image/gif",
+                media_type: mediaType,
                 data: parsed.data,
               },
             },
@@ -169,8 +201,10 @@ export async function POST(req: NextRequest) {
     if (process.env.NODE_ENV !== "production") console.log("[scan-receipt] odczyt:", JSON.stringify(wynik));
     return NextResponse.json(wynik);
   } catch (e) {
-    console.error("[scan-receipt] AI error:", e instanceof Error ? e.message : e);
-    // Nie crashuj — zostaw użytkownikowi puste pola
-    return NextResponse.json(PUSTY);
+    const status = (e as { status?: number })?.status;
+    const apiMsg = (e as { error?: { error?: { message?: string } } })?.error?.error?.message;
+    console.error("[scan-receipt] AI error:", status ?? "", apiMsg ?? (e instanceof Error ? e.message : e));
+    // Nie crashuj — zostaw użytkownikowi puste pola (z flagą błędu)
+    return NextResponse.json({ ...PUSTY, _apiError: true });
   }
 }
