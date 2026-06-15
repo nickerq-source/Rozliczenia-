@@ -355,6 +355,14 @@ function LegendaWyplaty() {
           <br />
           Pozostałe soboty nie są traktowane jako wolne bezpłatne.
         </p>
+        <p>
+          <b className="text-white">Brak pracy po stronie Żabki</b>
+          <br />
+          Jeżeli z przyczyn niezależnych od pracodawcy kierowca otrzyma wolne, ponieważ
+          Żabka nie zapewni wystarczającej ilości pracy, taki dzień nie jest liczony jako
+          wolne bezpłatne. Nie jest to wolne z winy kierowcy i nie wpływa na utratę
+          dodatków ani premii.
+        </p>
       </div>
     </Card>
   );
