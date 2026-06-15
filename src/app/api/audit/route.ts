@@ -2,12 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionProfile } from "@/lib/supabase-server";
 import { getAdminSupabase } from "@/lib/supabase-admin";
 import { getWebPush } from "@/lib/webpush";
+import { czyWidoczneDlaKierowcy } from "@/lib/driver-visibility";
 
 export const runtime = "nodejs";
 
 interface SubRow {
   id: string;
   user_name: string;
+  user_id: string | null;
   subscription: object;
 }
 
@@ -114,8 +116,21 @@ export async function POST(req: NextRequest) {
       push.configured = true;
       const { data: subs } = await admin
         .from("push_subscriptions")
-        .select("id, user_name, subscription")
+        .select("id, user_name, user_id, subscription")
         .eq("workspace_id", workspaceId);
+
+      // Zdarzenia wewnętrzne (faktury, koszty, notatki admina) NIE mogą trafić
+      // na telefon kierowcy — pomijamy jego subskrypcje. Sprawy kierowcy
+      // (dniówka, obciążenia, notatka do niego) lecą do wszystkich.
+      let driverIds: Set<string> | null = null;
+      if (!czyWidoczneDlaKierowcy(action)) {
+        const { data: drivers } = await admin
+          .from("profiles")
+          .select("id")
+          .eq("workspace_id", workspaceId)
+          .eq("role", "driver");
+        driverIds = new Set((drivers ?? []).map((d) => d.id as string));
+      }
 
       if (subs?.length) {
         push.subscriptions = subs.length;
@@ -127,6 +142,7 @@ export async function POST(req: NextRequest) {
 
         await Promise.all(
           (subs as SubRow[]).map(async (s) => {
+            if (driverIds && s.user_id && driverIds.has(s.user_id)) return; // nie pushuj kierowcy
             try {
               await wp.sendNotification(
                 s.subscription as Parameters<typeof wp.sendNotification>[0],

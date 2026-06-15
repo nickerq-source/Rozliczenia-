@@ -5,13 +5,16 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Card } from "./ui/Card";
+import { pushSupported, subscribePush, unsubscribePush, isPushActive } from "@/lib/push";
 import {
   IconBell,
+  IconBellOff,
   IconLoader,
   IconMoneybag,
   IconNotes,
   IconAlertTriangle,
   IconChevronDown,
+  IconCheck,
 } from "./ui/icons";
 import { cn } from "@/lib/utils";
 
@@ -44,6 +47,9 @@ function ikona(action: string) {
 export function PowiadomieniaKierowcy() {
   const [lista, setLista] = useState<Powiadomienie[] | null>(null);
   const [rozwiniete, setRozwiniete] = useState(false);
+  const [supported, setSupported] = useState(false);
+  const [pushOn, setPushOn] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
 
   const wczytaj = useCallback(async () => {
     try {
@@ -60,24 +66,78 @@ export function PowiadomieniaKierowcy() {
     wczytaj();
   }, [wczytaj]);
 
+  useEffect(() => {
+    const ok = pushSupported();
+    setSupported(ok);
+    if (ok) isPushActive().then(setPushOn);
+  }, []);
+
+  async function togglePush() {
+    if (pushBusy) return;
+    setPushBusy(true);
+    try {
+      if (pushOn) {
+        await unsubscribePush();
+        setPushOn(false);
+      } else {
+        const ok = await subscribePush();
+        setPushOn(ok);
+        if (!ok) alert("Nie udało się włączyć powiadomień — sprawdź zgodę w telefonie.");
+      }
+    } finally {
+      setPushBusy(false);
+    }
+  }
+
   const widoczne = rozwiniete ? (lista ?? []) : (lista ?? []).slice(0, 4);
 
   return (
     <Card>
-      <button
-        type="button"
-        onClick={() => setRozwiniete((v) => !v)}
-        className="flex w-full items-center gap-2 text-left"
-      >
+      <div className="flex items-center gap-2">
         <IconBell size={18} className="text-amber-brand shrink-0" />
         <h2 className="flex-1 text-sm font-bold text-white">Powiadomienia</h2>
         {(lista?.length ?? 0) > 4 && (
-          <IconChevronDown
-            size={16}
-            className={cn("text-dim transition-transform", rozwiniete && "rotate-180")}
-          />
+          <button type="button" onClick={() => setRozwiniete((v) => !v)} title={rozwiniete ? "Zwiń" : "Rozwiń"}>
+            <IconChevronDown
+              size={16}
+              className={cn("text-dim transition-transform", rozwiniete && "rotate-180")}
+            />
+          </button>
         )}
-      </button>
+      </div>
+
+      {/* Push na telefon */}
+      {supported && (
+        <div className="mt-2 flex items-center gap-2">
+          <span
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px]",
+              pushOn ? "bg-green-soft text-green-300" : "bg-surface2 text-dim"
+            )}
+          >
+            {pushOn ? <IconCheck size={12} /> : <IconBellOff size={12} />}
+            {pushOn ? "Push włączony" : "Push wyłączony"}
+          </span>
+          <span className="flex-1 text-[11px] text-dim">Powiadomienia na telefon</span>
+          <button
+            type="button"
+            onClick={togglePush}
+            disabled={pushBusy}
+            title={pushOn ? "Wyłącz powiadomienia" : "Włącz powiadomienia"}
+            className={cn(
+              "shrink-0 relative w-11 h-6 rounded-full transition-colors disabled:opacity-50",
+              pushOn ? "bg-amber-brand" : "bg-line"
+            )}
+          >
+            <span
+              className={cn(
+                "absolute top-0.5 w-5 h-5 rounded-full bg-white shadow transition-all",
+                pushOn ? "left-[22px]" : "left-0.5"
+              )}
+            />
+          </button>
+        </div>
+      )}
 
       <div className="mt-3 space-y-1.5">
         {lista === null ? (

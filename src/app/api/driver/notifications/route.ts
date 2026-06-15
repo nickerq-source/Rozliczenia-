@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSessionProfile } from "@/lib/supabase-server";
 import { getAdminSupabase } from "@/lib/supabase-admin";
+import { DRIVER_VISIBLE_ACTIONS } from "@/lib/driver-visibility";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,14 +11,7 @@ export const dynamic = "force-dynamic";
  * koszty, ustawienia, wewnętrzne notatki). Whitelist akcji ogranicza wynik do
  * spraw kierowcy: dniówka/wypłata, obciążenia, notatki do niego.
  */
-const DOZWOLONE_AKCJE = [
-  "wyplata_zmieniona", // dodanie/zmiana dniówki (kółka/szkolenie)
-  "wyplata_oznaczona", // wypłata oznaczona jako wypłacona
-  "wyplata_cofnieta",
-  "obciazenie_dodane",
-  "obciazenie_usuniete",
-  "notatka_kierowca", // notatka napisana do kierowcy
-];
+const DOZWOLONE_AKCJE = DRIVER_VISIBLE_ACTIONS as readonly string[];
 
 export async function GET() {
   const profile = await getSessionProfile();
