@@ -25,6 +25,15 @@ import { typDniaMeta, czyWolny, maKolka, maZlecenia } from "@/lib/day-type";
 import { TankowanieKierowcy } from "./TankowanieKierowcy";
 import { WiadomosciKierowcy } from "./WiadomosciKierowcy";
 import { PowiadomieniaKierowcy } from "./PowiadomieniaKierowcy";
+import {
+  DRIVER_LANGUAGE_STORAGE_KEY,
+  DriverLanguage,
+  driverMonthName,
+  driverTexts,
+  driverWeekdayShort,
+  normalizeDriverLanguage,
+  replaceVars,
+} from "@/lib/driver-translations";
 
 interface DzienRozbicie {
   data: string;
@@ -89,19 +98,16 @@ function formatDataPL(iso: string): string {
   return `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()}`;
 }
 
-function opisKategorii(kategoria: DriverKategoria): string {
-  if (kategoria === "tankowanie") return "Dodaj tankowanie, zdjęcie licznika i paragon.";
-  if (kategoria === "wiadomosci") return "Powiadomienia, notatki i kontakt z biurem.";
-  if (kategoria === "legenda") return "Stawki, premie i zasady naliczania wypłaty.";
-  return "Sprawdź dni pracy, kółka, zlecenia i zgłoś poprawki.";
-}
-
 export function DriverView({ name }: { name: string }) {
   const router = useRouter();
   const [miesiace, setMiesiace] = useState<MiesiacWyplata[] | null>(null);
   const [error, setError] = useState(false);
   const [otwarty, setOtwarty] = useState<number | null>(null);
   const [kategoria, setKategoria] = useState<DriverKategoria>("wyplata");
+  const [language, setLanguage] = useState<DriverLanguage>("pl");
+  const [languageBusy, setLanguageBusy] = useState(false);
+  const [languageError, setLanguageError] = useState(false);
+  const t = driverTexts(language);
 
   async function load() {
     try {
@@ -125,10 +131,51 @@ export function DriverView({ name }: { name: string }) {
     load();
   }, []);
 
+  useEffect(() => {
+    const cached = normalizeDriverLanguage(localStorage.getItem(DRIVER_LANGUAGE_STORAGE_KEY));
+    setLanguage(cached);
+
+    (async () => {
+      try {
+        const res = await fetch("/api/driver/language", { cache: "no-store" });
+        if (!res.ok) return;
+        const json = await res.json();
+        const next = normalizeDriverLanguage(json.language);
+        setLanguage(next);
+        localStorage.setItem(DRIVER_LANGUAGE_STORAGE_KEY, next);
+      } catch {
+        setLanguage("pl");
+      }
+    })();
+  }, []);
+
   async function logout() {
     await getBrowserSupabase().auth.signOut();
     router.push("/login");
     router.refresh();
+  }
+
+  async function changeLanguage(next: DriverLanguage) {
+    if (next === language || languageBusy) return;
+    const previous = language;
+    setLanguage(next);
+    localStorage.setItem(DRIVER_LANGUAGE_STORAGE_KEY, next);
+    setLanguageBusy(true);
+    setLanguageError(false);
+    try {
+      const res = await fetch("/api/driver/language", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ language: next }),
+      });
+      if (!res.ok) throw new Error("save failed");
+    } catch {
+      setLanguage(previous);
+      localStorage.setItem(DRIVER_LANGUAGE_STORAGE_KEY, previous);
+      setLanguageError(true);
+    } finally {
+      setLanguageBusy(false);
+    }
   }
 
   return (
@@ -164,11 +211,17 @@ export function DriverView({ name }: { name: string }) {
                   onClick={logout}
                   className="text-xs text-dim hover:text-ink border border-line rounded-lg px-2.5 py-1 transition-colors"
                 >
-                  Wyloguj
+                  {t.header.logout}
                 </button>
               </div>
             </div>
-            <KategorieKierowcy active={kategoria} onChange={setKategoria} />
+            <LanguageSwitch
+              language={language}
+              busy={languageBusy}
+              error={languageError}
+              onChange={changeLanguage}
+            />
+            <KategorieKierowcy active={kategoria} lang={language} onChange={setKategoria} />
           </div>
         </header>
 
@@ -176,41 +229,47 @@ export function DriverView({ name }: { name: string }) {
           <div className="flex items-center gap-2">
             <IkonaKategorii kategoria={kategoria} size={20} className="text-amber-brand" />
             <h1 className="text-lg font-bold text-white">
-              {kategoria === "wyplata" && "Wypłata"}
-              {kategoria === "tankowanie" && "Tankowanie"}
-              {kategoria === "wiadomosci" && "Wiadomości"}
-              {kategoria === "legenda" && "Legenda stawek i zasad"}
+              {kategoria === "wyplata" && t.header.title.payout}
+              {kategoria === "tankowanie" && t.header.title.fuel}
+              {kategoria === "wiadomosci" && t.header.title.messages}
+              {kategoria === "legenda" && t.header.title.legend}
             </h1>
           </div>
-          <p className="text-xs text-dim -mt-1">{opisKategorii(kategoria)}</p>
+          <p className="text-xs text-dim -mt-1">
+            {kategoria === "wyplata" && t.header.description.payout}
+            {kategoria === "tankowanie" && t.header.description.fuel}
+            {kategoria === "wiadomosci" && t.header.description.messages}
+            {kategoria === "legenda" && t.header.description.legend}
+          </p>
 
           {kategoria === "wyplata" && (
             <>
               <p className="text-xs text-dim">
-                Zgadza się? Zaznacz <span className="text-green-400 font-semibold">✓</span>.
-                Coś nie gra? Kliknij <span className="text-red-400 font-semibold">✗</span>{" "}
-                i podaj poprawną liczbę kółek.
+                {t.payout.verifyHint} <span className="text-green-400 font-semibold">✓</span>.
+                {" "}{t.payout.issueHint} <span className="text-red-400 font-semibold">✗</span>{" "}
+                {t.payout.issueHintTail}
               </p>
 
               {error ? (
                 <Card>
-                  <p className="text-sm text-red-300 mb-3">Nie udało się pobrać danych.</p>
+                  <p className="text-sm text-red-300 mb-3">{t.payout.loadError}</p>
                   <button
                     onClick={load}
                     className="w-full py-2 rounded-xl bg-amber-brand text-amber-ink font-bold text-sm"
                   >
-                    Spróbuj ponownie
+                    {t.payout.retry}
                   </button>
                 </Card>
               ) : miesiace === null ? (
                 <div className="flex items-center gap-2 text-dim text-sm py-8 justify-center">
-                  <IconLoader size={16} /> Ładowanie…
+                  <IconLoader size={16} /> {t.payout.loading}
                 </div>
               ) : (
                 miesiace.map((m) => (
                   <MiesiacKarta
                     key={m.miesiac}
                     m={m}
+                    lang={language}
                     otwarty={otwarty === m.miesiac}
                     onToggle={() => setOtwarty((p) => (p === m.miesiac ? null : m.miesiac))}
                     onZmiana={load}
@@ -220,16 +279,16 @@ export function DriverView({ name }: { name: string }) {
             </>
           )}
 
-          {kategoria === "tankowanie" && <TankowanieKierowcy />}
+          {kategoria === "tankowanie" && <TankowanieKierowcy lang={language} />}
 
           {kategoria === "wiadomosci" && (
             <>
-              <PowiadomieniaKierowcy />
-              <WiadomosciKierowcy />
+              <PowiadomieniaKierowcy lang={language} />
+              <WiadomosciKierowcy lang={language} />
             </>
           )}
 
-          {kategoria === "legenda" && <LegendaWyplaty />}
+          {kategoria === "legenda" && <LegendaWyplaty lang={language} />}
         </main>
       </div>
     </div>
@@ -250,18 +309,61 @@ function IkonaKategorii({
   return <IconMoneybag size={size} className={className} />;
 }
 
+function LanguageSwitch({
+  language,
+  busy,
+  error,
+  onChange,
+}: {
+  language: DriverLanguage;
+  busy: boolean;
+  error: boolean;
+  onChange: (lang: DriverLanguage) => void;
+}) {
+  const t = driverTexts(language);
+  return (
+    <div className="mb-1.5 flex items-center justify-between gap-2">
+      <span className="text-[11px] text-dim">{t.language.label}</span>
+      <div className="flex items-center gap-1">
+        {(["pl", "ru"] as const).map((lang) => (
+          <button
+            key={lang}
+            type="button"
+            onClick={() => onChange(lang)}
+            disabled={busy}
+            className={cn(
+              "min-h-8 rounded-lg border px-2.5 text-xs font-bold transition-colors disabled:opacity-50",
+              language === lang
+                ? "border-amber-brand bg-amber-brand text-amber-ink"
+                : "border-line text-dim hover:text-ink"
+            )}
+          >
+            {lang === "pl" ? t.language.polish : t.language.russian}
+          </button>
+        ))}
+      </div>
+      <span className="sr-only" aria-live="polite">
+        {busy ? t.language.saving : error ? t.language.error : ""}
+      </span>
+    </div>
+  );
+}
+
 function KategorieKierowcy({
   active,
+  lang,
   onChange,
 }: {
   active: DriverKategoria;
+  lang: DriverLanguage;
   onChange: (kategoria: DriverKategoria) => void;
 }) {
+  const t = driverTexts(lang);
   const items: Array<{ id: DriverKategoria; label: string; short: string }> = [
-    { id: "wyplata", label: "Wypłata", short: "Wypłata" },
-    { id: "tankowanie", label: "Tankowanie", short: "Tank." },
-    { id: "wiadomosci", label: "Wiadomości", short: "Wiad." },
-    { id: "legenda", label: "Legenda", short: "Zasady" },
+    { id: "wyplata", label: t.nav.payout, short: t.nav.payout },
+    { id: "tankowanie", label: t.nav.fuel, short: t.nav.fuelShort },
+    { id: "wiadomosci", label: t.nav.messages, short: t.nav.messagesShort },
+    { id: "legenda", label: t.nav.legend, short: t.nav.legendShort },
   ];
 
   return (
@@ -289,80 +391,30 @@ function KategorieKierowcy({
   );
 }
 
-function LegendaWyplaty() {
+function LegendaWyplaty({ lang }: { lang: DriverLanguage }) {
+  const t = driverTexts(lang);
   return (
     <Card className="!p-4 border-amber-brand/25 bg-surface/90">
       <div className="flex items-center gap-2 mb-2">
         <IconMoneybag size={16} className="text-amber-brand" />
         <p className="text-xs font-extrabold uppercase tracking-wider text-amber-brand">
-          Legenda wypłaty kierowcy
+          {t.legend[0]}
         </p>
       </div>
       <div className="space-y-3 text-xs leading-relaxed text-dim">
-        <p>
-          <b className="text-white">Kółko — 100 zł</b>
-          <br />
-          Każde zaliczone kółko/trasa jest liczone po 100 zł.
-        </p>
-        <p>
-          <b className="text-white">Zlecenie — 50–100 zł albo cena indywidualna</b>
-          <br />
-          Zlecenia dodatkowe są liczone według stawki 50–100 zł albo według ceny
-          indywidualnej wpisanej przez biuro.
-        </p>
-        <p>
-          <b className="text-white">Premia sobotnia — +200 zł</b>
-          <br />
-          Premia przysługuje za przepracowanie 4 sobót w danym miesiącu.
-        </p>
-        <p>
-          <b className="text-white">Warunek premii sobotniej:</b>
-          <br />
-          Kierowca musi zachować ciągłość pracy w miesiącu. Urlop oraz L4 nie przerywają
-          ciągłości pracy.
-          <br />
-          Przykład: kierowca bierze urlop w środę, ale pracuje 4 soboty — premia sobotnia
-          nadal przysługuje.
-        </p>
-        <p>
-          Wolne bezpłatne od poniedziałku do piątku może wpłynąć na dodatki według zasad
-          obowiązujących od lipca.
-        </p>
-        <p>
-          <b className="text-white">Sobota + niedziela — normalna kasa + dodatek 250 zł</b>
-          <br />
-          Jeżeli kierowca pracuje w sobotę i niedzielę, otrzymuje normalną kasę za wykonane
-          kółka i zlecenia oraz dodatkowo +250 zł.
-        </p>
-        <p className="rounded-xl border border-amber-brand/30 bg-amber-brand/10 px-3 py-2.5 text-amber-brand">
-          <b>Warunek dodatku 250 zł od lipca:</b>
-          <br />
-          Dodatek 250 zł za sobotę + niedzielę przysługuje tylko wtedy, gdy kierowca nie ma
-          w danym miesiącu 2 dni wolnego bezpłatnego w dni robocze, czyli od poniedziałku
-          do piątku.
-          <br />
-          <br />
-          Jeżeli w danym miesiącu kierowca ma 2 dni wolnego bezpłatnego od poniedziałku
-          do piątku, dodatek 250 zł za sobotę + niedzielę nie przysługuje.
-        </p>
-        <p>
-          <b className="text-white">Soboty nie liczą się do limitu wolnego bezpłatnego.</b>
-          <br />
-          Do limitu liczymy tylko dni robocze od poniedziałku do piątku.
-        </p>
-        <p>
-          <b className="text-white">Dwie soboty w miesiącu są obowiązkowe.</b>
-          <br />
-          Pozostałe soboty nie są traktowane jako wolne bezpłatne.
-        </p>
-        <p>
-          <b className="text-white">Brak pracy po stronie Żabki</b>
-          <br />
-          Jeżeli z przyczyn niezależnych od pracodawcy kierowca otrzyma wolne, ponieważ
-          Żabka nie zapewni wystarczającej ilości pracy, taki dzień nie jest liczony jako
-          wolne bezpłatne. Nie jest to wolne z winy kierowcy i nie wpływa na utratę
-          dodatków ani premii.
-        </p>
+        {t.legend.slice(1).map((text, idx) => (
+          <p
+            key={idx}
+            className={idx === 4 ? "rounded-xl border border-amber-brand/30 bg-amber-brand/10 px-3 py-2.5 text-amber-brand" : undefined}
+          >
+            {text.split("\n").map((line, lineIdx) => (
+              <span key={lineIdx}>
+                {lineIdx === 0 && idx !== 3 && idx !== 6 ? <b className="text-white">{line}</b> : line}
+                {lineIdx < text.split("\n").length - 1 && <br />}
+              </span>
+            ))}
+          </p>
+        ))}
       </div>
     </Card>
   );
@@ -372,15 +424,18 @@ function LegendaWyplaty() {
 
 function MiesiacKarta({
   m,
+  lang,
   otwarty,
   onToggle,
   onZmiana,
 }: {
   m: MiesiacWyplata;
+  lang: DriverLanguage;
   otwarty: boolean;
   onToggle: () => void;
   onZmiana: () => void;
 }) {
+  const t = driverTexts(lang);
   const wyplacone = m.wyplata.status === "wypłacone";
   const aktywny = m.wynagrodzenie > 0;
 
@@ -400,7 +455,9 @@ function MiesiacKarta({
         className={cn("w-full flex items-center justify-between text-left", aktywny && "cursor-pointer")}
       >
         <div className="flex items-center gap-2">
-          <h2 className="text-sm font-bold text-white uppercase tracking-wide">{m.nazwa} 2026</h2>
+          <h2 className="text-sm font-bold text-white uppercase tracking-wide">
+            {driverMonthName(lang, m.miesiac)} 2026
+          </h2>
           {m.zamkniety && <IconLock size={13} className="text-amber-brand" />}
         </div>
         {aktywny && (
@@ -414,8 +471,8 @@ function MiesiacKarta({
           >
             {wyplacone ? <IconCheck size={12} /> : <span className="w-1.5 h-1.5 rounded-full bg-amber-brand" />}
             {wyplacone
-              ? `Wypłacone${m.wyplata.paidAt ? ` (${formatDataPL(m.wyplata.paidAt)})` : ""}`
-              : "Niewypłacone"}
+              ? `${t.payout.paid}${m.wyplata.paidAt ? ` (${formatDataPL(m.wyplata.paidAt)})` : ""}`
+              : t.payout.unpaid}
           </span>
         )}
       </button>
@@ -425,14 +482,22 @@ function MiesiacKarta({
       </p>
       {aktywny && m.obciazeniaSuma > 0 && (
         <p className="text-[11px] text-dim mt-0.5">
-          zarobek {formatZlCaly(m.wynagrodzenie)} − obciążenia {formatZlCaly(m.obciazeniaSuma)}
+          {replaceVars(t.payout.earnedMinusDeductions, {
+            earned: formatZlCaly(m.wynagrodzenie),
+            deductions: formatZlCaly(m.obciazeniaSuma),
+          })}
         </p>
       )}
 
       {aktywny && (
         <p className="text-xs text-dim mt-0.5">
-          {m.dniPracy} dni pracy · {m.kolka} kółek · soboty {m.liczbaSobot}/4
-          {m.premia > 0 && <span className="text-amber-brand"> · premia +{formatZlCaly(m.premia)}</span>}
+          {replaceVars(t.payout.workSummary, {
+            days: m.dniPracy,
+            loops: m.kolka,
+            Saturdays: m.liczbaSobot,
+            saturdays: m.liczbaSobot,
+          })}
+          {m.premia > 0 && <span className="text-amber-brand"> · {t.payout.premium} +{formatZlCaly(m.premia)}</span>}
         </p>
       )}
 
@@ -444,20 +509,20 @@ function MiesiacKarta({
           )}
         >
           {m.dodatkiZablokowaneOdLipca && <IconAlertTriangle size={12} />}
-          Wolne bezpłatne Pon–Pt:{" "}
+          {t.payout.unpaidWeekdayLeave}{" "}
           <b className={m.dodatkiZablokowaneOdLipca ? "text-red-200" : "text-ink"}>
             {m.wolneBezplatneRobocze}/2
           </b>
-          {m.dodatkiZablokowaneOdLipca && " — premia i dodatki niedzielne zablokowane"}
+          {m.dodatkiZablokowaneOdLipca && ` ${t.payout.extrasBlocked}`}
         </p>
       )}
 
       {aktywny && (m.liczbyDni.wolne + m.liczbyDni.urlop + m.liczbyDni.chorobowe) > 0 && (
         <p className="text-[11px] text-dim mt-0.5 flex flex-wrap gap-x-2.5">
-          <span>Pracujące: <b className="text-ink">{m.liczbyDni.pracujace}</b></span>
-          {m.liczbyDni.wolne > 0 && <span>Wolne: <b className="text-zinc-300">{m.liczbyDni.wolne}</b></span>}
-          {m.liczbyDni.urlop > 0 && <span>Urlop: <b className="text-blue-300">{m.liczbyDni.urlop}</b></span>}
-          {m.liczbyDni.chorobowe > 0 && <span>L4: <b className="text-purple-300">{m.liczbyDni.chorobowe}</b></span>}
+          <span>{t.payout.workingDays} <b className="text-ink">{m.liczbyDni.pracujace}</b></span>
+          {m.liczbyDni.wolne > 0 && <span>{t.payout.freeDays} <b className="text-zinc-300">{m.liczbyDni.wolne}</b></span>}
+          {m.liczbyDni.urlop > 0 && <span>{t.payout.vacation} <b className="text-blue-300">{m.liczbyDni.urlop}</b></span>}
+          {m.liczbyDni.chorobowe > 0 && <span>{t.payout.sickLeave} <b className="text-purple-300">{m.liczbyDni.chorobowe}</b></span>}
         </p>
       )}
 
@@ -467,36 +532,35 @@ function MiesiacKarta({
           className="mt-2 inline-flex items-center gap-1.5 text-xs text-amber-brand border border-amber-brand/40 rounded-lg px-2.5 py-1 hover:bg-amber-brand/10 transition-colors"
           onClick={(e) => e.stopPropagation()}
         >
-          📄 Pobierz PDF wypłaty
+          📄 {t.payout.downloadPdf}
         </a>
       )}
 
       {/* Rozliczenie wypłaty (z obciążeniami) — widoczne po rozwinięciu */}
       {aktywny && otwarty && (
         <div className="mt-3 rounded-xl bg-surface2 border border-line p-3 text-sm tabular-nums">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-dim mb-2">Rozliczenie wypłaty</p>
+          <p className="text-[11px] font-bold uppercase tracking-wider text-dim mb-2">{t.payout.breakdownTitle}</p>
           <div className="flex justify-between py-0.5">
-            <span className="text-dim">Zarobek z kółek + dodatki</span>
+            <span className="text-dim">{t.payout.loopsAndExtras}</span>
             <span className="text-ink">{formatZlCaly(m.sumaDniowek)}</span>
           </div>
           {m.premia > 0 && (
             <div className="flex justify-between py-0.5">
-              <span className="text-dim">Premia sobotnia</span>
+              <span className="text-dim">{t.payout.saturdayPremium}</span>
               <span className="text-amber-brand">+ {formatZlCaly(m.premia)}</span>
             </div>
           )}
           {m.dodatkiZablokowaneOdLipca && (
             <div className="mt-2 rounded-lg border border-red-500/35 bg-red-soft px-2.5 py-2 text-xs text-red-200">
-              Premia sobotnia 200 zł i dodatki niedzielne 250 zł nie są doliczone,
-              bo w tym miesiącu są co najmniej 2 dni wolnego bezpłatnego od poniedziałku do piątku.
+              {t.payout.blockedInfo}
             </div>
           )}
 
           {/* Obciążenia */}
           <div className="mt-1.5 pt-1.5 border-t border-line">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-dim mb-1">Obciążenia</p>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-dim mb-1">{t.payout.deductions}</p>
             {m.obciazenia.length === 0 ? (
-              <p className="text-xs text-dim/60">Brak obciążeń w tym miesiącu.</p>
+              <p className="text-xs text-dim/60">{t.payout.noDeductions}</p>
             ) : (
               m.obciazenia.map((o) => (
                 <div key={o.id} className="flex items-start justify-between gap-2 text-xs py-0.5">
@@ -512,7 +576,7 @@ function MiesiacKarta({
           </div>
 
           <div className="flex justify-between font-bold pt-2 mt-1.5 border-t border-line">
-            <span className="text-white">Do wypłaty</span>
+            <span className="text-white">{t.payout.toPay}</span>
             <span className="text-white text-base">{formatZlCaly(m.doWyplaty)}</span>
           </div>
         </div>
@@ -526,7 +590,7 @@ function MiesiacKarta({
           className="mt-2 flex items-center gap-1.5 text-xs text-amber-brand"
         >
           <IconAlertTriangle size={13} />
-          {doSprawdzenia} {doSprawdzenia === 1 ? "dzień do sprawdzenia" : "dni do sprawdzenia"}
+          {doSprawdzenia} {doSprawdzenia === 1 ? t.payout.dayToCheck : t.payout.daysToCheck}
         </button>
       )}
 
@@ -538,6 +602,7 @@ function MiesiacKarta({
               key={d.data}
               miesiac={m.miesiac}
               d={d}
+              lang={lang}
               zgloszenie={zglMap.get(d.data)}
               readonly={m.zamkniety}
               onZmiana={onZmiana}
@@ -554,16 +619,19 @@ function MiesiacKarta({
 function DzienWiersz({
   miesiac,
   d,
+  lang,
   zgloszenie,
   readonly,
   onZmiana,
 }: {
   miesiac: number;
   d: DzienRozbicie;
+  lang: DriverLanguage;
   zgloszenie?: Zgloszenie;
   readonly: boolean;
   onZmiana: () => void;
 }) {
+  const t = driverTexts(lang);
   const [busy, setBusy] = useState(false);
   const [zglaszam, setZglaszam] = useState(false);
   const [propozycja, setPropozycja] = useState<string>(String(d.kolka));
@@ -598,6 +666,7 @@ function DzienWiersz({
   const dzienMaKolka = maKolka(d.dayType);
   const dzienMaZlecenia = maZlecenia(d.dayType);
   const meta = typDniaMeta(d.dayType);
+  const dayTypeLabel = t.dayType[d.dayType];
   const tlo = d.sobota
     ? "var(--sat-bg)"
     : d.niedziela
@@ -616,7 +685,7 @@ function DzienWiersz({
               d.sobota ? "text-green-300" : d.niedziela ? "text-yellow-300" : "text-dim"
             )}
           >
-            {d.skrotDnia}
+            {driverWeekdayShort(lang, d.data)}
           </span>
         </div>
 
@@ -624,22 +693,22 @@ function DzienWiersz({
         <div className="flex-1 min-w-0">
           {wolny ? (
             <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-bold", meta.chipCls)}>
-              {meta.label}
+              {dayTypeLabel}
             </span>
           ) : (
             <p className="text-sm text-ink">
               {dzienMaKolka && (
-                <><span className="font-semibold text-white">{d.kolka}</span> kółek</>
+                <><span className="font-semibold text-white">{d.kolka}</span> {t.day.loops}</>
               )}
               {dzienMaZlecenia && d.zlecenia > 0 && (
                 <span className="text-amber-brand text-xs">
-                  {dzienMaKolka ? " · " : ""}{d.zlecenia} zlec. × {formatZlCaly(d.stawkaZlecenia)}
+                  {dzienMaKolka ? " · " : ""}{d.zlecenia} {t.day.ordersShort} × {formatZlCaly(d.stawkaZlecenia)}
                 </span>
               )}
               {d.dodatekNiedzielny > 0 && (
-                <span className="text-yellow-300 text-xs"> · +niedziela</span>
+                <span className="text-yellow-300 text-xs"> · {t.day.sundayBonus}</span>
               )}
-              {d.szkolenie > 0 && <span className="text-blue-300 text-xs"> · szkolenie</span>}
+              {d.szkolenie > 0 && <span className="text-blue-300 text-xs"> · {t.day.training}</span>}
             </p>
           )}
         </div>
@@ -655,16 +724,16 @@ function DzienWiersz({
         {!readonly && (
           <div className="shrink-0 flex items-center gap-1">
             {st === "zaakceptowany" ? (
-              <span title="Potwierdzone przez Ciebie" className="text-green-400">
+              <span title={t.day.confirmed} className="text-green-400">
                 <IconCheck size={18} />
               </span>
             ) : st === "zgloszony" ? (
               <span className="text-[11px] text-amber-brand font-medium px-2 py-0.5 rounded-full bg-amber-brand/10 border border-amber-brand/30">
-                czeka
+                {t.day.waiting}
               </span>
             ) : st === "przyjety" ? (
-              <span title="Poprawione" className="text-green-400 flex items-center gap-0.5 text-[11px]">
-                <IconCheck size={14} /> ok
+              <span title={t.day.fixed} className="text-green-400 flex items-center gap-0.5 text-[11px]">
+                <IconCheck size={14} /> {t.day.fixed}
               </span>
             ) : (
               <>
@@ -672,7 +741,7 @@ function DzienWiersz({
                   type="button"
                   disabled={busy}
                   onClick={() => wyslij("akceptuj")}
-                  title={wolny ? `Tak, ${meta.label} się zgadza` : "Wszystko się zgadza"}
+                  title={wolny ? replaceVars(t.day.confirmFree, { dayType: dayTypeLabel }) : t.day.confirmWork}
                   className="p-1.5 rounded-lg text-green-400 hover:bg-green-soft transition-colors disabled:opacity-40"
                 >
                   <IconCheck size={18} />
@@ -681,7 +750,7 @@ function DzienWiersz({
                   type="button"
                   disabled={busy}
                   onClick={() => setZglaszam((v) => !v)}
-                  title={wolny ? "Pracowałem tego dnia — zgłoś" : "Zgłoś błąd"}
+                  title={wolny ? t.day.reportWorked : t.day.reportError}
                   className="p-1.5 rounded-lg text-red-400 hover:bg-red-soft transition-colors disabled:opacity-40"
                 >
                   <IconX size={18} />
@@ -695,12 +764,12 @@ function DzienWiersz({
       {/* Status odrzucenia */}
       {st === "odrzucony" && (
         <p className="mt-1 text-[11px] text-red-300/80">
-          Twoje zgłoszenie zostało odrzucone przez biuro.
+          {t.day.rejected}
         </p>
       )}
       {st === "zgloszony" && zgloszenie?.kolkaProponowane !== undefined && (
         <p className="mt-1 text-[11px] text-amber-brand/90">
-          Zgłoszono: {zgloszenie.kolkaSystem} → {zgloszenie.kolkaProponowane} kółek
+          {replaceVars(t.day.reported, { old: zgloszenie.kolkaSystem, next: zgloszenie.kolkaProponowane })}
           {zgloszenie.uwaga ? ` — „${zgloszenie.uwaga}”` : ""}
         </p>
       )}
@@ -710,11 +779,11 @@ function DzienWiersz({
         <div className="mt-2 pt-2 border-t border-line/60 space-y-2">
           {wolny && (
             <p className="text-[11px] text-amber-brand/90">
-              Ten dzień jest oznaczony jako {meta.label}. Jeśli pracowałeś — podaj liczbę kółek.
+              {replaceVars(t.day.wasFree, { dayType: dayTypeLabel })}
             </p>
           )}
           <div className="flex items-center gap-2">
-            <label className="text-xs text-dim">{wolny ? "Pracowałem — kółek:" : "Powinno być kółek:"}</label>
+            <label className="text-xs text-dim">{wolny ? t.day.workedLoops : t.day.shouldBeLoops}</label>
             <input
               type="number"
               min={0}
@@ -727,7 +796,7 @@ function DzienWiersz({
             type="text"
             value={uwaga}
             onChange={(e) => setUwaga(e.target.value)}
-            placeholder="Komentarz (opcjonalnie)…"
+            placeholder={t.day.commentPlaceholder}
             className="w-full bg-input border border-line rounded-lg px-2.5 py-1.5 text-sm text-ink placeholder:text-dim/40"
           />
           <div className="flex gap-2">
@@ -738,7 +807,7 @@ function DzienWiersz({
               className="flex-1 py-1.5 rounded-lg bg-red-500/90 hover:bg-red-500 text-white text-xs font-bold disabled:opacity-50 flex items-center justify-center gap-1"
             >
               {busy ? <IconLoader size={13} /> : <IconAlertTriangle size={13} />}
-              Wyślij zgłoszenie
+              {t.day.sendReport}
             </button>
             <button
               type="button"
@@ -746,7 +815,7 @@ function DzienWiersz({
               onClick={() => setZglaszam(false)}
               className="px-3 py-1.5 rounded-lg border border-line text-dim text-xs hover:text-ink"
             >
-              Anuluj
+              {t.day.cancel}
             </button>
           </div>
         </div>

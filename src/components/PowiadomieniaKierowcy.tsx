@@ -17,6 +17,12 @@ import {
   IconCheck,
 } from "./ui/icons";
 import { cn } from "@/lib/utils";
+import {
+  DriverLanguage,
+  driverNotificationDescription,
+  driverTexts,
+  replaceVars,
+} from "@/lib/driver-translations";
 
 interface Powiadomienie {
   id: string;
@@ -25,16 +31,16 @@ interface Powiadomienie {
   created_at: string;
 }
 
-function relativeTime(iso: string): string {
+function relativeTime(iso: string, t: ReturnType<typeof driverTexts>): string {
   const diff = Date.now() - new Date(iso).getTime();
   const min = Math.floor(diff / 60000);
-  if (min < 1) return "przed chwilą";
-  if (min < 60) return `${min} min temu`;
+  if (min < 1) return t.notifications.now;
+  if (min < 60) return replaceVars(t.notifications.minutesAgo, { count: min });
   const h = Math.floor(min / 60);
-  if (h < 24) return `${h} godz. temu`;
+  if (h < 24) return replaceVars(t.notifications.hoursAgo, { count: h });
   const d = Math.floor(h / 24);
-  if (d === 1) return "wczoraj";
-  return `${d} dni temu`;
+  if (d === 1) return t.notifications.yesterday;
+  return replaceVars(t.notifications.daysAgo, { count: d });
 }
 
 function ikona(action: string) {
@@ -44,7 +50,8 @@ function ikona(action: string) {
   return <IconBell size={14} />;
 }
 
-export function PowiadomieniaKierowcy() {
+export function PowiadomieniaKierowcy({ lang }: { lang: DriverLanguage }) {
+  const t = driverTexts(lang);
   const [lista, setLista] = useState<Powiadomienie[] | null>(null);
   const [rozwiniete, setRozwiniete] = useState(false);
   const [supported, setSupported] = useState(false);
@@ -82,7 +89,7 @@ export function PowiadomieniaKierowcy() {
       } else {
         const ok = await subscribePush();
         setPushOn(ok);
-        if (!ok) alert("Nie udało się włączyć powiadomień — sprawdź zgodę w telefonie.");
+        if (!ok) alert(t.notifications.enableError);
       }
     } finally {
       setPushBusy(false);
@@ -95,9 +102,13 @@ export function PowiadomieniaKierowcy() {
     <Card>
       <div className="flex items-center gap-2">
         <IconBell size={18} className="text-amber-brand shrink-0" />
-        <h2 className="flex-1 text-sm font-bold text-white">Powiadomienia</h2>
+        <h2 className="flex-1 text-sm font-bold text-white">{t.notifications.title}</h2>
         {(lista?.length ?? 0) > 4 && (
-          <button type="button" onClick={() => setRozwiniete((v) => !v)} title={rozwiniete ? "Zwiń" : "Rozwiń"}>
+          <button
+            type="button"
+            onClick={() => setRozwiniete((v) => !v)}
+            title={rozwiniete ? t.notifications.collapse : t.notifications.expand}
+          >
             <IconChevronDown
               size={16}
               className={cn("text-dim transition-transform", rozwiniete && "rotate-180")}
@@ -116,14 +127,14 @@ export function PowiadomieniaKierowcy() {
             )}
           >
             {pushOn ? <IconCheck size={12} /> : <IconBellOff size={12} />}
-            {pushOn ? "Push włączony" : "Push wyłączony"}
+            {pushOn ? t.notifications.pushOn : t.notifications.pushOff}
           </span>
-          <span className="flex-1 text-[11px] text-dim">Powiadomienia na telefon</span>
+          <span className="flex-1 text-[11px] text-dim">{t.notifications.pushLabel}</span>
           <button
             type="button"
             onClick={togglePush}
             disabled={pushBusy}
-            title={pushOn ? "Wyłącz powiadomienia" : "Włącz powiadomienia"}
+            title={pushOn ? t.notifications.turnOff : t.notifications.turnOn}
             className={cn(
               "shrink-0 relative w-11 h-6 rounded-full transition-colors disabled:opacity-50",
               pushOn ? "bg-amber-brand" : "bg-line"
@@ -142,17 +153,19 @@ export function PowiadomieniaKierowcy() {
       <div className="mt-3 space-y-1.5">
         {lista === null ? (
           <div className="flex items-center gap-2 text-dim text-sm py-2 justify-center">
-            <IconLoader size={15} /> Ładowanie…
+            <IconLoader size={15} /> {t.notifications.loading}
           </div>
         ) : lista.length === 0 ? (
-          <p className="text-sm text-dim/60 text-center py-2">Brak powiadomień.</p>
+          <p className="text-sm text-dim/60 text-center py-2">{t.notifications.empty}</p>
         ) : (
           widoczne.map((n) => (
             <div key={n.id} className="flex items-start gap-2 rounded-lg bg-surface2 px-3 py-2">
               <span className="shrink-0 text-amber-brand mt-0.5">{ikona(n.action)}</span>
               <div className="min-w-0 flex-1">
-                <p className="text-xs text-ink leading-snug">{n.description}</p>
-                <p className="text-[11px] text-dim/60 mt-0.5">{relativeTime(n.created_at)}</p>
+                <p className="text-xs text-ink leading-snug">
+                  {driverNotificationDescription(lang, n.description)}
+                </p>
+                <p className="text-[11px] text-dim/60 mt-0.5">{relativeTime(n.created_at, t)}</p>
               </div>
             </div>
           ))

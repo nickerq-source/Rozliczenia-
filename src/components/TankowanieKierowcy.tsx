@@ -19,6 +19,7 @@ import {
   IconTrash,
   IconLock,
 } from "./ui/icons";
+import { DriverLanguage, driverMonthName, driverTexts } from "@/lib/driver-translations";
 
 interface OdczytParagonu {
   sprzedawca: string | null;
@@ -49,7 +50,8 @@ function todayISO(): string {
 const num = (s: string): number => parseFloat(s.replace(",", "."));
 const ddmm = (iso: string): string => `${iso.slice(8, 10)}.${iso.slice(5, 7)}`;
 
-export function TankowanieKierowcy() {
+export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
+  const t = driverTexts(lang);
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [scanInfo, setScanInfo] = useState<null | "ok" | "manual">(null);
@@ -135,7 +137,7 @@ export function TankowanieKierowcy() {
       setScanInfo(o._noKey ? "manual" : "ok");
       setOpen(true);
     } catch {
-      setBlad("Nie udało się odczytać zdjęcia. Wpisz dane ręcznie.");
+      setBlad(t.fuel.readError);
       setOpen(true);
     } finally {
       setBusy(false);
@@ -145,7 +147,7 @@ export function TankowanieKierowcy() {
   async function zapisz() {
     const kwota = num(fKwota);
     if (!isFinite(kwota) || kwota <= 0) {
-      setBlad("Podaj kwotę tankowania (zł).");
+      setBlad(t.fuel.amountRequired);
       return;
     }
     const litry = num(fLitry);
@@ -166,14 +168,14 @@ export function TankowanieKierowcy() {
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setBlad(json.error ?? "Nie udało się zapisać tankowania.");
+        setBlad(json.error ?? t.fuel.saveError);
         return;
       }
       reset();
       setOpen(false);
       await wczytaj();
     } catch {
-      setBlad("Błąd połączenia. Spróbuj ponownie.");
+      setBlad(t.fuel.connectionError);
     } finally {
       setBusy(false);
     }
@@ -205,10 +207,10 @@ export function TankowanieKierowcy() {
     <Card>
       <div className="flex items-center gap-2">
         <IconGasStation size={18} className="text-amber-brand" />
-        <h2 className="text-sm font-bold text-white">Tankowanie</h2>
+        <h2 className="text-sm font-bold text-white">{t.fuel.title}</h2>
       </div>
       <p className="text-xs text-dim mt-1">
-        Wpisz litry i cenę albo zrób zdjęcie paragonu — reszta sama trafi do rozliczenia.
+        {t.fuel.intro}
       </p>
 
       {!open ? (
@@ -218,7 +220,7 @@ export function TankowanieKierowcy() {
             onClick={() => { reset(); setOpen(true); }}
             className="flex items-center justify-center gap-1.5 py-2.5 min-h-[44px] rounded-xl border border-dashed border-amber-brand/50 text-sm text-amber-brand hover:bg-amber-brand/10 transition-all"
           >
-            <IconPlus size={15} /> Wpisz ręcznie
+            <IconPlus size={15} /> {t.fuel.manual}
           </button>
           <label
             className={`flex items-center justify-center gap-1.5 py-2.5 min-h-[44px] rounded-xl border border-dashed border-amber-brand/50 text-sm text-amber-brand transition-all ${
@@ -226,7 +228,7 @@ export function TankowanieKierowcy() {
             }`}
           >
             {busy ? <IconLoader size={15} /> : <IconCamera size={15} />}
-            {busy ? "Odczytuję…" : "Ze zdjęcia"}
+            {busy ? t.fuel.reading : t.fuel.photo}
             <input
               type="file"
               accept="image/*"
@@ -242,7 +244,7 @@ export function TankowanieKierowcy() {
           {scanInfo && (
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-brand/10 border border-amber-brand/40 text-amber-brand text-[11px] font-medium">
               <IconCheck size={12} />
-              {scanInfo === "manual" ? "AI niedostępne — wpisz dane" : "Odczytano ze zdjęcia — sprawdź"}
+              {scanInfo === "manual" ? t.fuel.aiManual : t.fuel.aiRead}
             </span>
           )}
 
@@ -253,7 +255,7 @@ export function TankowanieKierowcy() {
 
           <div className="grid grid-cols-2 gap-2 text-xs">
             <label className="text-dim">
-              Litry
+              {t.fuel.liters}
               <input
                 inputMode="decimal"
                 value={fLitry}
@@ -263,7 +265,7 @@ export function TankowanieKierowcy() {
               />
             </label>
             <label className="text-dim">
-              Cena za litr (zł)
+              {t.fuel.pricePerLiter}
               <input
                 inputMode="decimal"
                 value={fCena}
@@ -273,7 +275,7 @@ export function TankowanieKierowcy() {
               />
             </label>
             <label className="text-dim col-span-2">
-              Kwota brutto (razem)
+              {t.fuel.grossAmount}
               <input
                 inputMode="decimal"
                 value={fKwota}
@@ -283,7 +285,7 @@ export function TankowanieKierowcy() {
               />
             </label>
             <label className="text-dim">
-              Data
+              {t.fuel.date}
               <input
                 type="date"
                 value={fData}
@@ -292,11 +294,11 @@ export function TankowanieKierowcy() {
               />
             </label>
             <label className="text-dim">
-              Stacja (opcjonalnie)
+              {t.fuel.station}
               <input
                 value={fSprzedawca}
                 onChange={(e) => setFSprzedawca(e.target.value)}
-                placeholder="np. Orlen"
+                placeholder={t.fuel.stationPlaceholder}
                 className={inputCls}
               />
             </label>
@@ -315,7 +317,7 @@ export function TankowanieKierowcy() {
               disabled={busy}
               className="flex-1 py-2 rounded-xl border border-line text-dim text-sm hover:text-ink disabled:opacity-50"
             >
-              Anuluj
+              {t.fuel.cancel}
             </button>
             <button
               type="button"
@@ -324,7 +326,7 @@ export function TankowanieKierowcy() {
               className="flex-1 py-2 rounded-xl bg-amber-brand text-amber-ink font-bold text-sm hover:bg-[#e09420] disabled:opacity-50 flex items-center justify-center gap-1.5"
             >
               {busy ? <IconLoader size={14} /> : <IconCheck size={14} />}
-              Zapisz tankowanie
+              {t.fuel.save}
             </button>
           </div>
         </div>
@@ -333,7 +335,7 @@ export function TankowanieKierowcy() {
       {/* Lista własnych tankowań kierowcy — z usuwaniem */}
       {lista.length > 0 && (
         <div className="mt-4 pt-3 border-t border-line/60">
-          <p className="text-[11px] font-semibold text-dim uppercase tracking-wide mb-1">Twoje tankowania</p>
+          <p className="text-[11px] font-semibold text-dim uppercase tracking-wide mb-1">{t.fuel.yourFuel}</p>
           <div className="divide-y divide-line/40">
             {lista.map((w) => (
               <div key={w.id} className="flex items-center gap-2 py-2">
@@ -342,23 +344,23 @@ export function TankowanieKierowcy() {
                     {formatZlCaly(w.koszt)}
                     {w.litry ? <span className="text-dim"> · {w.litry} l</span> : null}
                   </p>
-                  <p className="text-[11px] text-dim">{ddmm(w.data)} · {w.nazwaMiesiaca}</p>
+                  <p className="text-[11px] text-dim">{ddmm(w.data)} · {driverMonthName(lang, w.miesiac)}</p>
                 </div>
 
                 {w.zamkniety ? (
                   <span className="shrink-0 flex items-center gap-1 text-[10px] text-dim">
-                    <IconLock size={12} /> zamknięty
+                    <IconLock size={12} /> {t.fuel.closed}
                   </span>
                 ) : confirmId === w.id ? (
                   <div className="shrink-0 flex items-center gap-1.5">
-                    <span className="text-[11px] text-dim">Na pewno?</span>
+                    <span className="text-[11px] text-dim">{t.fuel.sure}</span>
                     <button
                       type="button"
                       onClick={() => usun(w)}
                       disabled={delBusyId === w.id}
                       className="px-2 py-1 rounded-lg bg-red-500/90 hover:bg-red-500 text-white text-[11px] font-bold disabled:opacity-50 flex items-center gap-1"
                     >
-                      {delBusyId === w.id ? <IconLoader size={11} /> : null} Usuń
+                      {delBusyId === w.id ? <IconLoader size={11} /> : null} {t.fuel.delete}
                     </button>
                     <button
                       type="button"
@@ -366,14 +368,14 @@ export function TankowanieKierowcy() {
                       disabled={delBusyId === w.id}
                       className="px-2 py-1 rounded-lg border border-line text-dim text-[11px] hover:text-ink"
                     >
-                      Nie
+                      {t.fuel.no}
                     </button>
                   </div>
                 ) : (
                   <button
                     type="button"
                     onClick={() => setConfirmId(w.id)}
-                    title="Usuń tankowanie"
+                    title={t.fuel.deleteTitle}
                     className="shrink-0 p-2 rounded-lg text-red-400 hover:bg-red-soft transition-colors"
                   >
                     <IconTrash size={16} />

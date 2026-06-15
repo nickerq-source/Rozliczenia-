@@ -20,6 +20,7 @@ CREATE TABLE profiles (
   email TEXT NOT NULL,
   name TEXT NOT NULL,
   role TEXT NOT NULL CHECK (role IN ('admin', 'driver')),
+  preferred_language TEXT NOT NULL DEFAULT 'pl' CHECK (preferred_language IN ('pl', 'ru')),
   workspace_id UUID NOT NULL REFERENCES workspaces(id),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
