@@ -11,6 +11,7 @@ import { ZarobekTab } from "./tabs/ZarobekTab";
 import { KosztyTab } from "./tabs/KosztyTab";
 import { RaportTab } from "./tabs/RaportTab";
 import { WiadomosciTab } from "./tabs/WiadomosciTab";
+import { LegendaWyplaty } from "./LegendaWyplaty";
 import { UstawieniaTab } from "./tabs/UstawieniaTab";
 import { getUstawienia, podatkiMiesiaca } from "@/lib/tax";
 import { UserNameModal } from "./UserNameModal";
@@ -197,7 +198,7 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
       setAktywnyMiesiac(m as MiesiącId);
     }
     const zNorm = z === "historia" ? "wiadomosci" : z; // alias starych linków
-    if (zNorm === "podsumowanie" || zNorm === "zarobek" || zNorm === "koszty" || zNorm === "raport" || zNorm === "wiadomosci" || zNorm === "ustawienia") {
+    if (zNorm === "podsumowanie" || zNorm === "zarobek" || zNorm === "koszty" || zNorm === "raport" || zNorm === "wiadomosci" || zNorm === "legenda" || zNorm === "ustawienia") {
       setAktywnaZakladka(zNorm as TabName);
     }
     if (zgl) setFocusZgloszenie(zgl);
@@ -294,7 +295,7 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
           ) : (
             <>
               {/* Baner zamkniętego miesiąca */}
-              {monthLocked && aktywnaZakladka !== "raport" && aktywnaZakladka !== "wiadomosci" && aktywnaZakladka !== "ustawienia" && (
+              {monthLocked && aktywnaZakladka !== "raport" && aktywnaZakladka !== "wiadomosci" && aktywnaZakladka !== "legenda" && aktywnaZakladka !== "ustawienia" && (
                 <div className="flex items-center gap-2 rounded-xl bg-surface2 border border-line px-4 py-2.5 text-sm text-dim">
                   <IconLock size={15} className="text-amber-brand" />
                   Miesiąc {POLSKIE_MIESIACE[aktywnyMiesiac]} 2026 jest zamknięty — tylko do odczytu.
@@ -350,6 +351,7 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
                   onUpdateNotatki={updateNotatki}
                 />
               )}
+              {aktywnaZakladka === "legenda" && isAdmin && <LegendaWyplaty lang="pl" />}
               {aktywnaZakladka === "ustawienia" && isAdmin && (
                 <UstawieniaTab
                   ustawienia={ustawienia}
@@ -360,7 +362,7 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
               )}
 
               {/* Zamknięcie / odblokowanie miesiąca (poza fieldsetem) */}
-              {isAdmin && aktywnaZakladka !== "raport" && aktywnaZakladka !== "wiadomosci" && aktywnaZakladka !== "ustawienia" && (
+              {isAdmin && aktywnaZakladka !== "raport" && aktywnaZakladka !== "wiadomosci" && aktywnaZakladka !== "legenda" && aktywnaZakladka !== "ustawienia" && (
                 <div className="space-y-2">
                   <div className="rounded-2xl border border-line bg-surface p-4">
                     <p className="mb-2 text-xs font-bold uppercase tracking-wider text-dim">
