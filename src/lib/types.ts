@@ -61,6 +61,8 @@ export interface DzienKierowcy {
   kolka: number; // liczba kółek (tras)
   szkolenie: number; // tylko czerwiec, w zł (0 lub 150)
   dayType?: DayType; // domyślnie "pracujacy"
+  zlecenia?: number; // liczba zleceń w tym dniu (oprócz tras)
+  stawkaZlecenia?: number; // zł za jedno zlecenie (50/100/własna); domyślnie 100
 }
 
 // ─── KATEGORIE I VAT KOSZTÓW ─────────────────────────────────────────────────
@@ -253,6 +255,7 @@ export interface WynikMiesiaca {
 
 export interface DniowkaInfo {
   kwotaKolek: number;   // kółka × 100
+  kwotaZlecen: number;  // zlecenia × stawka
   szkolenie: number;
   dodatekNiedzielny: number;
   dniowka: number;

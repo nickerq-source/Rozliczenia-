@@ -63,11 +63,12 @@ export async function GET(_req: NextRequest, { params }: Params) {
   const { dniowki, premia, wynagrodzenie, liczbaSobot } = obliczWynagrodzenie(miesiac, dni);
 
   // Rozbicie kwot
-  let zarobekKolka = 0, szkolenie = 0, dodatkiNd = 0, kolkaTotal = 0;
+  let zarobekKolka = 0, zarobekZlecen = 0, szkolenie = 0, dodatkiNd = 0, kolkaTotal = 0;
   for (const iso of getDniMiesiaca(miesiac)) {
     const i = dniowki[iso];
     if (!i) continue;
     zarobekKolka += i.kwotaKolek;
+    zarobekZlecen += i.kwotaZlecen;
     szkolenie += i.szkolenie;
     dodatkiNd += i.dodatekNiedzielny;
     kolkaTotal += parseNum(dni[iso]?.kolka);
@@ -176,6 +177,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     y -= opts?.bold ? 18 : 15;
   };
   wiersz("Zarobek z kółek", zarobekKolka);
+  if (zarobekZlecen > 0) wiersz("Zarobek ze zleceń", zarobekZlecen);
   if (szkolenie > 0) wiersz("Szkolenie", szkolenie);
   if (dodatkiNd > 0) wiersz("Dodatki niedzielne", dodatkiNd);
   if (premia > 0) wiersz("Premia sobotnia", premia, { color: amber });

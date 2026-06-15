@@ -8,6 +8,7 @@ import {
   DaneMiesiaca,
   DayType,
   DocumentStatus,
+  DzienKierowcy,
   KategoriaKosztu,
   KosztVatInfo,
   KosztZalacznik,
@@ -340,6 +341,8 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
   // Paginacja list kosztów (1-indeksowana)
   const [stronaTank, setStronaTank] = useState(1);
   const [stronaInne, setStronaInne] = useState(1);
+  // Dni, w których stawka zlecenia jest „własna" (nie 50/100)
+  const [innaStawka, setInnaStawka] = useState<Record<string, boolean>>({});
   // Id wpisów już objętych automatycznym backfillem (żeby nie powtarzać AI)
   const backfillDone = useRef<Set<string>>(new Set());
   const notifiedCostValues = useRef<Record<string, string>>({});
@@ -792,6 +795,19 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
     [onUpdate]
   );
 
+  const patchDzien = useCallback(
+    (iso: string, patch: Partial<DzienKierowcy>) => {
+      onUpdate((prev) => ({
+        ...prev,
+        dni: {
+          ...prev.dni,
+          [iso]: { ...(prev.dni[iso] ?? { data: iso, kolka: 0, szkolenie: 0 }), ...patch },
+        },
+      }));
+    },
+    [onUpdate]
+  );
+
   // Typ dnia (część E): wolne/urlop/L4 zerują kółka i dniówkę
   function setDayType(iso: string, dayType: DayType) {
     const stary = dane.dni[iso]?.dayType ?? "pracujacy";
@@ -1161,6 +1177,58 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
                     )}
                   </div>
                 </div>
+
+                {/* Zlecenia — dodatkowo do tras, tylko dni robocze */}
+                {!wolny && (() => {
+                  const stawka = parseNum(dzien.stawkaZlecenia) || 100;
+                  const pokazInna = innaStawka[iso] ?? (stawka !== 50 && stawka !== 100);
+                  return (
+                    <div className="flex items-center gap-1.5 px-2 pb-1 -mt-0.5 text-[11px] text-dim">
+                      <span className="shrink-0">Zlecenia</span>
+                      <div className="w-12">
+                        <NumInput
+                          value={dzien.zlecenia || ""}
+                          onChange={(v) => patchDzien(iso, { zlecenia: v })}
+                          placeholder="0"
+                          className="!py-1 !px-1.5 !text-xs !text-center"
+                        />
+                      </div>
+                      <span>×</span>
+                      <select
+                        value={pokazInna ? "inna" : String(stawka)}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          if (v === "inna") {
+                            setInnaStawka((p) => ({ ...p, [iso]: true }));
+                          } else {
+                            setInnaStawka((p) => ({ ...p, [iso]: false }));
+                            patchDzien(iso, { stawkaZlecenia: Number(v) });
+                          }
+                        }}
+                        className="bg-input border border-line rounded-lg px-1.5 py-1 text-xs text-ink"
+                      >
+                        <option value="50">50 zł</option>
+                        <option value="100">100 zł</option>
+                        <option value="inna">inna</option>
+                      </select>
+                      {pokazInna && (
+                        <div className="w-16">
+                          <NumInput
+                            value={dzien.stawkaZlecenia || ""}
+                            onChange={(v) => patchDzien(iso, { stawkaZlecenia: v })}
+                            placeholder="zł"
+                            className="!py-1 !px-1.5 !text-xs !text-center"
+                          />
+                        </div>
+                      )}
+                      {info && info.kwotaZlecen > 0 && (
+                        <span className="ml-auto text-amber-brand font-semibold tabular-nums">
+                          +{formatZlCaly(info.kwotaZlecen)}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             );
           })}

@@ -59,6 +59,9 @@ export async function GET() {
         dayType: dni[iso]?.dayType ?? "pracujacy",
         kolka: parseNum(dni[iso]?.kolka),
         szkolenie: parseNum(dni[iso]?.szkolenie),
+        zlecenia: parseNum(dni[iso]?.zlecenia),
+        stawkaZlecenia: parseNum(dni[iso]?.stawkaZlecenia) || 100,
+        kwotaZlecen: dniowki[iso]?.kwotaZlecen ?? 0,
         dniowka: dniowki[iso]?.dniowka ?? 0,
         dodatekNiedzielny: dniowki[iso]?.dodatekNiedzielny ?? 0,
       }));

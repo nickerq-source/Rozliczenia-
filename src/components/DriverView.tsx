@@ -33,6 +33,9 @@ interface DzienRozbicie {
   dayType: DayType;
   kolka: number;
   szkolenie: number;
+  zlecenia: number;
+  stawkaZlecenia: number;
+  kwotaZlecen: number;
   dniowka: number;
   dodatekNiedzielny: number;
 }
@@ -438,6 +441,9 @@ function DzienWiersz({
           ) : (
             <p className="text-sm text-ink">
               <span className="font-semibold text-white">{d.kolka}</span> kółek
+              {d.zlecenia > 0 && (
+                <span className="text-amber-brand text-xs"> · {d.zlecenia} zlec. × {formatZlCaly(d.stawkaZlecenia)}</span>
+              )}
               {d.dodatekNiedzielny > 0 && (
                 <span className="text-yellow-300 text-xs"> · +niedziela</span>
               )}

@@ -56,11 +56,16 @@ export function obliczDniowke(
 ): DniowkaInfo {
   // Dzień nie-pracujący (wolne/urlop/L4) → zero dniówki, zero kółek
   if (dzien.dayType && dzien.dayType !== "pracujacy") {
-    return { kwotaKolek: 0, szkolenie: 0, dodatekNiedzielny: 0, dniowka: 0 };
+    return { kwotaKolek: 0, kwotaZlecen: 0, szkolenie: 0, dodatekNiedzielny: 0, dniowka: 0 };
   }
 
   const kolka = parseNum(dzien.kolka);
   const kwotaKolek = kolka * 100;
+
+  // Zlecenia: liczba × stawka (50/100/własna; domyślnie 100), niezależnie od kółek
+  const liczbaZlecen = parseNum(dzien.zlecenia);
+  const stawkaZlecenia = parseNum(dzien.stawkaZlecenia) || 100;
+  const kwotaZlecen = liczbaZlecen * stawkaZlecenia;
 
   // Szkolenie: tylko czerwiec, ręcznie wpisane (0 domyślnie)
   const szkolenie = miesiac === 6 ? parseNum(dzien.szkolenie) : 0;
@@ -75,8 +80,8 @@ export function obliczDniowke(
     }
   }
 
-  const dniowka = kwotaKolek + szkolenie + dodatekNiedzielny;
-  return { kwotaKolek, szkolenie, dodatekNiedzielny, dniowka };
+  const dniowka = kwotaKolek + kwotaZlecen + szkolenie + dodatekNiedzielny;
+  return { kwotaKolek, kwotaZlecen, szkolenie, dodatekNiedzielny, dniowka };
 }
 
 // ─── WYNAGRODZENIE KIEROWCY ───────────────────────────────────────────────────
