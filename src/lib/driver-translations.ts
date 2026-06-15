@@ -155,16 +155,107 @@ export const DRIVER_TRANSLATIONS = {
       yesterday: "wczoraj",
       daysAgo: "{count} dni temu",
     },
-    legend: [
-      "💰 LEGENDA WYPŁATY",
-      "Kółko = 100 zł.",
-      "Zlecenie = 50–100 zł albo cena indywidualna wpisana przez biuro.",
-      "Premia sobotnia = +200 zł za 4 przepracowane soboty w miesiącu.\nUrlop i L4 nie przerywają ciągłości pracy, więc premia nadal się należy.",
-      "Sobota + niedziela = normalna kasa z kółek i zleceń + dodatkowe 250 zł.",
-      "Od lipca:\nJeżeli kierowca ma 2 dni wolnego bezpłatnego w dni robocze od poniedziałku do piątku, traci dodatek 250 zł za sobotę + niedzielę.",
-      "Soboty nie liczą się do limitu wolnego bezpłatnego.\nDwie soboty w miesiącu są obowiązkowe.\nPozostałe soboty nie są traktowane jako wolne bezpłatne.",
-      "Jeżeli z przyczyn niezależnych od pracodawcy kierowca otrzyma wolne, ponieważ Żabka nie zapewni wystarczającej ilości pracy, taki dzień nie jest liczony jako wolne bezpłatne. Nie jest to wolne z winy kierowcy i nie wpływa na utratę dodatków ani premii.",
-    ],
+    legend: {
+      title: "💰 LEGENDA WYPŁATY KIEROWCY",
+      intro:
+        "Wypłata kierowcy jest liczona na podstawie kółek, zleceń, urlopów oraz premii i dodatków za obecność, soboty i weekendy.",
+      sections: [
+        {
+          title: "KÓŁKO",
+          important: "Każde zaliczone kółko / trasa = 100 zł.",
+        },
+        {
+          title: "ZLECENIE",
+          important: "Zlecenie dodatkowe = 50–100 zł albo cena indywidualna wpisana przez biuro.",
+        },
+        {
+          title: "URLOP",
+          important: "Urlop to dzień urlopowy płatny 250 zł.",
+          points: [
+            "Urlop nie przerywa ciągłości pracy i nie powoduje utraty premii ani dodatków.",
+            "Kierowca ma 14 dni urlopowych na cały rok.",
+            "Do końca grudnia kierowcy pozostało 8 dni urlopowych.",
+          ],
+          examples: [
+            "Jeżeli kierowca bierze urlop w środę, dzień jest płatny 250 zł i nie przerywa ciągłości pracy.",
+          ],
+        },
+        {
+          title: "WOLNE",
+          important: "Wolne oznacza dzień wolny bezpłatny.",
+          points: [
+            "1 dzień wolnego bezpłatnego w miesiącu nie przerywa ciągłości pracy i nie zabiera premii ani dodatków.",
+            "Dopiero 2 dni wolnego bezpłatnego w tym samym miesiącu, w dni robocze od poniedziałku do piątku, przerywają ciągłość pracy.",
+            "Jeżeli kierowca ma 2 dni wolnego bezpłatnego w miesiącu, traci dodatek 250 zł za sobotę + niedzielę.",
+          ],
+          examples: [
+            "Kierowca bierze wolne bezpłatne w środę. To jedyny taki dzień w miesiącu. Ciągłość pracy nie jest przerwana i dodatki nadal przysługują.",
+            "Kierowca bierze wolne bezpłatne w środę i piątek. To 2 dni wolnego bezpłatnego w dni robocze w tym samym miesiącu. Ciągłość pracy zostaje przerwana i kierowca traci dodatek 250 zł za sobotę + niedzielę.",
+          ],
+        },
+        {
+          title: "PREMIA SOBOTNIA",
+          important: "Premia sobotnia = 200 zł.",
+          points: [
+            "Premia przysługuje za 4 przepracowane soboty w miesiącu.",
+            "Warunek: kierowca musi zachować ciągłość pracy.",
+            "Urlop nie przerywa ciągłości pracy.",
+            "1 dzień wolnego bezpłatnego w miesiącu też nie przerywa ciągłości pracy.",
+            "2 dni wolnego bezpłatnego w dni robocze od poniedziałku do piątku przerywają ciągłość pracy.",
+          ],
+        },
+        {
+          title: "DODATEK ZA SOBOTĘ + NIEDZIELĘ",
+          important:
+            "Jeżeli kierowca pracuje w sobotę i niedzielę, otrzymuje normalną kasę za kółka i zlecenia oraz dodatkowo 250 zł premii.",
+          points: [
+            "Czyli: sobota + niedziela = kasa z kółek + kasa ze zleceń + dodatek 250 zł.",
+          ],
+          highlight: true,
+        },
+        {
+          title: "WARUNEK DODATKU 250 ZŁ OD LIPCA",
+          important:
+            "Od lipca dodatek 250 zł za sobotę + niedzielę zależy od liczby dni wolnego bezpłatnego w miesiącu.",
+          points: [
+            "Do limitu liczą się tylko dni robocze od poniedziałku do piątku.",
+            "1 dzień wolnego bezpłatnego w miesiącu nie zabiera dodatku 250 zł.",
+            "2 dni wolnego bezpłatnego w miesiącu zabierają dodatek 250 zł za sobotę + niedzielę.",
+          ],
+          highlight: true,
+        },
+        {
+          title: "SOBOTY A WOLNE BEZPŁATNE",
+          important: "Soboty nie liczą się do limitu wolnego bezpłatnego.",
+          points: [
+            "Do limitu liczymy tylko dni robocze od poniedziałku do piątku.",
+            "Dwie soboty w miesiącu są obowiązkowe.",
+            "Pozostałe soboty nie są traktowane jako wolne bezpłatne.",
+          ],
+        },
+        {
+          title: "WOLNE Z POWODU BRAKU PRACY Z ŻABKI",
+          important:
+            "Jeżeli kierowca otrzyma wolne, bo Żabka nie zapewni wystarczającej ilości pracy, taki dzień nie jest liczony jako wolne bezpłatne.",
+          points: [
+            "Nie jest to wolne z winy kierowcy i nie wpływa na utratę premii ani dodatków.",
+          ],
+        },
+      ],
+      summaryTitle: "PODSUMOWANIE",
+      summary: [
+        "Kółko = 100 zł.",
+        "Zlecenie = 50–100 zł albo cena indywidualna.",
+        "Urlop = dzień płatny 250 zł.",
+        "Wolne = dzień wolny bezpłatny.",
+        "1 dzień wolnego bezpłatnego w miesiącu nie przerywa ciągłości pracy.",
+        "2 dni wolnego bezpłatnego w dni robocze przerywają ciągłość pracy i zabierają dodatek 250 zł za sobotę + niedzielę.",
+        "Premia sobotnia = 200 zł za 4 przepracowane soboty.",
+        "Sobota + niedziela = normalna kasa + dodatek 250 zł.",
+        "Soboty nie liczą się jako wolne bezpłatne.",
+        "Wolne z powodu braku pracy z Żabki nie liczy się jako wolne bezpłatne.",
+      ],
+    },
   },
   ru: {
     language: {
@@ -312,16 +403,107 @@ export const DRIVER_TRANSLATIONS = {
       yesterday: "вчера",
       daysAgo: "{count} дн. назад",
     },
-    legend: [
-      "💰 ЛЕГЕНДА ВЫПЛАТ",
-      "Маршрут = 100 zł.",
-      "Заявка = 50–100 zł или индивидуальная цена, указанная офисом.",
-      "Субботняя премия = +200 zł за 4 отработанные субботы в месяце.\nОтпуск и больничный L4 не прерывают непрерывность работы, поэтому премия сохраняется.",
-      "Суббота + воскресенье = обычная оплата за маршруты и заявки + дополнительная премия 250 zł.",
-      "С июля:\nЕсли у водителя есть 2 дня неоплачиваемого выходного в рабочие дни с понедельника по пятницу, он теряет дополнительную премию 250 zł за субботу + воскресенье.",
-      "Субботы не считаются в лимит неоплачиваемых выходных.\nДве субботы в месяце являются обязательными рабочими днями.\nОстальные субботы не считаются неоплачиваемым выходным.",
-      "Если по причинам, не зависящим от работодателя, водитель получает выходной, потому что Żabka не предоставила достаточное количество работы, такой день не считается неоплачиваемым выходным. Это не выходной по вине водителя и он не влияет на потерю премий или дополнительных выплат.",
-    ],
+    legend: {
+      title: "💰 ЛЕГЕНДА ВЫПЛАТ ВОДИТЕЛЯ",
+      intro:
+        "Выплата водителя рассчитывается на основе маршрутов, заявок, отпусков, премий и доплат за присутствие, субботы и выходные.",
+      sections: [
+        {
+          title: "МАРШРУТ",
+          important: "Каждый засчитанный маршрут / круг = 100 zł.",
+        },
+        {
+          title: "ЗАЯВКА",
+          important: "Дополнительная заявка = 50–100 zł или индивидуальная цена, указанная офисом.",
+        },
+        {
+          title: "ОТПУСК",
+          important: "Отпускной день оплачивается 250 zł.",
+          points: [
+            "Отпуск не прерывает непрерывность работы и не приводит к потере премий или доплат.",
+            "У водителя есть 14 отпускных дней на весь год.",
+            "До конца декабря у водителя осталось 8 отпускных дней.",
+          ],
+          examples: [
+            "Если водитель берет отпуск в среду, этот день оплачивается 250 zł и не прерывает непрерывность работы.",
+          ],
+        },
+        {
+          title: "ВЫХОДНОЙ",
+          important: "Выходной означает неоплачиваемый выходной день.",
+          points: [
+            "1 день неоплачиваемого выходного в месяце не прерывает непрерывность работы и не забирает премии или доплаты.",
+            "Только 2 дня неоплачиваемого выходного в том же месяце, в рабочие дни с понедельника по пятницу, прерывают непрерывность работы.",
+            "Если у водителя есть 2 дня неоплачиваемого выходного в месяце, он теряет доплату 250 zł за субботу + воскресенье.",
+          ],
+          examples: [
+            "Водитель берет неоплачиваемый выходной в среду. Это единственный такой день в месяце. Непрерывность работы не прерывается, и доплаты сохраняются.",
+            "Водитель берет неоплачиваемый выходной в среду и пятницу. Это 2 дня неоплачиваемого выходного в рабочие дни в том же месяце. Непрерывность работы прерывается, и водитель теряет доплату 250 zł за субботу + воскресенье.",
+          ],
+        },
+        {
+          title: "СУББОТНЯЯ ПРЕМИЯ",
+          important: "Субботняя премия = 200 zł.",
+          points: [
+            "Премия положена за 4 отработанные субботы в месяце.",
+            "Условие: водитель должен сохранить непрерывность работы.",
+            "Отпуск не прерывает непрерывность работы.",
+            "1 день неоплачиваемого выходного в месяце тоже не прерывает непрерывность работы.",
+            "2 дня неоплачиваемого выходного в рабочие дни с понедельника по пятницу прерывают непрерывность работы.",
+          ],
+        },
+        {
+          title: "ДОПЛАТА ЗА СУББОТУ + ВОСКРЕСЕНЬЕ",
+          important:
+            "Если водитель работает в субботу и воскресенье, он получает обычную оплату за маршруты и заявки, а также дополнительную премию 250 zł.",
+          points: [
+            "То есть: суббота + воскресенье = оплата маршрутов + оплата заявок + доплата 250 zł.",
+          ],
+          highlight: true,
+        },
+        {
+          title: "УСЛОВИЕ ДОПЛАТЫ 250 ZŁ С ИЮЛЯ",
+          important:
+            "С июля доплата 250 zł за субботу + воскресенье зависит от количества неоплачиваемых выходных в месяце.",
+          points: [
+            "В лимит считаются только рабочие дни с понедельника по пятницу.",
+            "1 день неоплачиваемого выходного в месяце не забирает доплату 250 zł.",
+            "2 дня неоплачиваемого выходного в месяце забирают доплату 250 zł за субботу + воскресенье.",
+          ],
+          highlight: true,
+        },
+        {
+          title: "СУББОТЫ И НЕОПЛАЧИВАЕМЫЙ ВЫХОДНОЙ",
+          important: "Субботы не считаются в лимит неоплачиваемых выходных.",
+          points: [
+            "В лимит считаются только рабочие дни с понедельника по пятницу.",
+            "Две субботы в месяце являются обязательными.",
+            "Остальные субботы не считаются неоплачиваемым выходным.",
+          ],
+        },
+        {
+          title: "ВЫХОДНОЙ ИЗ-ЗА ОТСУТСТВИЯ РАБОТЫ ОТ ŻABKA",
+          important:
+            "Если водитель получает выходной, потому что Żabka не предоставила достаточно работы, такой день не считается неоплачиваемым выходным.",
+          points: [
+            "Это не выходной по вине водителя и он не влияет на потерю премий или доплат.",
+          ],
+        },
+      ],
+      summaryTitle: "ИТОГ",
+      summary: [
+        "Маршрут = 100 zł.",
+        "Заявка = 50–100 zł или индивидуальная цена.",
+        "Отпуск = оплачиваемый день 250 zł.",
+        "Выходной = неоплачиваемый выходной день.",
+        "1 день неоплачиваемого выходного в месяце не прерывает непрерывность работы.",
+        "2 дня неоплачиваемого выходного в рабочие дни прерывают непрерывность работы и забирают доплату 250 zł за субботу + воскресенье.",
+        "Субботняя премия = 200 zł за 4 отработанные субботы.",
+        "Суббота + воскресенье = обычная оплата + доплата 250 zł.",
+        "Субботы не считаются неоплачиваемым выходным.",
+        "Выходной из-за отсутствия работы от Żabka не считается неоплачиваемым выходным.",
+      ],
+    },
   },
 } as const;
 
