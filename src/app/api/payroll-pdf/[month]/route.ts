@@ -63,7 +63,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
   const { dniowki, premia, wynagrodzenie, liczbaSobot } = obliczWynagrodzenie(miesiac, dni);
 
   // Rozbicie kwot
-  let zarobekKolka = 0, zarobekZlecen = 0, szkolenie = 0, dodatkiNd = 0, kolkaTotal = 0;
+  let zarobekKolka = 0, zarobekZlecen = 0, szkolenie = 0, dodatkiNd = 0, zarobekUrlop = 0, kolkaTotal = 0;
   for (const iso of getDniMiesiaca(miesiac)) {
     const i = dniowki[iso];
     if (!i) continue;
@@ -71,6 +71,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
     zarobekZlecen += i.kwotaZlecen;
     szkolenie += i.szkolenie;
     dodatkiNd += i.dodatekNiedzielny;
+    zarobekUrlop += i.urlop;
     kolkaTotal += parseNum(dni[iso]?.kolka);
   }
   const obciazeniaSuma = sumaObciazen(dane.obciazenia);
@@ -150,7 +151,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
     text(typ === "pracujacy" ? "pracujący" : TYP_DNIA_LABEL[typ], cols.typ, y, 9, reg, typ === "pracujacy" ? dark : amber);
     // Kółka: liczba dla P/P+Z, „—" dla wolnych i samego Z
     right(wolny || !maKolka(typ) ? "—" : String(parseNum(dni[iso]?.kolka)), cols.kolka, y, 9);
-    right(wolny ? "—" : formatZl(dniowki[iso]?.dniowka ?? 0), cols.dniowka, y, 9);
+    // Dniówka: pokaż gdy > 0 (także urlop płatny 250)
+    right((dniowki[iso]?.dniowka ?? 0) > 0 ? formatZl(dniowki[iso].dniowka) : "—", cols.dniowka, y, 9);
     y -= 14;
   }
   y -= 4;
@@ -179,6 +181,7 @@ export async function GET(_req: NextRequest, { params }: Params) {
   };
   wiersz("Zarobek z kółek", zarobekKolka);
   if (zarobekZlecen > 0) wiersz("Zarobek ze zleceń", zarobekZlecen);
+  if (zarobekUrlop > 0) wiersz("Urlop (płatny)", zarobekUrlop);
   if (szkolenie > 0) wiersz("Szkolenie", szkolenie);
   if (dodatkiNd > 0) wiersz("Dodatki niedzielne", dodatkiNd);
   if (premia > 0) wiersz("Premia sobotnia", premia, { color: amber });

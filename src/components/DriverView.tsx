@@ -775,8 +775,8 @@ function DzienWiersz({
           )}
         </div>
 
-        {/* Kwota */}
-        {!wolny && (
+        {/* Kwota — także dla urlopu (płatny 250 zł), nie dla wolnego/L4 */}
+        {d.dniowka > 0 && (
           <span className="shrink-0 text-sm font-bold text-amber-brand tabular-nums">
             {formatZlCaly(d.dniowka)}
           </span>

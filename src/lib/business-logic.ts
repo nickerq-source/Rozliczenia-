@@ -43,6 +43,9 @@ export function formatZlCaly(kwota: number): string {
 
 // ─── DNIÓWKA ──────────────────────────────────────────────────────────────────
 
+/** Stawka za dzień urlopu (płatny, nie przerywa ciągłości). */
+export const STAWKA_URLOPU = 250;
+
 /**
  * Oblicza dniówkę dla jednego dnia.
  * @param iso      - data "YYYY-MM-DD"
@@ -56,9 +59,14 @@ export function obliczDniowke(
   dniMap: Record<string, DzienKierowcy>,
   miesiac: number
 ): DniowkaInfo {
-  // Dzień nie-pracujący (wolne/urlop/L4) → zero dniówki
+  // Urlop = dzień płatny 250 zł (nie przerywa ciągłości pracy)
+  if (dzien.dayType === "urlop") {
+    return { kwotaKolek: 0, kwotaZlecen: 0, szkolenie: 0, dodatekNiedzielny: 0, urlop: STAWKA_URLOPU, dniowka: STAWKA_URLOPU };
+  }
+
+  // Wolne bezpłatne / L4 → zero dniówki
   if (czyWolny(dzien.dayType)) {
-    return { kwotaKolek: 0, kwotaZlecen: 0, szkolenie: 0, dodatekNiedzielny: 0, dniowka: 0 };
+    return { kwotaKolek: 0, kwotaZlecen: 0, szkolenie: 0, dodatekNiedzielny: 0, urlop: 0, dniowka: 0 };
   }
 
   // Kółka (trasy) tylko dla P / P+Z
@@ -85,7 +93,7 @@ export function obliczDniowke(
   }
 
   const dniowka = kwotaKolek + kwotaZlecen + szkolenie + dodatekNiedzielny;
-  return { kwotaKolek, kwotaZlecen, szkolenie, dodatekNiedzielny, dniowka };
+  return { kwotaKolek, kwotaZlecen, szkolenie, dodatekNiedzielny, urlop: 0, dniowka };
 }
 
 // ─── WYNAGRODZENIE KIEROWCY ───────────────────────────────────────────────────

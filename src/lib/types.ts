@@ -267,5 +267,6 @@ export interface DniowkaInfo {
   kwotaZlecen: number;  // zlecenia × stawka
   szkolenie: number;
   dodatekNiedzielny: number;
+  urlop: number;        // dzień urlopu płatny (250 zł)
   dniowka: number;
 }
