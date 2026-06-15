@@ -152,20 +152,23 @@ export function DriverView({ name }: { name: string }) {
           className="sticky top-0 z-10 border-b border-line"
           style={{ background: "rgba(10, 15, 12, 0.92)", backdropFilter: "blur(12px)" }}
         >
-          <div className="max-w-[480px] mx-auto px-3 sm:px-6 py-2.5 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <IconTruck size={20} className="text-amber-brand" />
-              <span className="logo-gem text-[19px]">PapiTrans</span>
+          <div className="max-w-[480px] mx-auto px-3 sm:px-6 pt-2">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <IconTruck size={20} className="text-amber-brand" />
+                <span className="logo-gem text-[19px]">PapiTrans</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-dim">{name}</span>
+                <button
+                  onClick={logout}
+                  className="text-xs text-dim hover:text-ink border border-line rounded-lg px-2.5 py-1 transition-colors"
+                >
+                  Wyloguj
+                </button>
+              </div>
             </div>
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-dim">{name}</span>
-              <button
-                onClick={logout}
-                className="text-xs text-dim hover:text-ink border border-line rounded-lg px-2.5 py-1 transition-colors"
-              >
-                Wyloguj
-              </button>
-            </div>
+            <KategorieKierowcy active={kategoria} onChange={setKategoria} />
           </div>
         </header>
 
@@ -180,8 +183,6 @@ export function DriverView({ name }: { name: string }) {
             </h1>
           </div>
           <p className="text-xs text-dim -mt-1">{opisKategorii(kategoria)}</p>
-
-          <KategorieKierowcy active={kategoria} onChange={setKategoria} />
 
           {kategoria === "wyplata" && (
             <>
@@ -264,7 +265,7 @@ function KategorieKierowcy({
   ];
 
   return (
-    <div className="grid grid-cols-4 gap-1.5 rounded-2xl border border-line bg-surface/90 p-1.5">
+    <div className="flex w-full">
       {items.map((item) => {
         const selected = active === item.id;
         return (
@@ -273,13 +274,12 @@ function KategorieKierowcy({
             type="button"
             onClick={() => onChange(item.id)}
             className={cn(
-              "min-h-11 rounded-xl px-1.5 py-2 text-[11px] font-bold transition-all flex flex-col items-center justify-center gap-1",
+              "flex-1 min-h-[40px] border-b-2 -mb-px px-1 py-2 text-[12px] font-medium transition-all duration-150",
               selected
-                ? "bg-amber-brand text-amber-ink shadow-[0_0_0_1px_rgba(245,165,36,0.35)]"
-                : "text-dim hover:text-ink hover:bg-surface2"
+                ? "border-amber-brand text-white font-bold"
+                : "border-transparent text-dim hover:text-ink"
             )}
           >
-            <IkonaKategorii kategoria={item.id} size={15} />
             <span className="hidden min-[390px]:inline">{item.label}</span>
             <span className="min-[390px]:hidden">{item.short}</span>
           </button>
@@ -291,36 +291,69 @@ function KategorieKierowcy({
 
 function LegendaWyplaty() {
   return (
-    <Card className="!p-3 border-amber-brand/25 bg-surface/90">
+    <Card className="!p-4 border-amber-brand/25 bg-surface/90">
       <div className="flex items-center gap-2 mb-2">
         <IconMoneybag size={16} className="text-amber-brand" />
         <p className="text-xs font-extrabold uppercase tracking-wider text-amber-brand">
-          Legenda wypłaty
+          Legenda wypłaty kierowcy
         </p>
       </div>
-      <div className="space-y-1.5 text-xs leading-relaxed text-dim">
+      <div className="space-y-3 text-xs leading-relaxed text-dim">
         <p>
-          <b className="text-white">Kółko</b> = 100 zł.
+          <b className="text-white">Kółko — 100 zł</b>
+          <br />
+          Każde zaliczone kółko/trasa jest liczone po 100 zł.
         </p>
         <p>
-          <b className="text-white">Zlecenie</b> = 50–100 zł albo cena indywidualna wpisana przez biuro.
+          <b className="text-white">Zlecenie — 50–100 zł albo cena indywidualna</b>
+          <br />
+          Zlecenia dodatkowe są liczone według stawki 50–100 zł albo według ceny
+          indywidualnej wpisanej przez biuro.
         </p>
         <p>
-          <b className="text-white">Premia sobotnia</b> = +200 zł za 4 przepracowane soboty w miesiącu.
-          Urlop i L4 zachowują ciągłość pracy.
+          <b className="text-white">Premia sobotnia — +200 zł</b>
+          <br />
+          Premia przysługuje za przepracowanie 4 sobót w danym miesiącu.
         </p>
         <p>
-          <b className="text-white">Sobota + niedziela</b> = normalna kasa z kółek i zleceń
-          oraz dodatkowe +250 zł za niedzielę, jeśli przepracowana była sobota i niedziela.
+          <b className="text-white">Warunek premii sobotniej:</b>
+          <br />
+          Kierowca musi zachować ciągłość pracy w miesiącu. Urlop oraz L4 nie przerywają
+          ciągłości pracy.
+          <br />
+          Przykład: kierowca bierze urlop w środę, ale pracuje 4 soboty — premia sobotnia
+          nadal przysługuje.
         </p>
         <p>
-          <b className="text-white">Wolne soboty</b> — kierowcy należą się 2 wolne soboty w miesiącu.
-          Te soboty nie liczą się jako wolne bezpłatne i nie zabierają dodatku za pracującą parę sobota+niedziela.
+          Wolne bezpłatne od poniedziałku do piątku może wpłynąć na dodatki według zasad
+          obowiązujących od lipca.
         </p>
-        <p className="rounded-lg border border-amber-brand/30 bg-amber-brand/10 px-2.5 py-2 text-amber-brand">
-          Od lipca: 2 dni wolnego bezpłatnego od poniedziałku do piątku w danym miesiącu
-          blokują premię sobotnią 200 zł i dodatek niedzielny 250 zł. Soboty nie liczą się
-          do tego limitu wolnego.
+        <p>
+          <b className="text-white">Sobota + niedziela — normalna kasa + dodatek 250 zł</b>
+          <br />
+          Jeżeli kierowca pracuje w sobotę i niedzielę, otrzymuje normalną kasę za wykonane
+          kółka i zlecenia oraz dodatkowo +250 zł.
+        </p>
+        <p className="rounded-xl border border-amber-brand/30 bg-amber-brand/10 px-3 py-2.5 text-amber-brand">
+          <b>Warunek dodatku 250 zł od lipca:</b>
+          <br />
+          Dodatek 250 zł za sobotę + niedzielę przysługuje tylko wtedy, gdy kierowca nie ma
+          w danym miesiącu 2 dni wolnego bezpłatnego w dni robocze, czyli od poniedziałku
+          do piątku.
+          <br />
+          <br />
+          Jeżeli w danym miesiącu kierowca ma 2 dni wolnego bezpłatnego od poniedziałku
+          do piątku, dodatek 250 zł za sobotę + niedzielę nie przysługuje.
+        </p>
+        <p>
+          <b className="text-white">Soboty nie liczą się do limitu wolnego bezpłatnego.</b>
+          <br />
+          Do limitu liczymy tylko dni robocze od poniedziałku do piątku.
+        </p>
+        <p>
+          <b className="text-white">Dwie soboty w miesiącu są obowiązkowe.</b>
+          <br />
+          Pozostałe soboty nie są traktowane jako wolne bezpłatne.
         </p>
       </div>
     </Card>
