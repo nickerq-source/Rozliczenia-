@@ -29,6 +29,7 @@ interface OdczytParagonu {
   vatRate: string | null;
   nazwa: string | null;
   litry: number | null;
+  cenaZaLitr: number | null;
   _noKey?: boolean;
 }
 
@@ -112,32 +113,60 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
     if (!file) return;
     setBusy(true);
     setBlad(null);
+    const dev = process.env.NODE_ENV !== "production";
     try {
-      const dataUrl = await imageToCompressedDataUrl(file);
+      // Wyższa jakość do OCR (drobny druk paragonu); Claude i tak zmniejszy do ~1568px
+      const dataUrl = await imageToCompressedDataUrl(file, 1600, 0.82);
+      if (dev) console.log("[tankowanie] wysyłam zdjęcie do OCR, dł. base64:", dataUrl.length);
       const res = await fetch("/api/scan-receipt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ image: dataUrl }),
       });
-      const o: OdczytParagonu = res.ok
-        ? await res.json()
-        : { sprzedawca: null, nip: null, data: null, kwotaBrutto: null, vatRate: null, nazwa: null, litry: null };
+      const o: OdczytParagonu | null = res.ok ? await res.json() : null;
+      if (dev) console.log("[tankowanie] OCR status:", res.status, "odczyt:", o);
 
       setFZalacznik(dataUrl);
-      setFData(o.data ?? todayISO());
-      setFSprzedawca(o.sprzedawca ?? "");
-      setFNip(o.nip ?? "");
-      setFKwota(o.kwotaBrutto != null ? String(o.kwotaBrutto) : "");
-      setFLitry(o.litry != null ? String(o.litry) : "");
-      if (o.kwotaBrutto != null && o.litry != null && o.litry > 0) {
-        setFCena(String(Math.round((o.kwotaBrutto / o.litry) * 100) / 100));
-      } else {
-        setFCena("");
+      if (!o) {
+        // Błąd endpointu — nie udawaj, że odczytano
+        setScanInfo(null);
+        setBlad(t.fuel.readError);
+        setOpen(true);
+        return;
       }
-      setScanInfo(o._noKey ? "manual" : "ok");
+
+      // Cena za litr: z OCR, a gdy brak — policz z kwoty i litrów
+      let cena = o.cenaZaLitr;
+      if (cena == null && o.kwotaBrutto != null && o.litry != null && o.litry > 0) {
+        cena = Math.round((o.kwotaBrutto / o.litry) * 100) / 100;
+      }
+
+      // Ustaw TYLKO pola, które OCR faktycznie odczytał — nie zerujemy reszty
+      if (o.data) setFData(o.data);
+      if (o.sprzedawca) setFSprzedawca(o.sprzedawca);
+      if (o.nip) setFNip(o.nip);
+      if (o.litry != null) setFLitry(String(o.litry));
+      if (cena != null) setFCena(String(cena));
+      if (o.kwotaBrutto != null) setFKwota(String(o.kwotaBrutto));
+      else if (o.litry != null && cena != null) {
+        setFKwota(String(Math.round(o.litry * cena * 100) / 100));
+      }
+
+      // „Odczytano" tylko gdy realnie wpadło ≥1 ważne pole
+      const cosOdczytano =
+        !!o.data || !!o.sprzedawca || o.litry != null || cena != null || o.kwotaBrutto != null;
+      if (o._noKey) {
+        setScanInfo("manual");
+      } else if (cosOdczytano) {
+        setScanInfo("ok");
+      } else {
+        setScanInfo(null);
+        setBlad(t.fuel.readError);
+      }
       setOpen(true);
     } catch {
       setBlad(t.fuel.readError);
+      setScanInfo(null);
       setOpen(true);
     } finally {
       setBusy(false);

@@ -24,21 +24,44 @@ interface OdczytParagonu {
   vatRate: VatRate | null;
   nazwa: string | null;
   litry: number | null; // liczba litrów paliwa (gdy to paragon za paliwo)
+  cenaZaLitr: number | null; // cena za 1 litr
 }
 
 const PUSTY: OdczytParagonu = {
-  sprzedawca: null, nip: null, data: null, kwotaBrutto: null, vatRate: null, nazwa: null, litry: null,
+  sprzedawca: null, nip: null, data: null, kwotaBrutto: null, vatRate: null, nazwa: null, litry: null, cenaZaLitr: null,
 };
 
-const PROMPT = `Odczytaj dane z tego paragonu lub faktury. Zwróć WYŁĄCZNIE JSON, bez komentarzy:
-{"sprzedawca": "nazwa firmy lub null",
- "nip": "NIP cyframi bez kresek lub null",
- "data": "YYYY-MM-DD lub null",
- "kwotaBrutto": liczba (suma do zapłaty, brutto) lub null,
- "vatRate": jedna z "0","0.05","0.08","0.23","zw","np" — dominująca stawka VAT, lub null,
- "nazwa": "krótka nazwa zakupu, max 40 znaków (np. 'Paliwo Orlen', 'Olej silnikowy') lub null",
- "litry": liczba zatankowanych litrów paliwa (np. 45.32) lub null jeśli to nie paliwo}
-Jeśli czegoś nie ma lub nie jesteś pewny — wpisz null. Nie zgaduj.`;
+const PROMPT = `Odczytaj dane z tego zdjęcia paragonu lub faktury za TANKOWANIE PALIWA. Zwróć WYŁĄCZNIE czysty JSON (bez markdown, bez komentarzy, bez tekstu wokół):
+{"sprzedawca": "krótka nazwa stacji (np. MOYA, Orlen, BP, Shell) lub null",
+ "nip": "NIP sprzedawcy cyframi bez kresek lub null",
+ "data": "data sprzedaży w formacie YYYY-MM-DD lub null",
+ "kwotaBrutto": liczba — suma brutto do zapłaty (np. 130.33) lub null,
+ "litry": liczba litrów paliwa (np. 20.72) lub null,
+ "cenaZaLitr": cena za 1 litr (np. 6.29) lub null,
+ "vatRate": jedna z "0","0.05","0.08","0.23","zw","np" lub null,
+ "nazwa": "krótka nazwa, np. 'Olej napędowy', 'Pb95' lub null"}
+
+Jak czytać polskie faktury za paliwo:
+- Linia typu "20.72 LITR * 6.29" lub "20,72 L x 6,29" znaczy: litry = 20.72, cenaZaLitr = 6.29.
+- "SUMA: PLN 130.33", "DO ZAPŁATY 130.33", "RAZEM 130,33" znaczy: kwotaBrutto = 130.33.
+- "Data sprzedaży: 06-06-2026" znaczy datę tankowania → zwróć "2026-06-06".
+- "STACJA PALIW MOYA" → sprzedawca = "MOYA".
+- "OLEJ NAPĘDOWY" / "ON" → nazwa "Olej napędowy"; "Pb95"/"Pb98" → benzyna.
+- Liczby z przecinkiem traktuj jak z kropką (20,72 = 20.72; 130,33 = 130.33).
+Liczby zwróć jako liczby (nie tekst). Jeśli czegoś naprawdę nie ma na zdjęciu — wpisz null. Nie zgaduj.`;
+
+/** Tolerancyjna konwersja na liczbę: liczba albo tekst "20,72"/"PLN 130.33"/"6.29 zł". */
+function toNum(v: unknown): number | null {
+  if (typeof v === "number") return isFinite(v) ? v : null;
+  if (typeof v === "string") {
+    const cleaned = v.replace(/[^0-9.,-]/g, "").replace(/\s/g, "");
+    // ostatni separator decyduje o kropce dziesiętnej
+    const norm = cleaned.replace(/\.(?=.*[.,])/g, "").replace(",", ".");
+    const n = parseFloat(norm);
+    return isFinite(n) ? n : null;
+  }
+  return null;
+}
 
 /** Wyciąga media_type i czyste base64 z dataUrl */
 function parseDataUrl(dataUrl: string): { mediaType: string; data: string } | null {
@@ -56,26 +79,32 @@ function walidujVat(raw: unknown): VatRate | null {
   return null;
 }
 
+const r2 = (n: number | null): number | null => (n != null ? Math.round(n * 100) / 100 : null);
+const dodatni = (n: number | null): number | null => (n != null && n > 0 ? n : null);
+
 function waliduj(raw: unknown): OdczytParagonu {
   if (!raw || typeof raw !== "object") return PUSTY;
   const o = raw as Record<string, unknown>;
   const dataStr = typeof o.data === "string" && /^\d{4}-\d{2}-\d{2}$/.test(o.data) ? o.data : null;
-  const kwota =
-    typeof o.kwotaBrutto === "number" && isFinite(o.kwotaBrutto) && o.kwotaBrutto > 0
-      ? Math.round(o.kwotaBrutto * 100) / 100
-      : null;
-  const litry =
-    typeof o.litry === "number" && isFinite(o.litry) && o.litry > 0
-      ? Math.round(o.litry * 100) / 100
-      : null;
+
+  let kwota = dodatni(toNum(o.kwotaBrutto));
+  let litry = dodatni(toNum(o.litry));
+  let cena = dodatni(toNum(o.cenaZaLitr));
+
+  // Awaryjne wyliczenie brakującego pola z dwóch pozostałych
+  if (kwota == null && litry != null && cena != null) kwota = litry * cena;
+  else if (cena == null && kwota != null && litry != null) cena = kwota / litry;
+  else if (litry == null && kwota != null && cena != null) litry = kwota / cena;
+
   return {
-    sprzedawca: typeof o.sprzedawca === "string" ? o.sprzedawca.slice(0, 120) : null,
+    sprzedawca: typeof o.sprzedawca === "string" ? o.sprzedawca.trim().slice(0, 120) || null : null,
     nip: typeof o.nip === "string" ? o.nip.replace(/[^0-9]/g, "").slice(0, 15) || null : null,
     data: dataStr,
-    kwotaBrutto: kwota,
+    kwotaBrutto: r2(kwota),
     vatRate: walidujVat(o.vatRate),
-    nazwa: typeof o.nazwa === "string" ? o.nazwa.slice(0, 60) : null,
-    litry,
+    nazwa: typeof o.nazwa === "string" ? o.nazwa.trim().slice(0, 60) || null : null,
+    litry: r2(litry),
+    cenaZaLitr: r2(cena),
   };
 }
 
@@ -132,8 +161,13 @@ export async function POST(req: NextRequest) {
       .map((b) => b.text)
       .join("");
     const match = text.match(/\{[\s\S]*\}/);
-    if (!match) return NextResponse.json(PUSTY);
-    return NextResponse.json(waliduj(JSON.parse(match[0])));
+    if (!match) {
+      if (process.env.NODE_ENV !== "production") console.log("[scan-receipt] brak JSON w odpowiedzi:", text.slice(0, 300));
+      return NextResponse.json(PUSTY);
+    }
+    const wynik = waliduj(JSON.parse(match[0]));
+    if (process.env.NODE_ENV !== "production") console.log("[scan-receipt] odczyt:", JSON.stringify(wynik));
+    return NextResponse.json(wynik);
   } catch (e) {
     console.error("[scan-receipt] AI error:", e instanceof Error ? e.message : e);
     // Nie crashuj — zostaw użytkownikowi puste pola
