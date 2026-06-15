@@ -1070,6 +1070,18 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
       <Card>
         <CardTitle>Dni kierowcy</CardTitle>
 
+        {/* Legenda skrótów typów dnia */}
+        <div className="mb-3 flex flex-wrap items-center gap-1.5 text-[11px] text-dim">
+          {TYPY_DNIA.map((t) => (
+            <span key={t.id} className="inline-flex items-center gap-1">
+              <span className={cn("rounded-full border px-1.5 py-0.5 font-bold leading-none", t.chipCls)}>
+                {t.krotki}
+              </span>
+              <span>= {t.label}</span>
+            </span>
+          ))}
+        </div>
+
         {/* Nagłówek kolumn */}
         <div className={cn(
           "grid gap-2 text-xs font-bold uppercase tracking-wide text-dim mb-2 px-2",
