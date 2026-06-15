@@ -431,7 +431,7 @@ function LegendaWyplaty({ lang }: { lang: DriverLanguage }) {
                   {section.title}
                 </h3>
               </div>
-              <p className="font-bold text-white underline decoration-amber-brand/70 decoration-2 underline-offset-4">
+              <p className="font-bold text-white">
                 {section.important}
               </p>
               {points && (
