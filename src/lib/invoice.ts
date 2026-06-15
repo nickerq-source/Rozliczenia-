@@ -28,11 +28,13 @@ export interface ParsedRow {
   dataZaladunku: string; // ISO "YYYY-MM-DD"
   odlegloscKm: number;
   kosztPotwierdzony: number; // netto (kolumna Koszt potwierdzony)
+  isZlecenie: boolean; // true gdy w kolumnie „Uwagi" jest komentarz (zlecenie, nie trasa)
 }
 
 export interface ParsedInvoice {
   invoiceNumber: string | null;
-  ileKolek: number;
+  ileKolek: number; // trasy bez komentarza w Uwagach
+  ileZlecen: number; // wiersze z komentarzem w Uwagach
   sumaKm: number;
   netto: number;
   brutto: number;
@@ -116,19 +118,30 @@ function parseDataLine(
   if (kosztIdx >= nums.length) return null;
   const kosztPotwierdzony = nums[kosztIdx];
 
+  // Zlecenie = komentarz w kolumnie „Uwagi" (między Wagą a Kosztem). W tekście
+  // objawia się słowem między datą a statusem („Rozliczony"). Zwykła trasa ma
+  // tam same liczby. Tniemy przed statusem/numerem FV/PLN, by nie złapać ich liter.
+  const cut = afterDate.search(/Rozliczony|\bPLN\b|\b58\d{8,12}\b/i);
+  const segUwag = cut >= 0 ? afterDate.slice(0, cut) : afterDate;
+  const isZlecenie = /\p{L}{2,}/u.test(segUwag);
+
   // Sanity 1: koszt w tysiącach == prawdopodobnie wzięliśmy Wagę → odrzuć
   if (kosztPotwierdzony >= WAGA_THRESHOLD || kosztPotwierdzony === waga) {
     return null;
   }
 
-  // Sanity 2: Koszt dystrybucja (kolejna niezerowa) ≈ Koszt potwierdzony
-  let dystIdx = kosztIdx + 1;
-  while (dystIdx < nums.length && nums[dystIdx] === 0) dystIdx++;
-  if (dystIdx < nums.length) {
-    const kosztDystrybucja = nums[dystIdx];
-    if (Math.abs(kosztDystrybucja - kosztPotwierdzony) > 50) {
-      // Kolumny się nie zgadzają — nie ufamy temu wierszowi
-      return null;
+  // Sanity 2: Koszt dystrybucja (kolejna niezerowa) ≈ Koszt potwierdzony.
+  // Pomijamy dla zleceń — tam dystrybucja = 0, a kolejna niezerowa to już
+  // kurs faktury (1,0000), co fałszywie odrzucałoby prawidłowe zlecenia.
+  if (!isZlecenie) {
+    let dystIdx = kosztIdx + 1;
+    while (dystIdx < nums.length && nums[dystIdx] === 0) dystIdx++;
+    if (dystIdx < nums.length) {
+      const kosztDystrybucja = nums[dystIdx];
+      if (Math.abs(kosztDystrybucja - kosztPotwierdzony) > 50) {
+        // Kolumny się nie zgadzają — nie ufamy temu wierszowi
+        return null;
+      }
     }
   }
 
@@ -138,6 +151,7 @@ function parseDataLine(
     dataZaladunku: dateMatch[1],
     odlegloscKm: km,
     kosztPotwierdzony,
+    isZlecenie,
   };
 }
 
@@ -184,19 +198,23 @@ export function buildResult(
   rows: ParsedRow[],
   debugText?: string
 ): ParsedInvoice {
-  const ileKolek = rows.length;
+  const ileZlecen = rows.filter((r) => r.isZlecenie).length;
+  const ileKolek = rows.length - ileZlecen; // trasy bez komentarza w Uwagach
+  const total = rows.length; // wszystkie pozycje (trasy + zlecenia)
   const sumaKm = rows.reduce((s, r) => s + r.odlegloscKm, 0);
 
+  // Netto/brutto = pełna wartość faktury (trasy + zlecenia) → przychód bez zmian
   const nettoRaw = rows.reduce((s, r) => s + r.kosztPotwierdzony, 0);
   const netto = Math.round(nettoRaw * 100) / 100;
   const brutto = Math.round(netto * (1 + VAT) * 100) / 100;
 
+  // Średnie liczone na pozycję (trasy + zlecenia)
   const sredniaKm =
-    ileKolek > 0 ? Math.round((sumaKm / ileKolek) * 100) / 100 : 0;
+    total > 0 ? Math.round((sumaKm / total) * 100) / 100 : 0;
   const sredniaNetto =
-    ileKolek > 0 ? Math.round((netto / ileKolek) * 100) / 100 : 0;
+    total > 0 ? Math.round((netto / total) * 100) / 100 : 0;
   const sredniaBrutto =
-    ileKolek > 0 ? Math.round((brutto / ileKolek) * 100) / 100 : 0;
+    total > 0 ? Math.round((brutto / total) * 100) / 100 : 0;
 
   const dates = rows
     .map((r) => {
@@ -209,6 +227,7 @@ export function buildResult(
   return {
     invoiceNumber,
     ileKolek,
+    ileZlecen,
     sumaKm,
     netto,
     brutto,

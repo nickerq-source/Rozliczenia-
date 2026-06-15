@@ -7,6 +7,7 @@ export interface PDFImportData {
   nazwaPliku: string;
   numerFaktury: string | null;
   ileKolek: number;
+  ileZlecen?: number; // wiersze ze zleceniem (komentarz w Uwagach)
   sumaKm: number;
   netto: number;
   brutto: number;

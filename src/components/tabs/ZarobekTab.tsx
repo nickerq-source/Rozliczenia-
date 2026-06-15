@@ -182,6 +182,7 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
       nazwaPliku: fileName,
       numerFaktury: invoiceNumber,
       ileKolek: filtered.ileKolek,
+      ileZlecen: filtered.ileZlecen,
       sumaKm: filtered.sumaKm,
       netto: filtered.netto,
       brutto: filtered.brutto,
@@ -257,6 +258,7 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
       invoiceNumber: imp.numerFaktury,
       filtered: {
         ileKolek: imp.ileKolek,
+        ileZlecen: imp.ileZlecen,
         sumaKm: imp.sumaKm,
         netto: imp.netto,
         brutto: imp.brutto,
@@ -468,6 +470,9 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
                         </>
                       )}
                       {faktura.pdfImport.ileKolek} kółek
+                      {(faktura.pdfImport.ileZlecen ?? 0) > 0 && (
+                        <> {" · "}{faktura.pdfImport.ileZlecen} zlec.</>
+                      )}
                       {" · "}
                       {faktura.pdfImport.sumaKm} km
                       {" · netto "}

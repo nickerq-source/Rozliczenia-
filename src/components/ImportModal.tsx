@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 
 interface FilteredResult {
   ileKolek: number;
+  ileZlecen?: number;
   sumaKm: number;
   netto: number;
   brutto: number;
@@ -126,6 +127,9 @@ export function ImportModal({
               </div>
 
               <Row label="Kółka (trasy)" value={String(filtered!.ileKolek)} />
+              {(filtered!.ileZlecen ?? 0) > 0 && (
+                <Row label="Zlecenia (z uwagą)" value={String(filtered!.ileZlecen)} />
+              )}
               <Row label="Suma km" value={`${filtered!.sumaKm} km`} />
               <Row label="Średnia km/kółko" value={`${filtered!.sredniaKm} km`} />
 

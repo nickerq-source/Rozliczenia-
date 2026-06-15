@@ -131,7 +131,7 @@ export async function POST(req: NextRequest) {
 
   const result = parseInvoicePDF(pdfText, isDev);
 
-  if (result.ileKolek === 0) {
+  if (result.ileKolek === 0 && result.ileZlecen === 0) {
     return NextResponse.json({
       invoiceNumber: result.invoiceNumber,
       filtered: null,
@@ -144,6 +144,7 @@ export async function POST(req: NextRequest) {
     invoiceNumber: result.invoiceNumber,
     filtered: {
       ileKolek: result.ileKolek,
+      ileZlecen: result.ileZlecen,
       sumaKm: result.sumaKm,
       netto: result.netto,
       brutto: result.brutto,
