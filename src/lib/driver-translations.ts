@@ -35,7 +35,7 @@ export const DRIVER_TRANSLATIONS = {
         legend: "Legenda stawek i zasad",
       },
       description: {
-        payout: "Sprawdź dni pracy, kółka, zlecenia i zgłoś poprawki.",
+        payout: "Sprawdź dni pracy, kółka, dodatkowe zlecenia i zgłoś poprawki.",
         fuel: "Dodaj tankowanie, zdjęcie licznika i paragon.",
         messages: "Powiadomienia, notatki i kontakt z biurem.",
         legend: "Stawki, premie i zasady naliczania wypłaty.",
@@ -61,7 +61,7 @@ export const DRIVER_TRANSLATIONS = {
       sickLeave: "L4:",
       downloadPdf: "Pobierz PDF wypłaty",
       breakdownTitle: "Rozliczenie wypłaty",
-      loopsAndExtras: "Zarobek z kółek + dodatki",
+      loopsAndExtras: "Wynagrodzenie za kółka + dodatki",
       saturdayPremium: "Premia sobotnia",
       blockedInfo:
         "Premia sobotnia 200 zł i dodatki niedzielne 250 zł nie są doliczone, bo w tym miesiącu są co najmniej 2 dni wolnego bezpłatnego od poniedziałku do piątku.",
@@ -158,11 +158,11 @@ export const DRIVER_TRANSLATIONS = {
     legend: {
       title: "💰 LEGENDA WYPŁATY KIEROWCY",
       intro:
-        "Wypłata kierowcy jest liczona na podstawie tras, dodatkowych zleceń, urlopów oraz premii i dodatków za obecność, soboty i weekendy.",
+        "Wypłata kierowcy jest liczona na podstawie kółek, dodatkowych zleceń, urlopów oraz premii i dodatków za obecność, soboty i weekendy.",
       sections: [
         {
-          title: "TRASA",
-          important: "Każda zaliczona trasa = 100 zł.",
+          title: "KÓŁKO",
+          important: "Każde zaliczone kółko = 100 zł.",
         },
         {
           title: "DODATKOWE ZLECENIE",
@@ -207,9 +207,9 @@ export const DRIVER_TRANSLATIONS = {
         {
           title: "DODATEK ZA SOBOTĘ + NIEDZIELĘ",
           important:
-            "Jeżeli kierowca pracuje w sobotę i niedzielę, otrzymuje normalne wynagrodzenie za trasy i dodatkowe zlecenia oraz dodatkowo 250 zł premii.",
+            "Jeżeli kierowca pracuje w sobotę i niedzielę, otrzymuje normalne wynagrodzenie za kółka i dodatkowe zlecenia oraz dodatkowo 250 zł premii.",
           points: [
-            "Czyli: sobota + niedziela = wynagrodzenie za trasy + wynagrodzenie za zlecenia + dodatek 250 zł.",
+            "Czyli: sobota + niedziela = wynagrodzenie za kółka + wynagrodzenie za zlecenia + dodatek 250 zł.",
           ],
           highlight: true,
         },
@@ -244,14 +244,14 @@ export const DRIVER_TRANSLATIONS = {
       ],
       summaryTitle: "PODSUMOWANIE",
       summary: [
-        "Trasa = 100 zł.",
+        "Kółko = 100 zł.",
         "Dodatkowe zlecenie = 50–100 zł albo cena indywidualna.",
         "Urlop = dzień płatny 250 zł.",
         "Wolne = dzień wolny bezpłatny.",
         "1 dzień wolnego bezpłatnego w miesiącu nie przerywa ciągłości pracy.",
         "2 dni wolnego bezpłatnego w dni robocze przerywają ciągłość pracy i zabierają dodatek 250 zł za sobotę + niedzielę.",
         "Premia sobotnia = 200 zł za 4 przepracowane soboty.",
-        "Sobota + niedziela = normalna kasa + dodatek 250 zł.",
+        "Sobota + niedziela = normalne wynagrodzenie + dodatek 250 zł.",
         "Soboty nie liczą się jako wolne bezpłatne.",
         "Wolne z powodu braku pracy z Żabki nie liczy się jako wolne bezpłatne.",
       ],
@@ -283,7 +283,7 @@ export const DRIVER_TRANSLATIONS = {
         legend: "Ставки и правила",
       },
       description: {
-        payout: "Проверь рабочие дни, маршруты, заявки и отправь исправления.",
+        payout: "Проверь рабочие дни, рейсы, дополнительные заказы и отправь исправления.",
         fuel: "Добавь заправку, фото счетчика и чек.",
         messages: "Уведомления, заметки и связь с офисом.",
         legend: "Ставки, премии и правила расчета выплаты.",
@@ -292,14 +292,14 @@ export const DRIVER_TRANSLATIONS = {
     payout: {
       verifyHint: "Все верно? Нажми",
       issueHint: "Что-то не так? Нажми",
-      issueHintTail: "и укажи правильное количество маршрутов.",
+      issueHintTail: "и укажи правильное количество рейсов.",
       loadError: "Не удалось загрузить данные.",
       retry: "Попробовать снова",
       loading: "Загрузка…",
       paid: "Выплачено",
       unpaid: "Не выплачено",
       earnedMinusDeductions: "заработок {earned} − удержания {deductions}",
-      workSummary: "{days} рабочих дней · {loops} маршрутов · субботы {saturdays}/4",
+      workSummary: "{days} рабочих дней · {loops} рейсов · субботы {saturdays}/4",
       premium: "премия",
       unpaidWeekdayLeave: "Неоплач. выходные Пн–Пт:",
       extrasBlocked: "— премия и воскресные доплаты заблокированы",
@@ -309,7 +309,7 @@ export const DRIVER_TRANSLATIONS = {
       sickLeave: "L4:",
       downloadPdf: "Скачать PDF выплаты",
       breakdownTitle: "Расчет выплаты",
-      loopsAndExtras: "Оплата маршрутов + доплаты",
+      loopsAndExtras: "Оплата за рейсы + дополнительные выплаты",
       saturdayPremium: "Субботняя премия",
       blockedInfo:
         "Субботняя премия 200 zł и воскресные доплаты 250 zł не начислены, потому что в этом месяце есть минимум 2 дня неоплачиваемого выходного с понедельника по пятницу.",
@@ -320,7 +320,7 @@ export const DRIVER_TRANSLATIONS = {
       daysToCheck: "дней для проверки",
     },
     day: {
-      loops: "маршр.",
+      loops: "рейсов",
       ordersShort: "заяв.",
       sundayBonus: "+воскресенье",
       training: "обучение",
@@ -332,10 +332,10 @@ export const DRIVER_TRANSLATIONS = {
       waiting: "ожидает",
       fixed: "ок",
       rejected: "Твоя заявка была отклонена офисом.",
-      reported: "Сообщено: {old} → {next} маршрутов",
-      wasFree: "Этот день отмечен как {dayType}. Если ты работал — укажи количество маршрутов.",
-      shouldBeLoops: "Должно быть маршрутов:",
-      workedLoops: "Я работал — маршрутов:",
+      reported: "Сообщено: {old} → {next} рейсов",
+      wasFree: "Этот день отмечен как {dayType}. Если ты работал — укажи количество рейсов.",
+      shouldBeLoops: "Должно быть рейсов:",
+      workedLoops: "Я работал — рейсов:",
       commentPlaceholder: "Комментарий (необязательно)…",
       sendReport: "Отправить заявку",
       cancel: "Отмена",
@@ -406,11 +406,11 @@ export const DRIVER_TRANSLATIONS = {
     legend: {
       title: "💰 ЛЕГЕНДА ВЫПЛАТ ВОДИТЕЛЯ",
       intro:
-        "Выплата водителя рассчитывается на основе выполненных маршрутов/рейсов, дополнительных заказов, отпускных дней, премий и дополнительных выплат за посещаемость, работу по субботам и работу в выходные.",
+        "Выплата водителя рассчитывается на основе выполненных рейсов, дополнительных заказов, отпускных дней, премий и дополнительных выплат за посещаемость, работу по субботам и работу в выходные.",
       sections: [
         {
-          title: "МАРШРУТ / РЕЙС",
-          important: "Каждый засчитанный маршрут / рейс = 100 zł.",
+          title: "РЕЙС",
+          important: "Каждый засчитанный рейс = 100 zł.",
         },
         {
           title: "ДОПОЛНИТЕЛЬНЫЙ ЗАКАЗ",
@@ -455,9 +455,9 @@ export const DRIVER_TRANSLATIONS = {
         {
           title: "ДОПОЛНИТЕЛЬНАЯ ВЫПЛАТА ЗА СУББОТУ + ВОСКРЕСЕНЬЕ",
           important:
-            "Если водитель работает в субботу и воскресенье, он получает обычную оплату за маршруты/рейсы и дополнительные заказы, а также дополнительную выплату 250 zł.",
+            "Если водитель работает в субботу и воскресенье, он получает обычную оплату за рейсы и дополнительные заказы, а также дополнительную выплату 250 zł.",
           points: [
-            "То есть: суббота + воскресенье = оплата за маршруты/рейсы + оплата за заказы + дополнительная выплата 250 zł.",
+            "То есть: суббота + воскресенье = оплата за рейсы + оплата за заказы + дополнительная выплата 250 zł.",
           ],
           highlight: true,
         },
@@ -492,7 +492,7 @@ export const DRIVER_TRANSLATIONS = {
       ],
       summaryTitle: "КРАТКОЕ РЕЗЮМЕ",
       summary: [
-        "Маршрут / рейс = 100 zł.",
+        "Рейс = 100 zł.",
         "Дополнительный заказ = 50–100 zł или индивидуальная цена.",
         "Отпуск = оплачиваемый день 250 zł.",
         "Неоплачиваемый выходной = день без оплаты.",
