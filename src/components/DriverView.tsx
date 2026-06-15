@@ -13,6 +13,8 @@ import {
   IconCheck,
   IconLoader,
   IconMoneybag,
+  IconGasStation,
+  IconBell,
   IconX,
   IconAlertTriangle,
   IconLock,
@@ -80,9 +82,18 @@ interface MiesiacWyplata {
   zgloszenia: Zgloszenie[];
 }
 
+type DriverKategoria = "wyplata" | "tankowanie" | "wiadomosci" | "legenda";
+
 function formatDataPL(iso: string): string {
   const d = new Date(iso);
   return `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()}`;
+}
+
+function opisKategorii(kategoria: DriverKategoria): string {
+  if (kategoria === "tankowanie") return "Dodaj tankowanie, zdjęcie licznika i paragon.";
+  if (kategoria === "wiadomosci") return "Powiadomienia, notatki i kontakt z biurem.";
+  if (kategoria === "legenda") return "Stawki, premie i zasady naliczania wypłaty.";
+  return "Sprawdź dni pracy, kółka, zlecenia i zgłoś poprawki.";
 }
 
 export function DriverView({ name }: { name: string }) {
@@ -90,6 +101,7 @@ export function DriverView({ name }: { name: string }) {
   const [miesiace, setMiesiace] = useState<MiesiacWyplata[] | null>(null);
   const [error, setError] = useState(false);
   const [otwarty, setOtwarty] = useState<number | null>(null);
+  const [kategoria, setKategoria] = useState<DriverKategoria>("wyplata");
 
   async function load() {
     try {
@@ -160,50 +172,120 @@ export function DriverView({ name }: { name: string }) {
 
         <main className="max-w-[480px] mx-auto px-3 sm:px-6 py-4 space-y-3">
           <div className="flex items-center gap-2">
-            <IconMoneybag size={20} className="text-amber-brand" />
-            <h1 className="text-lg font-bold text-white">Moja wypłata</h1>
+            <IkonaKategorii kategoria={kategoria} size={20} className="text-amber-brand" />
+            <h1 className="text-lg font-bold text-white">
+              {kategoria === "wyplata" && "Wypłata"}
+              {kategoria === "tankowanie" && "Tankowanie"}
+              {kategoria === "wiadomosci" && "Wiadomości"}
+              {kategoria === "legenda" && "Legenda stawek i zasad"}
+            </h1>
           </div>
-          <p className="text-xs text-dim -mt-1">
-            Sprawdź każdy dzień. Zgadza się? Zaznacz{" "}
-            <span className="text-green-400 font-semibold">✓</span>. Coś nie gra? Kliknij{" "}
-            <span className="text-red-400 font-semibold">✗</span> i podaj poprawną liczbę kółek.
-          </p>
+          <p className="text-xs text-dim -mt-1">{opisKategorii(kategoria)}</p>
 
-          <LegendaWyplaty />
+          <KategorieKierowcy active={kategoria} onChange={setKategoria} />
 
-          <PowiadomieniaKierowcy />
+          {kategoria === "wyplata" && (
+            <>
+              <p className="text-xs text-dim">
+                Zgadza się? Zaznacz <span className="text-green-400 font-semibold">✓</span>.
+                Coś nie gra? Kliknij <span className="text-red-400 font-semibold">✗</span>{" "}
+                i podaj poprawną liczbę kółek.
+              </p>
 
-          <TankowanieKierowcy />
-
-          <WiadomosciKierowcy />
-
-          {error ? (
-            <Card>
-              <p className="text-sm text-red-300 mb-3">Nie udało się pobrać danych.</p>
-              <button
-                onClick={load}
-                className="w-full py-2 rounded-xl bg-amber-brand text-amber-ink font-bold text-sm"
-              >
-                Spróbuj ponownie
-              </button>
-            </Card>
-          ) : miesiace === null ? (
-            <div className="flex items-center gap-2 text-dim text-sm py-8 justify-center">
-              <IconLoader size={16} /> Ładowanie…
-            </div>
-          ) : (
-            miesiace.map((m) => (
-              <MiesiacKarta
-                key={m.miesiac}
-                m={m}
-                otwarty={otwarty === m.miesiac}
-                onToggle={() => setOtwarty((p) => (p === m.miesiac ? null : m.miesiac))}
-                onZmiana={load}
-              />
-            ))
+              {error ? (
+                <Card>
+                  <p className="text-sm text-red-300 mb-3">Nie udało się pobrać danych.</p>
+                  <button
+                    onClick={load}
+                    className="w-full py-2 rounded-xl bg-amber-brand text-amber-ink font-bold text-sm"
+                  >
+                    Spróbuj ponownie
+                  </button>
+                </Card>
+              ) : miesiace === null ? (
+                <div className="flex items-center gap-2 text-dim text-sm py-8 justify-center">
+                  <IconLoader size={16} /> Ładowanie…
+                </div>
+              ) : (
+                miesiace.map((m) => (
+                  <MiesiacKarta
+                    key={m.miesiac}
+                    m={m}
+                    otwarty={otwarty === m.miesiac}
+                    onToggle={() => setOtwarty((p) => (p === m.miesiac ? null : m.miesiac))}
+                    onZmiana={load}
+                  />
+                ))
+              )}
+            </>
           )}
+
+          {kategoria === "tankowanie" && <TankowanieKierowcy />}
+
+          {kategoria === "wiadomosci" && (
+            <>
+              <PowiadomieniaKierowcy />
+              <WiadomosciKierowcy />
+            </>
+          )}
+
+          {kategoria === "legenda" && <LegendaWyplaty />}
         </main>
       </div>
+    </div>
+  );
+}
+
+function IkonaKategorii({
+  kategoria,
+  size,
+  className,
+}: {
+  kategoria: DriverKategoria;
+  size?: number;
+  className?: string;
+}) {
+  if (kategoria === "tankowanie") return <IconGasStation size={size} className={className} />;
+  if (kategoria === "wiadomosci") return <IconBell size={size} className={className} />;
+  return <IconMoneybag size={size} className={className} />;
+}
+
+function KategorieKierowcy({
+  active,
+  onChange,
+}: {
+  active: DriverKategoria;
+  onChange: (kategoria: DriverKategoria) => void;
+}) {
+  const items: Array<{ id: DriverKategoria; label: string; short: string }> = [
+    { id: "wyplata", label: "Wypłata", short: "Wypłata" },
+    { id: "tankowanie", label: "Tankowanie", short: "Tank." },
+    { id: "wiadomosci", label: "Wiadomości", short: "Wiad." },
+    { id: "legenda", label: "Legenda", short: "Zasady" },
+  ];
+
+  return (
+    <div className="grid grid-cols-4 gap-1.5 rounded-2xl border border-line bg-surface/90 p-1.5">
+      {items.map((item) => {
+        const selected = active === item.id;
+        return (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => onChange(item.id)}
+            className={cn(
+              "min-h-11 rounded-xl px-1.5 py-2 text-[11px] font-bold transition-all flex flex-col items-center justify-center gap-1",
+              selected
+                ? "bg-amber-brand text-amber-ink shadow-[0_0_0_1px_rgba(245,165,36,0.35)]"
+                : "text-dim hover:text-ink hover:bg-surface2"
+            )}
+          >
+            <IkonaKategorii kategoria={item.id} size={15} />
+            <span className="hidden min-[390px]:inline">{item.label}</span>
+            <span className="min-[390px]:hidden">{item.short}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }
