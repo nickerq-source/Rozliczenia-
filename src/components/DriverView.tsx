@@ -232,6 +232,10 @@ function LegendaWyplaty() {
           <b className="text-white">Sobota + niedziela</b> = normalna kasa z kółek i zleceń
           oraz dodatkowe +250 zł za niedzielę, jeśli przepracowana była sobota i niedziela.
         </p>
+        <p>
+          <b className="text-white">Wolne soboty</b> — kierowcy należą się 2 wolne soboty w miesiącu.
+          Te soboty nie liczą się jako wolne bezpłatne i nie zabierają dodatku za pracującą parę sobota+niedziela.
+        </p>
         <p className="rounded-lg border border-amber-brand/30 bg-amber-brand/10 px-2.5 py-2 text-amber-brand">
           Od lipca: 2 dni wolnego bezpłatnego od poniedziałku do piątku w danym miesiącu
           blokują premię sobotnią 200 zł i dodatek niedzielny 250 zł. Soboty nie liczą się
