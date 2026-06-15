@@ -19,7 +19,7 @@ import {
 } from "./ui/icons";
 import { cn } from "@/lib/utils";
 import type { WeryfikacjaStatus, DayType } from "@/lib/types";
-import { typDniaMeta } from "@/lib/day-type";
+import { typDniaMeta, czyWolny, maKolka, maZlecenia } from "@/lib/day-type";
 import { TankowanieKierowcy } from "./TankowanieKierowcy";
 import { WiadomosciKierowcy } from "./WiadomosciKierowcy";
 import { PowiadomieniaKierowcy } from "./PowiadomieniaKierowcy";
@@ -408,7 +408,9 @@ function DzienWiersz({
   }
 
   const st = zgloszenie?.status;
-  const wolny = d.dayType !== "pracujacy";
+  const wolny = czyWolny(d.dayType);
+  const dzienMaKolka = maKolka(d.dayType);
+  const dzienMaZlecenia = maZlecenia(d.dayType);
   const meta = typDniaMeta(d.dayType);
   const tlo = d.sobota
     ? "var(--sat-bg)"
@@ -440,9 +442,13 @@ function DzienWiersz({
             </span>
           ) : (
             <p className="text-sm text-ink">
-              <span className="font-semibold text-white">{d.kolka}</span> kółek
-              {d.zlecenia > 0 && (
-                <span className="text-amber-brand text-xs"> · {d.zlecenia} zlec. × {formatZlCaly(d.stawkaZlecenia)}</span>
+              {dzienMaKolka && (
+                <><span className="font-semibold text-white">{d.kolka}</span> kółek</>
+              )}
+              {dzienMaZlecenia && d.zlecenia > 0 && (
+                <span className="text-amber-brand text-xs">
+                  {dzienMaKolka ? " · " : ""}{d.zlecenia} zlec. × {formatZlCaly(d.stawkaZlecenia)}
+                </span>
               )}
               {d.dodatekNiedzielny > 0 && (
                 <span className="text-yellow-300 text-xs"> · +niedziela</span>

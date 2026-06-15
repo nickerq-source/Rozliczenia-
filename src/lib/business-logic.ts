@@ -15,6 +15,7 @@ import {
   poprzedniDzien,
   getWeeksOfMonth,
 } from "./dates";
+import { czyWolny, maKolka, maZlecenia } from "./day-type";
 
 /** Bezpieczne parsowanie liczby — puste lub NaN zwraca 0 */
 export function parseNum(val: string | number | undefined | null): number {
@@ -54,28 +55,29 @@ export function obliczDniowke(
   dniMap: Record<string, DzienKierowcy>,
   miesiac: number
 ): DniowkaInfo {
-  // Dzień nie-pracujący (wolne/urlop/L4) → zero dniówki, zero kółek
-  if (dzien.dayType && dzien.dayType !== "pracujacy") {
+  // Dzień nie-pracujący (wolne/urlop/L4) → zero dniówki
+  if (czyWolny(dzien.dayType)) {
     return { kwotaKolek: 0, kwotaZlecen: 0, szkolenie: 0, dodatekNiedzielny: 0, dniowka: 0 };
   }
 
-  const kolka = parseNum(dzien.kolka);
+  // Kółka (trasy) tylko dla P / P+Z
+  const kolka = maKolka(dzien.dayType) ? parseNum(dzien.kolka) : 0;
   const kwotaKolek = kolka * 100;
 
-  // Zlecenia: liczba × stawka (50/100/własna; domyślnie 100), niezależnie od kółek
-  const liczbaZlecen = parseNum(dzien.zlecenia);
+  // Zlecenia (liczba × stawka 50/100/własna) tylko dla P+Z / Z
+  const liczbaZlecen = maZlecenia(dzien.dayType) ? parseNum(dzien.zlecenia) : 0;
   const stawkaZlecenia = parseNum(dzien.stawkaZlecenia) || 100;
   const kwotaZlecen = liczbaZlecen * stawkaZlecenia;
 
-  // Szkolenie: tylko czerwiec, ręcznie wpisane (0 domyślnie)
-  const szkolenie = miesiac === 6 ? parseNum(dzien.szkolenie) : 0;
+  // Szkolenie: tylko czerwiec, dni z trasami, ręcznie wpisane (0 domyślnie)
+  const szkolenie = miesiac === 6 && maKolka(dzien.dayType) ? parseNum(dzien.szkolenie) : 0;
 
   // Dodatek niedzielny: +250 zł gdy niedziela kółka ≥ 1 ORAZ poprzednia sobota kółka ≥ 1
   let dodatekNiedzielny = 0;
   if (isNiedziela(iso) && kolka >= 1) {
     const sobIso = poprzedniDzien(iso);
     const sobDzien = dniMap[sobIso];
-    if (sobDzien && parseNum(sobDzien.kolka) >= 1) {
+    if (sobDzien && maKolka(sobDzien.dayType) && parseNum(sobDzien.kolka) >= 1) {
       dodatekNiedzielny = 250;
     }
   }
@@ -111,8 +113,8 @@ export function obliczWynagrodzenie(
     dniowki[iso] = info;
     sumaDniowek += info.dniowka;
 
-    const pracujacy = !dzien.dayType || dzien.dayType === "pracujacy";
-    if (pracujacy && isSobota(iso) && parseNum(dzien.kolka) > 0) {
+    // Premia sobotnia liczy się od przepracowanych tras (kółek) w sobotę
+    if (maKolka(dzien.dayType) && isSobota(iso) && parseNum(dzien.kolka) > 0) {
       liczbaSobot++;
     }
   }
@@ -159,7 +161,8 @@ export function liczDniWgTypu(dni: Record<string, DzienKierowcy>): {
     if (typ === "wolne") wolne++;
     else if (typ === "urlop") urlop++;
     else if (typ === "chorobowe") chorobowe++;
-    else if (parseNum(d.kolka) > 0) pracujace++;
+    // Pracujące = przepracowane trasy lub zlecenia
+    else if (parseNum(d.kolka) > 0 || (maZlecenia(typ) && parseNum(d.zlecenia) > 0)) pracujace++;
   }
   return { pracujace, wolne, urlop, chorobowe };
 }

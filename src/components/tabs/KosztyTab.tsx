@@ -19,7 +19,7 @@ import {
   ZgloszenieDnia,
 } from "@/lib/types";
 import { kategoriaLabel, domyslnyVatKategorii } from "@/lib/tax";
-import { TYP_DNIA_LABEL, TYPY_DNIA, typDniaMeta } from "@/lib/day-type";
+import { TYP_DNIA_LABEL, TYPY_DNIA, typDniaMeta, czyWolny, maKolka, maZlecenia } from "@/lib/day-type";
 import { kategoryzujLokalnie } from "@/lib/categorize";
 import {
   KategoriaBadge,
@@ -808,13 +808,14 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
     [onUpdate]
   );
 
-  // Typ dnia (część E): wolne/urlop/L4 zerują kółka i dniówkę
+  // Typ dnia: wolne/urlop/L4 zerują wszystko; Z zeruje trasy; P zeruje zlecenia
   function setDayType(iso: string, dayType: DayType) {
     const stary = dane.dni[iso]?.dayType ?? "pracujacy";
     if (stary === dayType) return;
     onUpdate((prev) => {
       const base = prev.dni[iso] ?? { data: iso, kolka: 0, szkolenie: 0 };
-      const wolny = dayType !== "pracujacy";
+      const bezTras = !maKolka(dayType); // wolne/urlop/L4/Z
+      const bezZlecen = !maZlecenia(dayType); // P/wolne/urlop/L4
       return {
         ...prev,
         dni: {
@@ -822,8 +823,9 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
           [iso]: {
             ...base,
             dayType,
-            kolka: wolny ? 0 : base.kolka,
-            szkolenie: wolny ? 0 : base.szkolenie,
+            kolka: bezTras ? 0 : base.kolka,
+            szkolenie: bezTras ? 0 : base.szkolenie,
+            zlecenia: bezZlecen ? 0 : base.zlecenia,
           },
         },
       };
@@ -1086,7 +1088,9 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
             const zglDnia = zglPerDay.get(iso);
             const sporny = zglDnia?.status === "zgloszony";
             const typDnia = dzien.dayType ?? "pracujacy";
-            const wolny = typDnia !== "pracujacy";
+            const wolny = czyWolny(typDnia);
+            const dzienMaKolka = maKolka(typDnia);
+            const dzienMaZlecenia = maZlecenia(typDnia);
             const meta = typDniaMeta(typDnia);
 
             const separator =
@@ -1134,12 +1138,12 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
                     </select>
                   </div>
 
-                  {/* Kółka — zablokowane gdy dzień wolny/urlop/L4 */}
+                  {/* Kółka — input dla P/P+Z; chip dla wolnych; „—" dla samego Z */}
                   {wolny ? (
                     <span className={cn("flex items-center justify-center rounded-lg border px-1 py-1.5 text-[10px] font-bold !w-16", meta.chipCls)}>
                       {meta.krotki}
                     </span>
-                  ) : (
+                  ) : dzienMaKolka ? (
                     <NumInput
                       value={dzien.kolka || ""}
                       onChange={(v) => setKolka(iso, v)}
@@ -1148,13 +1152,13 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
                       placeholder="0"
                       className="!py-1.5 !px-2 !text-sm !text-center !w-16"
                     />
+                  ) : (
+                    <span className="flex items-center justify-center text-dim/40 text-sm !w-16" title="tylko zlecenia">—</span>
                   )}
 
-                  {/* Szkolenie (tylko czerwiec) */}
+                  {/* Szkolenie (tylko czerwiec, dni z trasami) */}
                   {miesiac === 6 && (
-                    wolny ? (
-                      <span className="flex items-center justify-center text-dim/40 text-sm !w-16">—</span>
-                    ) : (
+                    dzienMaKolka ? (
                       <NumInput
                         value={dzien.szkolenie || ""}
                         onChange={(v) => setSzkolenie(iso, v)}
@@ -1163,6 +1167,8 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
                         placeholder="0"
                         className="!py-1.5 !px-2 !text-sm !text-center !w-16"
                       />
+                    ) : (
+                      <span className="flex items-center justify-center text-dim/40 text-sm !w-16">—</span>
                     )
                   )}
 
@@ -1178,8 +1184,8 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
                   </div>
                 </div>
 
-                {/* Zlecenia — dodatkowo do tras, tylko dni robocze */}
-                {!wolny && (() => {
+                {/* Zlecenia — tylko gdy typ dnia to P+Z lub Z */}
+                {dzienMaZlecenia && (() => {
                   const stawka = parseNum(dzien.stawkaZlecenia) || 100;
                   const pokazInna = innaStawka[iso] ?? (stawka !== 50 && stawka !== 100);
                   return (

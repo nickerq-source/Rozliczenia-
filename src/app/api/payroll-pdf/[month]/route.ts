@@ -7,7 +7,7 @@ import { getSessionProfile } from "@/lib/supabase-server";
 import { getAdminSupabase } from "@/lib/supabase-admin";
 import { obliczWynagrodzenie, sumaObciazen, liczDniWgTypu, parseNum, formatZl } from "@/lib/business-logic";
 import { getDniMiesiaca, nazwaDnia, nrDnia, POLSKIE_MIESIACE, MIESIACE_ZAKRESU } from "@/lib/dates";
-import { TYP_DNIA_LABEL } from "@/lib/day-type";
+import { TYP_DNIA_LABEL, czyWolny, maKolka } from "@/lib/day-type";
 import { DaneMiesiaca, MiesiącId, WorkspaceData } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -145,10 +145,11 @@ export async function GET(_req: NextRequest, { params }: Params) {
   for (const iso of dniDoPokazania) {
     ensure(14);
     const typ = dni[iso]?.dayType ?? "pracujacy";
-    const wolny = typ !== "pracujacy";
+    const wolny = czyWolny(typ);
     text(`${nrDnia(iso)} ${nazwaDnia(iso)}`, cols.dzien, y, 9);
-    text(wolny ? TYP_DNIA_LABEL[typ] : "pracujący", cols.typ, y, 9, reg, wolny ? amber : dark);
-    right(wolny ? "—" : String(parseNum(dni[iso]?.kolka)), cols.kolka, y, 9);
+    text(typ === "pracujacy" ? "pracujący" : TYP_DNIA_LABEL[typ], cols.typ, y, 9, reg, typ === "pracujacy" ? dark : amber);
+    // Kółka: liczba dla P/P+Z, „—" dla wolnych i samego Z
+    right(wolny || !maKolka(typ) ? "—" : String(parseNum(dni[iso]?.kolka)), cols.kolka, y, 9);
     right(wolny ? "—" : formatZl(dniowki[iso]?.dniowka ?? 0), cols.dniowka, y, 9);
     y -= 14;
   }

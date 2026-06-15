@@ -55,7 +55,13 @@ export interface MonthLock {
 }
 
 /** Typ dnia pracy kierowcy */
-export type DayType = "pracujacy" | "wolne" | "urlop" | "chorobowe";
+export type DayType =
+  | "pracujacy" // P — same trasy (kółka)
+  | "praca_zlecenia" // P+Z — trasy + zlecenia
+  | "zlecenia" // Z — same zlecenia
+  | "wolne"
+  | "urlop"
+  | "chorobowe";
 
 export interface DzienKierowcy {
   data: string; // "2026-06-01" ISO format
