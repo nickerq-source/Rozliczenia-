@@ -10,6 +10,7 @@ import {
 } from "./types";
 import {
   getDniMiesiaca,
+  getDayOfWeek,
   isNiedziela,
   isSobota,
   poprzedniDzien,
@@ -72,9 +73,10 @@ export function obliczDniowke(
   // Szkolenie: tylko czerwiec, dni z trasami, ręcznie wpisane (0 domyślnie)
   const szkolenie = miesiac === 6 && maKolka(dzien.dayType) ? parseNum(dzien.szkolenie) : 0;
 
-  // Dodatek niedzielny: +250 zł gdy niedziela kółka ≥ 1 ORAZ poprzednia sobota kółka ≥ 1
+  // Dodatek niedzielny: +250 zł gdy niedziela kółka ≥ 1 ORAZ poprzednia sobota kółka ≥ 1.
+  // Od lipca blokuje go 2+ dni wolnego bezpłatnego Pon–Pt w miesiącu.
   let dodatekNiedzielny = 0;
-  if (isNiedziela(iso) && kolka >= 1) {
+  if (!czyDodatkiZablokowaneOdLipca(miesiac, dniMap) && isNiedziela(iso) && kolka >= 1) {
     const sobIso = poprzedniDzien(iso);
     const sobDzien = dniMap[sobIso];
     if (sobDzien && maKolka(sobDzien.dayType) && parseNum(sobDzien.kolka) >= 1) {
@@ -91,6 +93,8 @@ export function obliczDniowke(
 /**
  * Oblicza pełne wynagrodzenie kierowcy za miesiąc.
  * Premia 200 zł: gdy w miesiącu ≥ 4 przepracowane soboty (kółka > 0).
+ * Od lipca 2026 premię i dodatki niedzielne blokują 2+ dni wolnego
+ * bezpłatnego od poniedziałku do piątku. Urlop i L4 nie przerywają ciągłości.
  */
 export function obliczWynagrodzenie(
   miesiac: number,
@@ -100,9 +104,13 @@ export function obliczWynagrodzenie(
   premia: number;
   wynagrodzenie: number;
   liczbaSobot: number;
+  wolneBezplatneRobocze: number;
+  dodatkiZablokowaneOdLipca: boolean;
   dniowki: Record<string, DniowkaInfo>;
 } {
   const allDays = getDniMiesiaca(miesiac);
+  const wolneBezplatneRobocze = liczWolneBezplatneRobocze(miesiac, dni);
+  const dodatkiZablokowaneOdLipca = czyDodatkiZablokowaneOdLipca(miesiac, dni);
   let sumaDniowek = 0;
   let liczbaSobot = 0;
   const dniowki: Record<string, DniowkaInfo> = {};
@@ -119,10 +127,37 @@ export function obliczWynagrodzenie(
     }
   }
 
-  const premia = liczbaSobot >= 4 ? 200 : 0;
+  const premia = liczbaSobot >= 4 && !dodatkiZablokowaneOdLipca ? 200 : 0;
   const wynagrodzenie = sumaDniowek + premia;
 
-  return { sumaDniowek, premia, wynagrodzenie, liczbaSobot, dniowki };
+  return {
+    sumaDniowek,
+    premia,
+    wynagrodzenie,
+    liczbaSobot,
+    wolneBezplatneRobocze,
+    dodatkiZablokowaneOdLipca,
+    dniowki,
+  };
+}
+
+/** Liczy dni wolne bezpłatne od poniedziałku do piątku. Soboty nie wchodzą do limitu. */
+export function liczWolneBezplatneRobocze(
+  miesiac: number,
+  dni: Record<string, DzienKierowcy>
+): number {
+  return getDniMiesiaca(miesiac).filter((iso) => {
+    const dow = getDayOfWeek(iso);
+    return dow >= 1 && dow <= 5 && dni[iso]?.dayType === "wolne";
+  }).length;
+}
+
+/** Od lipca: 2+ dni wolnego bezpłatnego Pon–Pt blokują premię 200 i niedzielne +250. */
+export function czyDodatkiZablokowaneOdLipca(
+  miesiac: number,
+  dni: Record<string, DzienKierowcy>
+): boolean {
+  return miesiac >= 7 && liczWolneBezplatneRobocze(miesiac, dni) >= 2;
 }
 
 // ─── PRZYCHÓD ─────────────────────────────────────────────────────────────────
@@ -175,7 +210,14 @@ export function obliczWynikMiesiaca(
   ustawienia?: UstawieniaPodatkowe
 ): WynikMiesiaca {
   const przychod = obliczPrzychod(daneM.faktury);
-  const { wynagrodzenie, premia, sumaDniowek, liczbaSobot } = obliczWynagrodzenie(
+  const {
+    wynagrodzenie,
+    premia,
+    sumaDniowek,
+    liczbaSobot,
+    wolneBezplatneRobocze,
+    dodatkiZablokowaneOdLipca,
+  } = obliczWynagrodzenie(
     miesiac,
     daneM.dni
   );
@@ -201,7 +243,9 @@ export function obliczWynikMiesiaca(
     leasing,
     zysk,
     liczbaSobotPrzepracowanych: liczbaSobot,
-    premiaUwzglednioneod4Soboty: liczbaSobot >= 4,
+    premiaUwzglednioneod4Soboty: liczbaSobot >= 4 && !dodatkiZablokowaneOdLipca,
+    wolneBezplatneRobocze,
+    dodatkiZablokowaneOdLipca,
     sumaDniowek,
     premia,
   };

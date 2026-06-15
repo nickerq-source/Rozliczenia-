@@ -29,6 +29,7 @@ import {
   IconCheck,
   IconCalendar,
   IconPaperclip,
+  IconAlertTriangle,
 } from "../ui/icons";
 import { cn } from "@/lib/utils";
 
@@ -630,6 +631,14 @@ export function PodsumowanieTab({
             </span>
           </span>
 
+          {wynik.dodatkiZablokowaneOdLipca && (
+            <span className="flex items-center gap-2 px-3.5 py-2 rounded-full bg-red-soft border border-red-500/40 text-sm">
+              <IconAlertTriangle size={16} className="text-red-300" />
+              <span className="text-red-200">Dodatki:</span>
+              <span className="font-bold text-red-200">zablokowane</span>
+            </span>
+          )}
+
           <span
             className={cn(
               "flex items-center gap-2 px-3.5 py-2 rounded-full border text-sm",
@@ -664,11 +673,26 @@ export function PodsumowanieTab({
             <span className="tabular-nums text-ink">{formatZlCaly(wynik.sumaDniowek)}</span>
           </div>
           <div className="flex justify-between text-sm py-1">
-            <span className="text-dim">Premia (≥4 soboty)</span>
+            <span className="text-dim">Premia (soboty + ciągłość)</span>
             <span className={cn("tabular-nums", wynik.premia > 0 ? "text-amber-brand" : "text-dim")}>
               {wynik.premia > 0 ? `+ ${formatZlCaly(wynik.premia)}` : "0 zł"}
             </span>
           </div>
+          {miesiac >= 7 && (
+            <div className="flex justify-between text-sm py-1">
+              <span className={wynik.dodatkiZablokowaneOdLipca ? "text-red-300" : "text-dim"}>
+                Wolne bezpłatne Pon–Pt
+              </span>
+              <span className={cn("tabular-nums", wynik.dodatkiZablokowaneOdLipca ? "text-red-300" : "text-ink")}>
+                {wynik.wolneBezplatneRobocze} / 2
+              </span>
+            </div>
+          )}
+          {wynik.dodatkiZablokowaneOdLipca && (
+            <p className="mt-2 rounded-lg border border-red-500/35 bg-red-soft px-2.5 py-2 text-xs text-red-200">
+              Od lipca 2 dni wolnego bezpłatnego Pon–Pt blokują premię 200 zł i dodatki niedzielne 250 zł.
+            </p>
+          )}
           <div className="flex justify-between text-sm pt-2 border-t border-line font-bold">
             <span className="text-white">Łącznie wynagrodzenie</span>
             <span className="tabular-nums text-white">{formatZlCaly(wynik.wynagrodzeniePracownika)}</span>

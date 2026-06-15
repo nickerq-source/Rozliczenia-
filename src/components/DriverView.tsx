@@ -70,6 +70,8 @@ interface MiesiacWyplata {
   dniPracy: number;
   kolka: number;
   liczbaSobot: number;
+  wolneBezplatneRobocze: number;
+  dodatkiZablokowaneOdLipca: boolean;
   liczbyDni: { pracujace: number; wolne: number; urlop: number; chorobowe: number };
   wyplata: { status: "niewypłacone" | "wypłacone"; paidAt?: string };
   zamkniety: boolean;
@@ -167,6 +169,8 @@ export function DriverView({ name }: { name: string }) {
             <span className="text-red-400 font-semibold">✗</span> i podaj poprawną liczbę kółek.
           </p>
 
+          <LegendaWyplaty />
+
           <PowiadomieniaKierowcy />
 
           <TankowanieKierowcy />
@@ -201,6 +205,40 @@ export function DriverView({ name }: { name: string }) {
         </main>
       </div>
     </div>
+  );
+}
+
+function LegendaWyplaty() {
+  return (
+    <Card className="!p-3 border-amber-brand/25 bg-surface/90">
+      <div className="flex items-center gap-2 mb-2">
+        <IconMoneybag size={16} className="text-amber-brand" />
+        <p className="text-xs font-extrabold uppercase tracking-wider text-amber-brand">
+          Legenda wypłaty
+        </p>
+      </div>
+      <div className="space-y-1.5 text-xs leading-relaxed text-dim">
+        <p>
+          <b className="text-white">Kółko</b> = 100 zł.
+        </p>
+        <p>
+          <b className="text-white">Zlecenie</b> = 50–100 zł albo cena indywidualna wpisana przez biuro.
+        </p>
+        <p>
+          <b className="text-white">Premia sobotnia</b> = +200 zł za 4 przepracowane soboty w miesiącu.
+          Urlop i L4 zachowują ciągłość pracy.
+        </p>
+        <p>
+          <b className="text-white">Sobota + niedziela</b> = normalna kasa z kółek i zleceń
+          oraz dodatkowe +250 zł za niedzielę, jeśli przepracowana była sobota i niedziela.
+        </p>
+        <p className="rounded-lg border border-amber-brand/30 bg-amber-brand/10 px-2.5 py-2 text-amber-brand">
+          Od lipca: 2 dni wolnego bezpłatnego od poniedziałku do piątku w danym miesiącu
+          blokują premię sobotnią 200 zł i dodatek niedzielny 250 zł. Soboty nie liczą się
+          do tego limitu wolnego.
+        </p>
+      </div>
+    </Card>
   );
 }
 
@@ -272,6 +310,22 @@ function MiesiacKarta({
         </p>
       )}
 
+      {aktywny && m.miesiac >= 7 && (
+        <p
+          className={cn(
+            "text-[11px] mt-1 flex items-center gap-1.5",
+            m.dodatkiZablokowaneOdLipca ? "text-red-300" : "text-dim"
+          )}
+        >
+          {m.dodatkiZablokowaneOdLipca && <IconAlertTriangle size={12} />}
+          Wolne bezpłatne Pon–Pt:{" "}
+          <b className={m.dodatkiZablokowaneOdLipca ? "text-red-200" : "text-ink"}>
+            {m.wolneBezplatneRobocze}/2
+          </b>
+          {m.dodatkiZablokowaneOdLipca && " — premia i dodatki niedzielne zablokowane"}
+        </p>
+      )}
+
       {aktywny && (m.liczbyDni.wolne + m.liczbyDni.urlop + m.liczbyDni.chorobowe) > 0 && (
         <p className="text-[11px] text-dim mt-0.5 flex flex-wrap gap-x-2.5">
           <span>Pracujące: <b className="text-ink">{m.liczbyDni.pracujace}</b></span>
@@ -303,6 +357,12 @@ function MiesiacKarta({
             <div className="flex justify-between py-0.5">
               <span className="text-dim">Premia sobotnia</span>
               <span className="text-amber-brand">+ {formatZlCaly(m.premia)}</span>
+            </div>
+          )}
+          {m.dodatkiZablokowaneOdLipca && (
+            <div className="mt-2 rounded-lg border border-red-500/35 bg-red-soft px-2.5 py-2 text-xs text-red-200">
+              Premia sobotnia 200 zł i dodatki niedzielne 250 zł nie są doliczone,
+              bo w tym miesiącu są co najmniej 2 dni wolnego bezpłatnego od poniedziałku do piątku.
             </div>
           )}
 

@@ -39,7 +39,14 @@ export async function GET() {
       dni: {},
     }) as DaneMiesiaca;
     const dni = dane.dni ?? {};
-    const { wynagrodzenie, liczbaSobot, premia, dniowki } = obliczWynagrodzenie(m, dni);
+    const {
+      wynagrodzenie,
+      liczbaSobot,
+      premia,
+      wolneBezplatneRobocze,
+      dodatkiZablokowaneOdLipca,
+      dniowki,
+    } = obliczWynagrodzenie(m, dni);
 
     const dniPracy = Object.values(dni).filter((d) => parseNum(d.kolka) > 0).length;
     const kolka = Object.values(dni).reduce((s, d) => s + parseNum(d.kolka), 0);
@@ -88,6 +95,8 @@ export async function GET() {
       dniPracy,
       kolka,
       liczbaSobot,
+      wolneBezplatneRobocze,
+      dodatkiZablokowaneOdLipca,
       liczbyDni,
       wyplata: dane.wyplata ?? { status: "niewypłacone" },
       zamkniety: !!dane.zamkniety?.locked,

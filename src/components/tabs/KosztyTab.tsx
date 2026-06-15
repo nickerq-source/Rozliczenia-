@@ -716,10 +716,14 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
   }, [dane.tankowanie, dane.inneKoszty]);
 
   const allDays = getDniMiesiaca(miesiac);
-  const { dniowki, wynagrodzenie, liczbaSobot, premia } = obliczWynagrodzenie(
-    miesiac,
-    dane.dni
-  );
+  const {
+    dniowki,
+    wynagrodzenie,
+    liczbaSobot,
+    premia,
+    wolneBezplatneRobocze,
+    dodatkiZablokowaneOdLipca,
+  } = obliczWynagrodzenie(miesiac, dane.dni);
 
   // ─── ZGŁOSZENIA KIEROWCY ────────────────────────────────────────────────────
   const zgloszenia = dane.zgloszenia ?? [];
@@ -1265,10 +1269,25 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
             <span className="text-dim">Soboty przepracowane</span>
             <span className="tabular-nums text-ink">{liczbaSobot} / 4</span>
           </div>
+          {miesiac >= 7 && (
+            <div className="flex justify-between text-sm">
+              <span className={dodatkiZablokowaneOdLipca ? "text-red-300" : "text-dim"}>
+                Wolne bezpłatne Pon–Pt
+              </span>
+              <span className={cn("tabular-nums", dodatkiZablokowaneOdLipca ? "text-red-300" : "text-ink")}>
+                {wolneBezplatneRobocze} / 2
+              </span>
+            </div>
+          )}
           {premia > 0 && (
             <div className="flex justify-between text-sm">
               <span className="text-amber-brand">Premia (≥4 soboty)</span>
               <span className="tabular-nums text-amber-brand">+ {formatZlCaly(premia)}</span>
+            </div>
+          )}
+          {dodatkiZablokowaneOdLipca && (
+            <div className="rounded-lg border border-red-500/35 bg-red-soft px-2.5 py-2 text-xs text-red-200">
+              Od lipca 2 dni wolnego bezpłatnego Pon–Pt blokują premię 200 zł i dodatek niedzielny 250 zł.
             </div>
           )}
           <div className="flex justify-between font-bold pt-2 border-t border-line">

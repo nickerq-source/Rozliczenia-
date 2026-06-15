@@ -255,6 +255,8 @@ export interface WynikMiesiaca {
   zysk: number;
   liczbaSobotPrzepracowanych: number;
   premiaUwzglednioneod4Soboty: boolean;
+  wolneBezplatneRobocze: number;
+  dodatkiZablokowaneOdLipca: boolean;
   // szczegóły
   sumaDniowek: number;
   premia: number;
