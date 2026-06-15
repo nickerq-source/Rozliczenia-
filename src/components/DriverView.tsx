@@ -123,7 +123,6 @@ export function DriverView({ name }: { name: string }) {
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function logout() {
