@@ -143,16 +143,20 @@ function getAnthropicApiKey(): { key: string | null; error: string | null } {
     };
   }
 
-  const key = raw.trim().replace(/^["']|["']$/g, "");
-  if (/[^\x20-\x7E]/.test(key)) {
+  const cleaned = raw.trim().replace(/^["']|["']$/g, "");
+  const compact = cleaned.replace(/\s+/g, "");
+  const token = compact.match(/sk-ant-[A-Za-z0-9_-]{20,}/)?.[0] ?? compact;
+  const invalidChar = [...token].find((ch) => /[^\x20-\x7E]/.test(ch));
+  if (invalidChar) {
+    const idx = [...token].findIndex((ch) => ch === invalidChar);
     return {
       key: null,
       error:
-        "ANTHROPIC_API_KEY w Vercel zawiera niedozwolony znak. Wklej sam klucz Claude zaczynający się od sk-ant- bez opisu, spacji i polskich znaków.",
+        `ANTHROPIC_API_KEY w Vercel zawiera niedozwolony znak przy pozycji ${idx} (kod ${invalidChar.charCodeAt(0)}). Wklej sam klucz Claude zaczynający się od sk-ant-.`,
     };
   }
 
-  if (!key.startsWith("sk-ant-")) {
+  if (!token.startsWith("sk-ant-")) {
     return {
       key: null,
       error:
@@ -160,7 +164,7 @@ function getAnthropicApiKey(): { key: string | null; error: string | null } {
     };
   }
 
-  return { key, error: null };
+  return { key: token, error: null };
 }
 
 function clamp01(n: number | null): number {
