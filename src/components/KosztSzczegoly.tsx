@@ -60,12 +60,12 @@ export function KategoriaBadge({
   const sprawdzFirmowy = kategoria === "art_spozywcze";
 
   return (
-    <div className="flex items-center gap-1.5 flex-wrap">
+    <div className="grid grid-cols-1 gap-1.5 sm:flex sm:flex-wrap sm:items-center">
       <select
         value={kategoria}
         onChange={(e) => onZmienKategorie(e.target.value as KategoriaKosztu)}
         title="Kategoria kosztu"
-        className="bg-amber-brand/10 border border-amber-brand/40 rounded-full px-2.5 py-1 text-xs text-amber-brand font-medium"
+        className="w-full min-w-0 bg-amber-brand/10 border border-amber-brand/40 rounded-full px-2.5 py-1.5 text-xs text-amber-brand font-medium sm:w-auto"
       >
         {KATEGORIE.map((k) => (
           <option key={k.id} value={k.id}>{k.label}</option>
@@ -77,7 +77,7 @@ export function KategoriaBadge({
           type="button"
           onClick={onAuto}
           disabled={autoBusy}
-          className="inline-flex items-center gap-1 px-3 py-1.5 min-h-[28px] rounded-full bg-amber-brand text-amber-ink text-xs font-extrabold shadow-[0_0_0_1px_rgba(245,165,36,0.35)] hover:bg-[#e09420] disabled:opacity-50 transition-colors"
+          className="inline-flex w-full items-center justify-center gap-1 px-3 py-1.5 min-h-[32px] rounded-full bg-amber-brand text-amber-ink text-xs font-extrabold shadow-[0_0_0_1px_rgba(245,165,36,0.35)] hover:bg-[#e09420] disabled:opacity-50 transition-colors sm:w-auto"
           title="Automatycznie dobierz kategorię i VAT"
         >
           {autoBusy ? <IconLoader size={11} /> : "↻"}
@@ -87,7 +87,7 @@ export function KategoriaBadge({
 
       {sprawdzVat && (
         <span
-          className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-soft border border-red-500/40 text-red-300 text-[10px] font-medium"
+          className="flex w-full items-center justify-center gap-1 px-2 py-1 rounded-full bg-red-soft border border-red-500/40 text-red-300 text-[10px] font-medium sm:w-auto"
           title={zAI ? "Kategoria nadana przez AI — potwierdź lub zmień" : "Sprawdź kategorię i stawkę VAT"}
         >
           <IconAlertTriangle size={11} />
@@ -95,7 +95,7 @@ export function KategoriaBadge({
         </span>
       )}
       {sprawdzFirmowy && (
-        <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-brand/10 border border-amber-brand/40 text-amber-brand text-[10px] font-medium">
+        <span className="flex w-full items-center justify-center gap-1 px-2 py-1 rounded-full bg-amber-brand/10 border border-amber-brand/40 text-amber-brand text-[10px] font-medium sm:w-auto">
           <IconAlertTriangle size={11} />
           sprawdź czy koszt firmowy
         </span>
@@ -104,7 +104,7 @@ export function KategoriaBadge({
         <button
           type="button"
           onClick={onZatwierdzAI}
-          className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-soft border border-green-500/40 text-green-300 text-[10px] font-bold hover:bg-green-500/20"
+          className="flex w-full items-center justify-center gap-1 px-2 py-1 rounded-full bg-green-soft border border-green-500/40 text-green-300 text-[10px] font-bold hover:bg-green-500/20 sm:w-auto"
           title={`AI (confidence ${(wpis.kategoriaConfidence ?? 0).toFixed(2)}) — zatwierdź kategorię`}
         >
           <IconCheck size={11} />

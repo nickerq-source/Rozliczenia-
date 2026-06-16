@@ -148,12 +148,11 @@ const PAYER_OPTIONS: { id: KosztPayer; label: string }[] = [
 ];
 
 type PayerFilter = "all" | KosztPayer;
-type PodkategoriaKosztow = "all" | "tankowanie" | "wyplata_kierowcy" | "samochod_dzialalnosc";
+type PodkategoriaKosztow = "all" | "tankowanie" | "samochod_dzialalnosc";
 
 const PODKATEGORIE_KOSZTOW: { id: PodkategoriaKosztow; label: string }[] = [
   { id: "all", label: "wszystkie" },
   { id: "tankowanie", label: "Tankowanie" },
-  { id: "wyplata_kierowcy", label: "Wypłata kierowcy" },
   { id: "samochod_dzialalnosc", label: "Samochód i działalność" },
 ];
 
@@ -198,6 +197,36 @@ function PayerSelect({
         ))}
       </select>
     </label>
+  );
+}
+
+function VatMiniInfo({
+  wpis,
+  ustawienia,
+  domyslnaKategoria = "inne",
+}: {
+  wpis: KosztVatInfo & { koszt: number };
+  ustawienia: UstawieniaPodatkowe;
+  domyslnaKategoria?: KategoriaKosztu;
+}) {
+  const r = rozbijWpis(wpis, ustawienia, domyslnaKategoria);
+  const defVat = domyslnyVatKategorii(wpis.kategoria ?? domyslnaKategoria, ustawienia);
+  const vatRate = wpis.vatRate ?? defVat.vatRate;
+  return (
+    <div className="grid grid-cols-2 gap-1.5 text-[11px] sm:flex sm:flex-wrap">
+      <span className="rounded-full border border-line bg-surface2 px-2 py-1 text-dim">
+        VAT: <b className="text-ink">{vatRateLabel(vatRate)}</b>
+      </span>
+      <span className="rounded-full border border-line bg-surface2 px-2 py-1 text-dim">
+        netto: <b className="text-ink">{formatZl(r.netto)}</b>
+      </span>
+      <span className="rounded-full border border-line bg-surface2 px-2 py-1 text-dim">
+        VAT kwota: <b className="text-ink">{formatZl(r.vat)}</b>
+      </span>
+      <span className="rounded-full border border-line bg-surface2 px-2 py-1 text-dim">
+        odliczenie: <b className="text-green-300">{formatZl(r.vatDoOdliczenia)}</b>
+      </span>
+    </div>
   );
 }
 
@@ -681,12 +710,10 @@ function RozliczenieKosztowPanel({
   dane,
   ustawienia,
   miesiac,
-  wynagrodzenie,
 }: {
   dane: DaneMiesiaca;
   ustawienia: UstawieniaPodatkowe;
   miesiac: MiesiącId;
-  wynagrodzenie: number;
 }) {
   const [podkategoria, setPodkategoria] = useState<PodkategoriaKosztow>("all");
   const [kategoria, setKategoria] = useState<"all" | KategoriaKosztu>("all");
@@ -706,7 +733,7 @@ function RozliczenieKosztowPanel({
         kategoria: r.kategoria,
         podkategoria: "tankowanie",
         netto: r.netto,
-        vat: r.vatDoOdliczenia,
+        vat: r.vat,
         brutto: r.brutto,
       });
     }
@@ -721,26 +748,13 @@ function RozliczenieKosztowPanel({
         kategoria: r.kategoria,
         podkategoria: podkategoriaKosztu("inne", r.kategoria),
         netto: r.netto,
-        vat: r.vatDoOdliczenia,
+        vat: r.vat,
         brutto: r.brutto,
       });
     }
 
-    if (wynagrodzenie > 0) {
-      rows.push({
-        id: "wyplata-kierowcy",
-        nazwa: "Wypłata kierowcy",
-        paidBy: "Firma",
-        kategoria: "inne",
-        podkategoria: "wyplata_kierowcy",
-        netto: wynagrodzenie,
-        vat: 0,
-        brutto: wynagrodzenie,
-      });
-    }
-
     return rows;
-  }, [dane.tankowanie, dane.inneKoszty, ustawienia, wynagrodzenie]);
+  }, [dane.tankowanie, dane.inneKoszty, ustawienia]);
 
   const przefiltrowane = useMemo(
     () =>
@@ -753,10 +767,21 @@ function RozliczenieKosztowPanel({
     [pozycje, podkategoria, kategoria, payer]
   );
 
+  const doRozliczenia5050 = useMemo(
+    () =>
+      pozycje.filter((koszt) => {
+        if (podkategoria !== "all" && koszt.podkategoria !== podkategoria) return false;
+        if (kategoria !== "all" && koszt.kategoria !== kategoria) return false;
+        return true;
+      }),
+    [pozycje, podkategoria, kategoria]
+  );
+
   const rows = useMemo(() => rozliczenieRows(przefiltrowane), [przefiltrowane]);
-  const arturPaid = rows.find((r) => r.paidBy === "Artur")?.brutto ?? 0;
-  const damianPaid = rows.find((r) => r.paidBy === "Damian")?.brutto ?? 0;
-  const firmaPaid = rows.find((r) => r.paidBy === "Firma")?.brutto ?? 0;
+  const rows5050 = useMemo(() => rozliczenieRows(doRozliczenia5050), [doRozliczenia5050]);
+  const arturPaid = rows5050.find((r) => r.paidBy === "Artur")?.brutto ?? 0;
+  const damianPaid = rows5050.find((r) => r.paidBy === "Damian")?.brutto ?? 0;
+  const firmaPaid = rows5050.find((r) => r.paidBy === "Firma")?.brutto ?? 0;
   const privateTotal = arturPaid + damianPaid;
   const eachShare = privateTotal / 2;
   const diff = Math.round((arturPaid - eachShare) * 100) / 100;
@@ -774,7 +799,7 @@ function RozliczenieKosztowPanel({
         <div className="min-w-0 flex-1">
           <CardTitle className="mb-1">Rozliczenie kosztów</CardTitle>
           <p className="text-[11px] text-dim">
-            {POLSKIE_MIESIACE[miesiac]} 2026 · płatnik i rozbicie netto/VAT/brutto według filtrów.
+            {POLSKIE_MIESIACE[miesiac]} 2026 · tylko koszty z faktur/paragonów, bez wypłaty kierowcy.
           </p>
         </div>
       </div>
@@ -839,7 +864,7 @@ function RozliczenieKosztowPanel({
               <th className="px-3 py-2">Kto zapłacił</th>
               <th className="px-3 py-2 text-right">Liczba</th>
               <th className="px-3 py-2 text-right">Suma netto</th>
-              <th className="px-3 py-2 text-right">Suma VAT</th>
+              <th className="px-3 py-2 text-right">VAT z dokumentów</th>
               <th className="px-3 py-2 text-right">Suma brutto</th>
             </tr>
           </thead>
@@ -881,7 +906,7 @@ function RozliczenieKosztowPanel({
           {settlement}
         </p>
         <p className="mt-2 text-[11px] text-dim">
-          Do długu 50/50 liczą się tylko koszty oznaczone jako Artur albo Damian. Firma jest pokazana osobno.
+          Do długu 50/50 liczą się tylko koszty oznaczone jako Artur albo Damian. Filtr „Kto zapłacił” zawęża tabelę, ale samo 50/50 zawsze porównuje Artura i Damiana.
         </p>
       </div>
     </Card>
@@ -1645,9 +1670,12 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
         </Card>
       )}
 
-      {/* ── SEKCJA: DNI KIEROWCY ─────────────────────────────────────────── */}
+      {/* ── PODKATEGORIA: WYPŁATA KIEROWCY ──────────────────────────────── */}
       <Card>
-        <CardTitle>Dni kierowcy</CardTitle>
+        <CardTitle>Wypłata kierowcy</CardTitle>
+        <p className="mb-3 text-xs text-dim">
+          Dniówki, kółka, zlecenia, premie i dodatki kierowcy.
+        </p>
 
         {/* Legenda skrótów typów dnia */}
         <div className="mb-3 flex flex-wrap items-center gap-1.5 text-[11px] text-dim">
@@ -1888,9 +1916,12 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
         </div>
       </Card>
 
-      {/* ── SEKCJA: TANKOWANIE ───────────────────────────────────────────── */}
+      {/* ── PODKATEGORIA: TANKOWANIE ────────────────────────────────────── */}
       <Card>
         <CardTitle>Tankowanie</CardTitle>
+        <p className="mb-3 text-xs text-dim">
+          Paliwo, AdBlue oraz faktury/paragony za tankowanie.
+        </p>
         <div className="space-y-2">
           {tankowanieWidoczne.map((t) => (
             <div key={t.id} className="rounded-xl border border-line/60 p-2 space-y-1.5">
@@ -1937,7 +1968,12 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
                   ) : null}
                 </p>
               )}
-              <div className="mt-1.5">
+              <VatMiniInfo
+                wpis={{ ...t, kategoria: t.kategoria ?? "paliwo_adblue" }}
+                ustawienia={ustawienia}
+                domyslnaKategoria="paliwo_adblue"
+              />
+              <div className="mt-1.5 grid grid-cols-1 gap-1.5 sm:flex sm:flex-wrap sm:items-center">
                 <RozliczeniePodatkoweButton
                   checked={czyRozliczanyPodatkowo(t)}
                   onClick={() => {
@@ -1946,14 +1982,14 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
                     logVatPatch("paliwo", t.id, patch, t);
                   }}
                 />
+                <DokumentyKosztu
+                  wpis={t}
+                  showLicznik
+                  onStatus={(status) => zmienStatusDokumentu(t.id, "paliwo", status, "tankowanie", t)}
+                  onAdd={(file, typ) => dodajZalacznik(t.id, "paliwo", file, typ, "tankowanie")}
+                  onRemove={(zalacznikId) => usunZalacznik(t.id, zalacznikId, "tankowanie")}
+                />
               </div>
-              <DokumentyKosztu
-                wpis={t}
-                showLicznik
-                onStatus={(status) => zmienStatusDokumentu(t.id, "paliwo", status, "tankowanie", t)}
-                onAdd={(file, typ) => dodajZalacznik(t.id, "paliwo", file, typ, "tankowanie")}
-                onRemove={(zalacznikId) => usunZalacznik(t.id, zalacznikId, "tankowanie")}
-              />
               {rozwiniete[t.id] && (
                 <KosztSzczegolyPanel
                   wpis={t}
@@ -1995,12 +2031,14 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
         dane={dane}
         ustawienia={ustawienia}
         miesiac={miesiac}
-        wynagrodzenie={wynagrodzenie}
       />
 
-      {/* ── SEKCJA: INNE KOSZTY ──────────────────────────────────────────── */}
+      {/* ── PODKATEGORIA: SAMOCHÓD I DZIAŁALNOŚĆ ────────────────────────── */}
       <Card>
-        <CardTitle>Inne koszty</CardTitle>
+        <CardTitle>Samochód i działalność</CardTitle>
+        <p className="mb-3 text-xs text-dim">
+          Części, serwis, naprawy, opłaty, internet, telefon, wyposażenie i inne koszty firmowe.
+        </p>
         <div className="space-y-2">
           {inneWidoczne.map((k) => (
             <div key={k.id} className="rounded-xl border border-line/60 p-2 space-y-1.5">
@@ -2047,29 +2085,34 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
               </div>
 
               {/* Kategoria + ostrzeżenia + zatwierdzanie AI */}
-              <KategoriaBadge
-                wpis={k}
-                onZmienKategorie={(nowa) =>
-                  zmienKategorie(k.id, k.nazwa || "inny", k.kategoria, nowa, "inne")
-                }
-                onZatwierdzAI={() => zatwierdzAI(k.id, k.nazwa || "inny", "inne")}
-                onAuto={() => autoKategoryzuj(k.id, k.nazwa, k.koszt, k.data, "inne", true)}
-                autoBusy={autoBusyId === k.id}
-              />
-              <RozliczeniePodatkoweButton
-                checked={czyRozliczanyPodatkowo(k)}
-                onClick={() => {
-                  const patch = { hasInvoice: !czyRozliczanyPodatkowo(k) };
-                  updateInny(k.id, patch);
-                  logVatPatch(k.nazwa || "inny", k.id, patch, k);
-                }}
-              />
-              <DokumentyKosztu
-                wpis={k}
-                onStatus={(status) => zmienStatusDokumentu(k.id, k.nazwa || "inny", status, "inne", k)}
-                onAdd={(file, typ) => dodajZalacznik(k.id, k.nazwa || "inny", file, typ, "inne")}
-                onRemove={(zalacznikId) => usunZalacznik(k.id, zalacznikId, "inne")}
-              />
+              <div className="grid grid-cols-1 gap-1.5">
+                <KategoriaBadge
+                  wpis={k}
+                  onZmienKategorie={(nowa) =>
+                    zmienKategorie(k.id, k.nazwa || "inny", k.kategoria, nowa, "inne")
+                  }
+                  onZatwierdzAI={() => zatwierdzAI(k.id, k.nazwa || "inny", "inne")}
+                  onAuto={() => autoKategoryzuj(k.id, k.nazwa, k.koszt, k.data, "inne", true)}
+                  autoBusy={autoBusyId === k.id}
+                />
+                <VatMiniInfo wpis={k} ustawienia={ustawienia} />
+                <div className="grid grid-cols-1 gap-1.5 sm:flex sm:flex-wrap sm:items-center">
+                  <RozliczeniePodatkoweButton
+                    checked={czyRozliczanyPodatkowo(k)}
+                    onClick={() => {
+                      const patch = { hasInvoice: !czyRozliczanyPodatkowo(k) };
+                      updateInny(k.id, patch);
+                      logVatPatch(k.nazwa || "inny", k.id, patch, k);
+                    }}
+                  />
+                  <DokumentyKosztu
+                    wpis={k}
+                    onStatus={(status) => zmienStatusDokumentu(k.id, k.nazwa || "inny", status, "inne", k)}
+                    onAdd={(file, typ) => dodajZalacznik(k.id, k.nazwa || "inny", file, typ, "inne")}
+                    onRemove={(zalacznikId) => usunZalacznik(k.id, zalacznikId, "inne")}
+                  />
+                </div>
+              </div>
 
               {rozwiniete[k.id] && (
                 <KosztSzczegolyPanel
@@ -2101,7 +2144,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
         {dane.inneKoszty.length > 0 && (
           <div className="flex items-center gap-2 mt-3 rounded-2xl bg-surface2 border border-line px-4 py-3">
             <IconPackage size={18} className="text-amber-brand" />
-            <span className="text-sm text-dim flex-1">Suma inne koszty</span>
+            <span className="text-sm text-dim flex-1">Suma samochód i działalność</span>
             <span className="tabular-nums text-white font-bold">{formatZlCaly(sumaInne)}</span>
           </div>
         )}
