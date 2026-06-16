@@ -54,7 +54,7 @@ const PUSTY: OdczytParagonu = {
   needsReview: true,
 };
 
-const PROMPT = `Odczytaj dane z faktury lub paragonu za tankowanie. Zwróć WYŁĄCZNIE czysty JSON (bez markdown, bez komentarzy, bez tekstu wokół):
+const PROMPT = `Read data from a Polish fuel receipt or invoice. Return ONLY raw JSON, with no markdown and no extra text:
 {
   "productLine": string | null,
   "vatLine": string | null,
@@ -71,22 +71,22 @@ const PROMPT = `Odczytaj dane z faktury lub paragonu za tankowanie. Zwróć WYŁ
   "needsReview": boolean
 }
 
-Jak czytać polskie faktury za paliwo:
-- Jeśli obraz jest obrócony bokiem, odczytaj go po mentalnym obróceniu.
-- productLine: przepisz dokładnie jedną linię produktu z paliwem, tę gdzie jest LITR/L/l i * albo x, np. "OLEJ NAPĘDOWY ... 20.72 LITR*6.29" albo "EFECTA DIESEL ... 85,44 l*7,23".
-- Litry i cenę za litr bierz WYŁĄCZNIE z productLine: litry = liczba bezpośrednio PRZED LITR/L/l, cena za litr = liczba bezpośrednio PO znaku * albo x.
-- Linia typu "86.10 LITR*6.29", "20.72 LITR * 6.29", "20,06L x 6,48" lub "85,44 l*7,23" znaczy: litry = 86.10 / 20.72 / 20.06 / 85.44, cenaZaLitr = 6.29 / 6.48 / 7.23.
-- NIE bierz litrów ani ceny za litr z tabeli VAT/podatku. Kolumny "Wart.VAT", "Podatek", "Stawka", "Wart.Netto", "Wart.Brutto" nie są litrami ani ceną za litr.
-- Liczba przy "Wart.VAT" albo "Podatek" (np. 40.12) to kwota VAT, nie litry.
-- "SUMA: PLN 130.33", "DO ZAPŁATY 130.33", "RAZEM 130,33" znaczy: kwotaBrutto = 130.33.
-- "Data sprzedaży: 06-06-2026" znaczy datę tankowania → zwróć "2026-06-06".
-- "STACJA PALIW MOYA" → sprzedawca = "MOYA".
-- "OLEJ NAPĘDOWY" / "ON" → nazwa "Olej napędowy"; "Pb95"/"Pb98" → benzyna.
-- vatLine: przepisz linię/tabelę ze stawką VAT, np. "Stawka 8%" albo "Kwota B: 08,00%".
-- VAT czytaj WYŁĄCZNIE z widocznej stawki na dokumencie: 8% lub 08,00% => "0.08", 23% lub 23,00% => "0.23". Nie zgaduj VAT po typie paliwa.
-- NIP: zwróć NIP sprzedawcy/stacji, nie NIP nabywcy. Szukaj przy sekcji "Sprzedawca", nagłówku stacji albo danych firmy stacji. Ignoruj "Nabywca" i "NIP Nabywcy".
-- Liczby z przecinkiem traktuj jak z kropką (20,72 = 20.72; 130,33 = 130.33).
-Liczby zwróć jako liczby (nie tekst). Jeżeli czegoś nie widzisz, zwróć null, nie zgaduj.`;
+How to read Polish fuel receipts:
+- If the image is sideways, read it after mentally rotating it.
+- productLine: copy exactly one fuel product line, the line with LITR/L/l and * or x, for example "OLEJ NAPEDOWY ... 20.72 LITR*6.29" or "EFECTA DIESEL ... 85,44 l*7,23".
+- Read liters and price per liter ONLY from productLine: liters = number directly BEFORE LITR/L/l, pricePerLiter = number directly AFTER * or x.
+- A line like "86.10 LITR*6.29", "20.72 LITR * 6.29", "20,06L x 6,48" or "85,44 l*7,23" means liters = 86.10 / 20.72 / 20.06 / 85.44 and pricePerLiter = 6.29 / 6.48 / 7.23.
+- Do NOT take liters or price per liter from the VAT/tax table. Columns "Wart.VAT", "Podatek", "Stawka", "Wart.Netto", "Wart.Brutto" are not liters and not price per liter.
+- A number next to "Wart.VAT" or "Podatek" (for example 40.12) is VAT amount, not liters.
+- "SUMA: PLN 130.33", "DO ZAPLATY 130.33", "RAZEM 130,33" means grossAmount = 130.33.
+- "Data sprzedazy: 06-06-2026" means fuel date -> return "2026-06-06".
+- "STACJA PALIW MOYA" -> station = "MOYA".
+- "OLEJ NAPEDOWY" / "ON" -> fuelType = "Olej napedowy"; "Pb95"/"Pb98" -> gasoline.
+- vatLine: copy the VAT rate line/table, for example "Stawka 8%" or "Kwota B: 08,00%".
+- Read VAT ONLY from the visible rate on the document: 8% or 08,00% => "0.08", 23% or 23,00% => "0.23". Do not guess VAT from fuel type.
+- NIP: return seller/station NIP, not buyer NIP. Look near "Sprzedawca", station header or station company details. Ignore "Nabywca" and "NIP Nabywcy".
+- Treat comma decimal as dot decimal (20,72 = 20.72; 130,33 = 130.33).
+Return numbers as numbers, not strings. If a field is not visible, return null. Do not guess.`;
 
 /** Tolerancyjna konwersja na liczbę: liczba albo tekst "20,72"/"PLN 130.33"/"6.29 zł". */
 function toNum(v: unknown): number | null {
@@ -132,6 +132,35 @@ function parseDataUrl(dataUrl: string): { data: string } | null {
   if (!m) return null;
   // usuń ewentualne białe znaki z base64
   return { data: m[1].replace(/\s/g, "") };
+}
+
+function getAnthropicApiKey(): { key: string | null; error: string | null } {
+  const raw = process.env.ANTHROPIC_API_KEY;
+  if (!raw?.trim()) {
+    return {
+      key: null,
+      error: "Brak ANTHROPIC_API_KEY na serwerze. Dodaj tę zmienną w Vercel.",
+    };
+  }
+
+  const key = raw.trim().replace(/^["']|["']$/g, "");
+  if (/[^\x20-\x7E]/.test(key)) {
+    return {
+      key: null,
+      error:
+        "ANTHROPIC_API_KEY w Vercel zawiera niedozwolony znak. Wklej sam klucz Claude zaczynający się od sk-ant- bez opisu, spacji i polskich znaków.",
+    };
+  }
+
+  if (!key.startsWith("sk-ant-")) {
+    return {
+      key: null,
+      error:
+        "ANTHROPIC_API_KEY w Vercel wygląda niepoprawnie. Wklej sam klucz Claude zaczynający się od sk-ant-.",
+    };
+  }
+
+  return { key, error: null };
 }
 
 function clamp01(n: number | null): number {
@@ -391,20 +420,20 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
+  const apiKey = getAnthropicApiKey();
+  if (!apiKey.key) {
     return NextResponse.json(
       {
         ...PUSTY,
         _noKey: true,
-        error: "Brak ANTHROPIC_API_KEY na serwerze. Dodaj tę zmienną w Vercel.",
+        error: apiKey.error,
       },
       { status: 503 }
     );
   }
 
   try {
-    const client = new Anthropic({ apiKey });
+    const client = new Anthropic({ apiKey: apiKey.key });
     const response = await client.messages.create({
       model: "claude-haiku-4-5",
       max_tokens: 400,
@@ -465,7 +494,11 @@ export async function POST(req: NextRequest) {
     const status = (e as { status?: number })?.status;
     const apiMsg = (e as { error?: { error?: { message?: string } } })?.error?.error?.message;
     console.error("[scan-receipt] AI error:", status ?? "", apiMsg ?? (e instanceof Error ? e.message : e));
-    const message = apiMsg ?? (e instanceof Error ? e.message : "Nieznany błąd Claude OCR.");
+    let message = apiMsg ?? (e instanceof Error ? e.message : "Nieznany błąd Claude OCR.");
+    if (message.includes("ByteString")) {
+      message =
+        "Niepoprawny znak w danych wysyłanych do Claude. Sprawdź ANTHROPIC_API_KEY w Vercel: ma być sam klucz zaczynający się od sk-ant-, bez opisu i polskich znaków.";
+    }
     return NextResponse.json(
       {
         ...PUSTY,
