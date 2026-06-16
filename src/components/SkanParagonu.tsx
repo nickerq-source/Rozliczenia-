@@ -14,19 +14,14 @@ import {
   WpisTankowania,
 } from "@/lib/types";
 import { imageToCompressedDataUrl } from "@/lib/image";
+import {
+  ReceiptScanResult,
+  receiptHasImportantData,
+  scanReceiptDataUrl,
+} from "@/lib/receipt-scan-client";
 import { kategoryzujLokalnie } from "@/lib/categorize";
 import { KATEGORIE, domyslnyVatKategorii } from "@/lib/tax";
 import { IconCamera, IconLoader, IconAlertTriangle, IconX } from "./ui/icons";
-
-interface OdczytParagonu {
-  sprzedawca: string | null;
-  nip: string | null;
-  data: string | null;
-  kwotaBrutto: number | null;
-  vatRate: VatRate | null;
-  nazwa: string | null;
-  _noKey?: boolean;
-}
 
 const STAWKI: { id: VatRate; label: string }[] = [
   { id: "0.23", label: "23%" },
@@ -48,7 +43,7 @@ export function SkanParagonu({ typ, ustawienia, onZapisz, disabled }: Props) {
   const [busy, setBusy] = useState(false);
   const [modal, setModal] = useState<null | {
     dataUrl: string;
-    odczyt: OdczytParagonu;
+    odczyt: ReceiptScanResult;
   }>(null);
 
   // Pola formularza (edytowalne)
@@ -57,8 +52,15 @@ export function SkanParagonu({ typ, ustawienia, onZapisz, disabled }: Props) {
   const [fSprzedawca, setFSprzedawca] = useState("");
   const [fNip, setFNip] = useState("");
   const [fKwota, setFKwota] = useState("");
+  const [fLitry, setFLitry] = useState("");
+  const [fCena, setFCena] = useState("");
   const [fVat, setFVat] = useState<VatRate>("0.23");
   const [fKat, setFKat] = useState<KategoriaKosztu>("inne");
+
+  const parseDecimal = (v: string) => {
+    const n = parseFloat(v.replace(",", "."));
+    return isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : undefined;
+  };
 
   async function onPlik(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -66,30 +68,25 @@ export function SkanParagonu({ typ, ustawienia, onZapisz, disabled }: Props) {
     if (!file) return;
     setBusy(true);
     try {
-      const dataUrl = await imageToCompressedDataUrl(file);
-      const res = await fetch("/api/scan-receipt", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image: dataUrl }),
-      });
-      const odczyt: OdczytParagonu = res.ok
-        ? await res.json()
-        : { sprzedawca: null, nip: null, data: null, kwotaBrutto: null, vatRate: null, nazwa: null };
+      const dataUrl = await imageToCompressedDataUrl(file, 2000, 0.84);
+      const odczyt = await scanReceiptDataUrl(dataUrl, file.name);
 
       // Pre-fill formularza
-      const nazwa = odczyt.nazwa ?? "";
+      const nazwa = odczyt.nazwa ?? odczyt.fuelType ?? "";
       const reg = kategoryzujLokalnie(nazwa);
-      const kat = reg ?? "inne";
+      const kat = typ === "tankowanie" ? "paliwo_adblue" : reg ?? "inne";
       setFData(odczyt.data ?? "");
       setFNazwa(nazwa);
       setFSprzedawca(odczyt.sprzedawca ?? "");
       setFNip(odczyt.nip ?? "");
       setFKwota(odczyt.kwotaBrutto != null ? String(odczyt.kwotaBrutto) : "");
+      setFLitry(odczyt.litry != null ? String(odczyt.litry) : "");
+      setFCena(odczyt.cenaZaLitr != null ? String(odczyt.cenaZaLitr) : "");
       setFVat(odczyt.vatRate ?? domyslnyVatKategorii(kat, ustawienia).vatRate);
       setFKat(kat);
       setModal({ dataUrl, odczyt });
-    } catch {
-      alert("Nie udało się odczytać zdjęcia. Spróbuj ponownie lub dodaj koszt ręcznie.");
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Nie udało się odczytać zdjęcia. Spróbuj ponownie lub dodaj koszt ręcznie.");
     } finally {
       setBusy(false);
     }
@@ -133,9 +130,9 @@ export function SkanParagonu({ typ, ustawienia, onZapisz, disabled }: Props) {
       koszt: kwota,
       documentStatus: "paragon" as const,
       hasInvoice: true,
-      invoiceNumber: undefined,
       supplierName: fSprzedawca || undefined,
       supplierNip: fNip || undefined,
+      invoiceNumber: modal?.odczyt.documentNumber || undefined,
       amountMode: "brutto" as const,
       vatRate: fVat,
       vatDeductible: fVat !== "zw" && fVat !== "np",
@@ -148,7 +145,7 @@ export function SkanParagonu({ typ, ustawienia, onZapisz, disabled }: Props) {
     };
 
     if (typ === "tankowanie") {
-      onZapisz(wspolne as WpisTankowania);
+      onZapisz({ ...wspolne, litry: parseDecimal(fLitry) } as WpisTankowania);
     } else {
       onZapisz({ ...wspolne, nazwa: fNazwa || "Paragon" } as WpisInnegoKosztu);
     }
@@ -166,7 +163,7 @@ export function SkanParagonu({ typ, ustawienia, onZapisz, disabled }: Props) {
         {busy ? "Odczytuję paragon…" : "📷 Dodaj ze zdjęcia (AI)"}
         <input
           type="file"
-          accept="image/*"
+          accept="image/*,.heic,.heif"
           capture="environment"
           className="hidden"
           disabled={disabled || busy}
@@ -187,7 +184,11 @@ export function SkanParagonu({ typ, ustawienia, onZapisz, disabled }: Props) {
 
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-brand/10 border border-amber-brand/40 text-amber-brand text-[11px] font-medium">
               <IconAlertTriangle size={12} />
-              {modal.odczyt._noKey ? "AI niedostępne — wpisz dane ręcznie" : "odczytano ze zdjęcia — sprawdź dane"}
+              {modal.odczyt._noKey
+                ? "AI niedostępne — wpisz dane ręcznie"
+                : receiptHasImportantData(modal.odczyt)
+                ? "odczytano ze zdjęcia — sprawdź dane"
+                : "Nie udało się odczytać danych — wpisz ręcznie"}
             </span>
 
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -206,6 +207,18 @@ export function SkanParagonu({ typ, ustawienia, onZapisz, disabled }: Props) {
                 Kwota brutto
                 <input inputMode="decimal" value={fKwota} onChange={(e) => setFKwota(e.target.value)} placeholder="0,00" className="mt-0.5 w-full bg-input border border-line rounded-lg px-2 py-1.5 text-sm text-ink tabular-nums" />
               </label>
+              {typ === "tankowanie" && (
+                <>
+                  <label className="text-dim">
+                    Litry
+                    <input inputMode="decimal" value={fLitry} onChange={(e) => setFLitry(e.target.value)} placeholder="0" className="mt-0.5 w-full bg-input border border-line rounded-lg px-2 py-1.5 text-sm text-ink tabular-nums" />
+                  </label>
+                  <label className="text-dim">
+                    Cena za litr
+                    <input inputMode="decimal" value={fCena} onChange={(e) => setFCena(e.target.value)} placeholder="0,00" className="mt-0.5 w-full bg-input border border-line rounded-lg px-2 py-1.5 text-sm text-ink tabular-nums" />
+                  </label>
+                </>
+              )}
               <label className="text-dim">
                 Sprzedawca
                 <input value={fSprzedawca} onChange={(e) => setFSprzedawca(e.target.value)} className="mt-0.5 w-full bg-input border border-line rounded-lg px-2 py-1.5 text-sm text-ink" />

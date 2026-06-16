@@ -1,7 +1,8 @@
 "use client";
 
 // Kompresja zdjęcia do JPEG base64 (paragony/dokumenty) — ogranicza rozmiar
-// przed wysyłką do AI i zapisem w JSONB.
+// przed wysyłką do AI i zapisem w JSONB. Jeśli przeglądarka potrafi odczytać
+// HEIC/HEIF, canvas zapisze wynik jako JPEG; jeśli nie, zwracamy czytelny błąd.
 
 function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -12,15 +13,28 @@ function readFileAsDataUrl(file: File): Promise<string> {
   });
 }
 
-export async function imageToCompressedDataUrl(file: File, maxSide = 1400, quality = 0.74): Promise<string> {
+function looksLikeHeic(file: File): boolean {
+  const name = file.name.toLowerCase();
+  const type = file.type.toLowerCase();
+  return type.includes("heic") || type.includes("heif") || name.endsWith(".heic") || name.endsWith(".heif");
+}
+
+export async function imageToCompressedDataUrl(file: File, maxSide = 2000, quality = 0.84): Promise<string> {
   const raw = await readFileAsDataUrl(file);
-  if (!file.type.startsWith("image/")) return raw;
+  if (!file.type.startsWith("image/") && !looksLikeHeic(file)) return raw;
 
   const img = new Image();
   img.src = raw;
   await new Promise<void>((resolve, reject) => {
     img.onload = () => resolve();
-    img.onerror = () => reject(new Error("Nie udało się przetworzyć zdjęcia"));
+    img.onerror = () =>
+      reject(
+        new Error(
+          looksLikeHeic(file)
+            ? "Nie udało się odczytać HEIC/HEIF w tej przeglądarce. Zrób zdjęcie jako JPG/PNG albo wybierz zdjęcie po konwersji."
+            : "Nie udało się przetworzyć zdjęcia"
+        )
+      );
   });
 
   const scale = Math.min(1, maxSide / Math.max(img.width, img.height));

@@ -8,6 +8,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { Card } from "./ui/Card";
 import { imageToCompressedDataUrl } from "@/lib/image";
+import {
+  ReceiptScanResult,
+  receiptHasImportantData,
+  scanReceiptDataUrl,
+} from "@/lib/receipt-scan-client";
 import { formatZlCaly } from "@/lib/business-logic";
 import {
   IconGasStation,
@@ -20,18 +25,6 @@ import {
   IconLock,
 } from "./ui/icons";
 import { DriverLanguage, driverMonthName, driverTexts } from "@/lib/driver-translations";
-
-interface OdczytParagonu {
-  sprzedawca: string | null;
-  nip: string | null;
-  data: string | null;
-  kwotaBrutto: number | null;
-  vatRate: string | null;
-  nazwa: string | null;
-  litry: number | null;
-  cenaZaLitr: number | null;
-  _noKey?: boolean;
-}
 
 interface WpisListy {
   id: string;
@@ -116,24 +109,12 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
     const dev = process.env.NODE_ENV !== "production";
     try {
       // Wyższa jakość do OCR (drobny druk paragonu); Claude i tak zmniejszy do ~1568px
-      const dataUrl = await imageToCompressedDataUrl(file, 1600, 0.82);
+      const dataUrl = await imageToCompressedDataUrl(file, 2000, 0.84);
       if (dev) console.log("[tankowanie] wysyłam zdjęcie do OCR, dł. base64:", dataUrl.length);
-      const res = await fetch("/api/scan-receipt", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image: dataUrl }),
-      });
-      const o: OdczytParagonu | null = res.ok ? await res.json() : null;
-      if (dev) console.log("[tankowanie] OCR status:", res.status, "odczyt:", o);
+      const o: ReceiptScanResult = await scanReceiptDataUrl(dataUrl, file.name);
+      if (dev) console.log("[tankowanie] OCR odczyt:", o);
 
       setFZalacznik(dataUrl);
-      if (!o) {
-        // Błąd endpointu — nie udawaj, że odczytano
-        setScanInfo(null);
-        setBlad(t.fuel.readError);
-        setOpen(true);
-        return;
-      }
 
       // Cena za litr: z OCR, a gdy brak — policz z kwoty i litrów
       let cena = o.cenaZaLitr;
@@ -153,8 +134,7 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
       }
 
       // „Odczytano" tylko gdy realnie wpadło ≥1 ważne pole
-      const cosOdczytano =
-        !!o.data || !!o.sprzedawca || o.litry != null || cena != null || o.kwotaBrutto != null;
+      const cosOdczytano = receiptHasImportantData({ ...o, cenaZaLitr: cena });
       if (o._noKey) {
         setScanInfo("manual");
       } else if (cosOdczytano) {
@@ -164,8 +144,8 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
         setBlad(t.fuel.readError);
       }
       setOpen(true);
-    } catch {
-      setBlad(t.fuel.readError);
+    } catch (error) {
+      setBlad(error instanceof Error ? error.message : t.fuel.readError);
       setScanInfo(null);
       setOpen(true);
     } finally {
@@ -260,7 +240,7 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
             {busy ? t.fuel.reading : t.fuel.photo}
             <input
               type="file"
-              accept="image/*"
+              accept="image/*,.heic,.heif"
               capture="environment"
               className="hidden"
               disabled={busy}
