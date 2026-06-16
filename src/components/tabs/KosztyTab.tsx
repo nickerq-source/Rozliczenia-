@@ -2,7 +2,7 @@
 
 // Zakładka Koszty — sekcje: Dni kierowcy, Tankowanie, Inne koszty, Leasing
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 import {
   DaneMiesiaca,
@@ -31,10 +31,12 @@ import {
   obliczWynagrodzenie,
   obliczKosztPaliwa,
   obliczInneKoszty,
+  formatZl,
   formatZlCaly,
   parseNum,
   liczDniWgTypu,
 } from "@/lib/business-logic";
+import { buildFuelStats, FuelStatsRow } from "@/lib/fuel-stats";
 import {
   getDniMiesiaca,
   isSobota,
@@ -58,6 +60,7 @@ import {
 } from "../ui/icons";
 import { logChange } from "@/lib/audit";
 import { SkanParagonu } from "../SkanParagonu";
+import { ZalacznikPreview } from "../ZalacznikPreview";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -208,25 +211,6 @@ function DokumentyKosztu({
   const status = statusDokumentu(wpis);
   const zalaczniki = wpis.zalaczniki ?? [];
 
-  // Podgląd: legacy base64 otwieramy wprost; Storage → krótkotrwały podpisany URL.
-  // Okno otwieramy synchronicznie (gest użytkownika), potem ustawiamy adres.
-  async function otworzZalacznik(z: KosztZalacznik) {
-    if (z.dataUrl) {
-      window.open(z.dataUrl, "_blank", "noopener,noreferrer");
-      return;
-    }
-    if (!z.storagePath) return;
-    const w = window.open("", "_blank", "noopener,noreferrer");
-    try {
-      const res = await fetch(`/api/attachments/url?path=${encodeURIComponent(z.storagePath)}`);
-      const json = (await res.json()) as { url?: string };
-      if (res.ok && json.url && w) w.location.href = json.url;
-      else w?.close();
-    } catch {
-      w?.close();
-    }
-  }
-
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       <select
@@ -280,18 +264,15 @@ function DokumentyKosztu({
       )}
 
       {zalaczniki.map((z) => (
-        <span
+        <div
           key={z.id}
           className="inline-flex items-center gap-1 rounded-full bg-surface2 border border-line px-2 py-1 text-[10px] text-dim"
         >
-          <button
-            type="button"
-            onClick={() => otworzZalacznik(z)}
-            className="max-w-[92px] truncate hover:text-amber-brand"
-            title={z.nazwa}
-          >
-            {z.typ === "licznik" ? "licznik" : "dokument"} · {z.nazwa}
-          </button>
+          <ZalacznikPreview
+            zalaczniki={[z]}
+            label={z.typ === "licznik" ? "Podgląd licznika" : "Podgląd dokumentu"}
+            compact
+          />
           <button
             type="button"
             onClick={() => onRemove(z.id)}
@@ -300,7 +281,7 @@ function DokumentyKosztu({
           >
             <IconX size={10} />
           </button>
-        </span>
+        </div>
       ))}
     </div>
   );
@@ -330,6 +311,173 @@ function Pager({ strona, total, onZmiana }: { strona: number; total: number; onZ
         </button>
       ))}
     </div>
+  );
+}
+
+function formatLitry(value: number | null | undefined): string {
+  if (value == null || !isFinite(value)) return "brak danych";
+  return `${value.toLocaleString("pl-PL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} L`;
+}
+
+function formatZlNaLitr(value: number | null | undefined): string {
+  if (value == null || !isFinite(value)) return "brak danych";
+  return `${value.toLocaleString("pl-PL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} zł/L`;
+}
+
+function FuelStatsValue({
+  label,
+  value,
+  tone = "normal",
+}: {
+  label: string;
+  value: string;
+  tone?: "normal" | "amber" | "green";
+}) {
+  return (
+    <div className="rounded-xl border border-line bg-surface2 px-3 py-2">
+      <p className="text-[10px] font-bold uppercase tracking-wide text-dim">{label}</p>
+      <p
+        className={cn(
+          "mt-0.5 text-sm font-extrabold tabular-nums",
+          tone === "amber" ? "text-amber-brand" : tone === "green" ? "text-green-300" : "text-white"
+        )}
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function FuelStatsRowView({ row }: { row: FuelStatsRow }) {
+  return (
+    <tr className={cn("border-t border-line/60", row.pomijanyPowod && "opacity-60")}>
+      <td className="px-2 py-2 tabular-nums text-ink">{row.data}</td>
+      <td className="px-2 py-2 text-dim">{row.kierowca ?? "—"}</td>
+      <td className="px-2 py-2 text-dim">{row.stacja ?? "—"}</td>
+      <td className="px-2 py-2 text-right tabular-nums text-ink">{formatLitry(row.litry)}</td>
+      <td className="px-2 py-2 text-right tabular-nums text-ink">{formatZlNaLitr(row.cenaNettoZaLitr)}</td>
+      <td className="px-2 py-2 text-right tabular-nums text-ink">{formatZlNaLitr(row.cenaBruttoZaLitr)}</td>
+      <td className="px-2 py-2 text-right tabular-nums text-ink">{formatZl(row.netto)}</td>
+      <td className="px-2 py-2 text-right tabular-nums text-dim">{row.vatRate ? vatRateLabel(row.vatRate) : "—"}</td>
+      <td className="px-2 py-2 text-right tabular-nums text-ink">{formatZl(row.vat)}</td>
+      <td className="px-2 py-2 text-right tabular-nums font-bold text-white">{formatZl(row.brutto)}</td>
+      <td className="px-2 py-2">
+        {row.pomijanyPowod ? (
+          <span className="text-[11px] text-red-300">{row.pomijanyPowod}</span>
+        ) : (
+          <ZalacznikPreview zalaczniki={row.zalaczniki} compact />
+        )}
+      </td>
+    </tr>
+  );
+}
+
+function FuelStatsPanel({
+  dane,
+  ustawienia,
+  miesiac,
+}: {
+  dane: DaneMiesiaca;
+  ustawienia: UstawieniaPodatkowe;
+  miesiac: MiesiącId;
+}) {
+  const [kierowca, setKierowca] = useState("");
+  const [stacja, setStacja] = useState("");
+  const stats = useMemo(
+    () =>
+      buildFuelStats(dane, ustawienia, {
+        kierowca: kierowca || undefined,
+        stacja: stacja || undefined,
+      }),
+    [dane, ustawienia, kierowca, stacja]
+  );
+  const s = stats.summary;
+
+  return (
+    <Card>
+      <div className="flex items-center gap-2 mb-3">
+        <IconGasStation size={18} className="text-amber-brand" />
+        <div className="min-w-0 flex-1">
+          <h3 className="text-sm font-bold uppercase tracking-wider text-dim">
+            Statystyki tankowania
+          </h3>
+          <p className="text-[11px] text-dim/70">
+            {POLSKIE_MIESIACE[miesiac]} 2026 · średnie liczone jako suma kwot / suma litrów
+          </p>
+        </div>
+      </div>
+
+      <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <label className="text-[11px] font-semibold text-dim">
+          Kierowca
+          <select
+            value={kierowca}
+            onChange={(e) => setKierowca(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-line bg-input px-2 py-2 text-sm text-ink"
+          >
+            <option value="">wszyscy</option>
+            {stats.filters.kierowcy.map((k) => (
+              <option key={k} value={k}>{k}</option>
+            ))}
+          </select>
+        </label>
+        <label className="text-[11px] font-semibold text-dim">
+          Stacja
+          <select
+            value={stacja}
+            onChange={(e) => setStacja(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-line bg-input px-2 py-2 text-sm text-ink"
+          >
+            <option value="">wszystkie</option>
+            {stats.filters.stacje.map((x) => (
+              <option key={x} value={x}>{x}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <FuelStatsValue label="Łącznie litrów" value={formatLitry(s.sumaLitrow)} tone="amber" />
+        <FuelStatsValue label="Liczba tankowań" value={`${s.liczbaTankowan}`} />
+        <FuelStatsValue label="Śr. brutto/l" value={formatZlNaLitr(s.sredniaBruttoZaLitr)} tone="amber" />
+        <FuelStatsValue label="Śr. netto/l" value={formatZlNaLitr(s.sredniaNettoZaLitr)} />
+        <FuelStatsValue label="Kwota brutto" value={formatZl(s.brutto)} tone="green" />
+        <FuelStatsValue label="Kwota netto" value={formatZl(s.netto)} />
+        <FuelStatsValue label="VAT" value={formatZl(s.vat)} />
+        <FuelStatsValue label="Pominięto" value={`${s.pominiete}`} />
+      </div>
+
+      <div className="mt-4 overflow-x-auto rounded-xl border border-line">
+        <table className="min-w-[980px] w-full text-left text-xs">
+          <thead className="bg-surface2 text-[10px] uppercase tracking-wide text-dim">
+            <tr>
+              <th className="px-2 py-2">Data</th>
+              <th className="px-2 py-2">Kierowca</th>
+              <th className="px-2 py-2">Stacja</th>
+              <th className="px-2 py-2 text-right">Litry</th>
+              <th className="px-2 py-2 text-right">Netto/l</th>
+              <th className="px-2 py-2 text-right">Brutto/l</th>
+              <th className="px-2 py-2 text-right">Netto</th>
+              <th className="px-2 py-2 text-right">VAT %</th>
+              <th className="px-2 py-2 text-right">VAT</th>
+              <th className="px-2 py-2 text-right">Brutto</th>
+              <th className="px-2 py-2">Dokument</th>
+            </tr>
+          </thead>
+          <tbody>
+            {stats.rows.length === 0 ? (
+              <tr>
+                <td colSpan={11} className="px-3 py-6 text-center text-sm text-dim">
+                  Brak tankowań w tym miesiącu.
+                </td>
+              </tr>
+            ) : (
+              stats.rows.map((row) => <FuelStatsRowView key={row.id} row={row} />)
+            )}
+          </tbody>
+        </table>
+      </div>
+    </Card>
   );
 }
 
@@ -1401,6 +1549,8 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
           </div>
         )}
       </Card>
+
+      <FuelStatsPanel dane={dane} ustawienia={ustawienia} miesiac={miesiac} />
 
       {/* ── SEKCJA: INNE KOSZTY ──────────────────────────────────────────── */}
       <Card>

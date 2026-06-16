@@ -10,11 +10,14 @@ import {
   DaneMiesiaca,
   KosztZalacznik,
   MiesiącId,
+  VatRate,
   WorkspaceData,
   WpisTankowania,
 } from "@/lib/types";
 
 export const runtime = "nodejs";
+
+const DOZWOLONE_VAT: VatRate[] = ["0", "0.05", "0.08", "0.23", "zw", "np"];
 
 type Profile = NonNullable<Awaited<ReturnType<typeof getSessionProfile>>>;
 
@@ -91,7 +94,7 @@ async function powiadomAdminow(
  * Dodanie tankowania przez kierowcę. Kierowca nie ma RLS-owego dostępu do
  * workspaces — zapis idzie przez service role (read-modify-write tablicy
  * `tankowanie` w danych miesiąca). Wpis ląduje w kosztach admina (kategoria
- * paliwo/AdBlue, VAT 23%). Generuje powiadomienie (+ push) do adminów.
+ * paliwo/AdBlue, VAT z OCR albo domyślnie 23%). Generuje powiadomienie (+ push) do adminów.
  *
  * body: { data?, koszt, litry?, sprzedawca?, nip?, zalacznik? (dataUrl) }
  */
@@ -108,6 +111,7 @@ export async function POST(req: NextRequest) {
     litry?: number;
     sprzedawca?: string;
     nip?: string;
+    vatRate?: VatRate;
     zalacznik?: string;
   };
   try {
@@ -189,7 +193,7 @@ export async function POST(req: NextRequest) {
     supplierName: body.sprzedawca?.trim() || undefined,
     supplierNip: body.nip?.replace(/[^0-9]/g, "").slice(0, 15) || undefined,
     amountMode: "brutto",
-    vatRate: "0.23", // paliwo zawsze 23%
+    vatRate: body.vatRate && DOZWOLONE_VAT.includes(body.vatRate) ? body.vatRate : "0.23",
     vatDeductible: true,
     vatDeductionPercent: ustawienia.fuelVatDeductionPercent,
     kategoria: "paliwo_adblue",
@@ -256,6 +260,7 @@ export async function GET() {
     data: string;
     koszt: number;
     litry?: number;
+    zalaczniki?: KosztZalacznik[];
     miesiac: number;
     nazwaMiesiaca: string;
     zamkniety: boolean;
@@ -272,6 +277,7 @@ export async function GET() {
         data: t.data,
         koszt: parseNum(t.koszt),
         litry: t.litry,
+        zalaczniki: t.zalaczniki ?? [],
         miesiac: m,
         nazwaMiesiaca: POLSKIE_MIESIACE[m],
         zamkniety,

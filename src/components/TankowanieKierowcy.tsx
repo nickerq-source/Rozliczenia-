@@ -13,7 +13,9 @@ import {
   receiptHasImportantData,
   scanReceiptDataUrl,
 } from "@/lib/receipt-scan-client";
+import type { KosztZalacznik, VatRate } from "@/lib/types";
 import { formatZlCaly } from "@/lib/business-logic";
+import { ZalacznikPreview } from "./ZalacznikPreview";
 import {
   IconGasStation,
   IconCamera,
@@ -31,6 +33,7 @@ interface WpisListy {
   data: string;
   koszt: number;
   litry?: number;
+  zalaczniki?: KosztZalacznik[];
   miesiac: number;
   nazwaMiesiaca: string;
   zamkniety: boolean;
@@ -60,6 +63,7 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
   const [fLitry, setFLitry] = useState("");
   const [fCena, setFCena] = useState(""); // cena za litr
   const [fKwota, setFKwota] = useState(""); // kwota brutto (razem)
+  const [fVat, setFVat] = useState<VatRate>("0.23");
   const [fSprzedawca, setFSprzedawca] = useState("");
   const [fNip, setFNip] = useState("");
   const [fZalacznik, setFZalacznik] = useState<string | null>(null);
@@ -84,6 +88,7 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
     setFLitry("");
     setFCena("");
     setFKwota("");
+    setFVat("0.23");
     setFSprzedawca("");
     setFNip("");
     setFZalacznik(null);
@@ -132,6 +137,7 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
       else if (o.litry != null && cena != null) {
         setFKwota(String(Math.round(o.litry * cena * 100) / 100));
       }
+      if (o.vatRate) setFVat(o.vatRate);
 
       // „Odczytano" tylko gdy realnie wpadło ≥1 ważne pole
       const cosOdczytano = receiptHasImportantData({ ...o, cenaZaLitr: cena });
@@ -170,6 +176,7 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
           data: fData,
           koszt: kwota,
           litry: isFinite(litry) && litry > 0 ? litry : undefined,
+          vatRate: fVat,
           sprzedawca: fSprzedawca || undefined,
           nip: fNip || undefined,
           zalacznik: fZalacznik || undefined,
@@ -309,6 +316,21 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
               />
             </label>
             <label className="text-dim">
+              VAT
+              <select
+                value={fVat}
+                onChange={(e) => setFVat(e.target.value as VatRate)}
+                className={inputCls}
+              >
+                <option value="0.23">23%</option>
+                <option value="0.08">8%</option>
+                <option value="0.05">5%</option>
+                <option value="0">0%</option>
+                <option value="zw">zw.</option>
+                <option value="np">np.</option>
+              </select>
+            </label>
+            <label className="text-dim">
               {t.fuel.date}
               <input
                 type="date"
@@ -369,6 +391,11 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
                     {w.litry ? <span className="text-dim"> · {w.litry} l</span> : null}
                   </p>
                   <p className="text-[11px] text-dim">{ddmm(w.data)} · {driverMonthName(lang, w.miesiac)}</p>
+                  {w.zalaczniki?.length ? (
+                    <div className="mt-1">
+                      <ZalacznikPreview zalaczniki={w.zalaczniki} compact />
+                    </div>
+                  ) : null}
                 </div>
 
                 {w.zamkniety ? (
