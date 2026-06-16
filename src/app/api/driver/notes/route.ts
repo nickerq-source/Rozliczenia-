@@ -13,6 +13,12 @@ interface SubRow {
   subscription: object;
 }
 
+function unreadDriverNotes(notatki: Notatka[]): number {
+  return notatki.filter(
+    (n) => n.kanal === "kierowca" && !n.odKierowcy && !n.readByDriverAt
+  ).length;
+}
+
 /** Bieżący miesiąc w dozwolonym zakresie (fallback: pierwszy) */
 function biezacyMiesiac(): number {
   const m = new Date().getMonth() + 1;
@@ -41,18 +47,21 @@ export async function GET() {
   }
 
   const wsData = (ws.data ?? {}) as WorkspaceData;
-  const notatki = (wsData.notatki ?? [])
+  const wszystkie = wsData.notatki ?? [];
+  const notatki = wszystkie
     .filter((n) => n.kanal === "kierowca")
     .map((n) => ({
       id: n.id,
       tresc: n.tresc,
       autor: n.autor,
       odKierowcy: !!n.odKierowcy,
+      dataWydarzenia: n.dataWydarzenia ?? null,
+      readByDriverAt: n.readByDriverAt ?? null,
       dataUtworzenia: n.dataUtworzenia,
     }))
     .sort((a, b) => (a.dataUtworzenia < b.dataUtworzenia ? 1 : -1));
 
-  return NextResponse.json({ notatki });
+  return NextResponse.json({ notatki, unreadCount: unreadDriverNotes(wszystkie) });
 }
 
 export async function POST(req: NextRequest) {
@@ -148,4 +157,59 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ ok: true, notatka: { id: nowa.id, tresc: nowa.tresc, autor: nowa.autor, odKierowcy: true, dataUtworzenia: nowa.dataUtworzenia } });
+}
+
+export async function PATCH(req: NextRequest) {
+  const profile = await getSessionProfile();
+  if (!profile) return NextResponse.json({ error: "Brak sesji" }, { status: 401 });
+  if (profile.role !== "driver") {
+    return NextResponse.json({ error: "Tylko dla kierowcy" }, { status: 403 });
+  }
+
+  let body: { id?: string; action?: "read" };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Nieprawidłowy JSON" }, { status: 400 });
+  }
+
+  if (!body.id || body.action !== "read") {
+    return NextResponse.json({ error: "Nieprawidłowa akcja" }, { status: 400 });
+  }
+
+  const admin = getAdminSupabase();
+  const { data: ws, error } = await admin
+    .from("workspaces")
+    .select("data")
+    .eq("id", profile.workspace_id)
+    .single();
+  if (error || !ws) {
+    return NextResponse.json({ error: "Workspace nie znaleziony" }, { status: 404 });
+  }
+
+  const wsData = (ws.data ?? {}) as WorkspaceData;
+  let found = false;
+  const now = new Date().toISOString();
+  const notatki = (wsData.notatki ?? []).map((n) => {
+    if (n.id !== body.id || n.kanal !== "kierowca" || n.odKierowcy) return n;
+    found = true;
+    return {
+      ...n,
+      readByDriverAt: n.readByDriverAt ?? now,
+      readByDriverId: n.readByDriverId ?? profile.id,
+    };
+  });
+
+  if (!found) {
+    return NextResponse.json({ error: "Wiadomość nie znaleziona" }, { status: 404 });
+  }
+
+  const nowaData: WorkspaceData = { ...wsData, notatki };
+  const { error: saveErr } = await admin
+    .from("workspaces")
+    .update({ data: nowaData, updated_at: now })
+    .eq("id", profile.workspace_id);
+  if (saveErr) return NextResponse.json({ error: saveErr.message }, { status: 503 });
+
+  return NextResponse.json({ ok: true, readAt: now, unreadCount: unreadDriverNotes(notatki) });
 }

@@ -1,7 +1,7 @@
 {
   "crons": [
     { "path": "/api/cron/auto-pay-invoices", "schedule": "0 5 * * *" },
-    { "path": "/api/cron/note-reminders", "schedule": "0 6 * * *" },
-    { "path": "/api/cron/note-reminders", "schedule": "0 21 * * *" }
+    { "path": "/api/cron/note-reminders", "schedule": "0 7 * * *" },
+    { "path": "/api/cron/note-reminders", "schedule": "0 8 * * *" }
   ]
 }

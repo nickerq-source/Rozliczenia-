@@ -194,6 +194,9 @@ export interface Notatka {
   tresc: string;
   dataUtworzenia: string; // ISO datetime
   dataWydarzenia?: string; // ISO "YYYY-MM-DD" — termin/przypomnienie
+  readByDriverAt?: string; // ISO datetime — kierowca potwierdził przeczytanie
+  readByDriverId?: string; // auth/profile id kierowcy
+  reminderSentAt?: string; // ISO datetime — przypomnienie w dniu wydarzenia wysłane
   autor: string;
   miesiac: number;
   kanal?: NotatkaKanal; // domyślnie "admin" (notatki sprzed podziału = wewnętrzne)

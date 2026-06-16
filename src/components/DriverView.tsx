@@ -108,6 +108,7 @@ export function DriverView({ name }: { name: string }) {
   const [language, setLanguage] = useState<DriverLanguage>("pl");
   const [languageBusy, setLanguageBusy] = useState(false);
   const [languageError, setLanguageError] = useState(false);
+  const [unreadMessages, setUnreadMessages] = useState(0);
   const t = driverTexts(language);
 
   async function load() {
@@ -130,6 +131,25 @@ export function DriverView({ name }: { name: string }) {
 
   useEffect(() => {
     load();
+  }, []);
+
+  useEffect(() => {
+    const tab = new URLSearchParams(window.location.search).get("tab");
+    if (tab === "wiadomosci") setKategoria("wiadomosci");
+    if (tab === "tankowanie") setKategoria("tankowanie");
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch("/api/driver/notes", { cache: "no-store" });
+        if (!r.ok) return;
+        const j = await r.json();
+        setUnreadMessages(j.unreadCount ?? 0);
+      } catch {
+        setUnreadMessages(0);
+      }
+    })();
   }, []);
 
   useEffect(() => {
@@ -222,7 +242,12 @@ export function DriverView({ name }: { name: string }) {
               error={languageError}
               onChange={changeLanguage}
             />
-            <KategorieKierowcy active={kategoria} lang={language} onChange={setKategoria} />
+            <KategorieKierowcy
+              active={kategoria}
+              lang={language}
+              unreadMessages={unreadMessages}
+              onChange={setKategoria}
+            />
           </div>
         </header>
 
@@ -285,7 +310,7 @@ export function DriverView({ name }: { name: string }) {
           {kategoria === "wiadomosci" && (
             <>
               <PowiadomieniaKierowcy lang={language} />
-              <WiadomosciKierowcy lang={language} />
+              <WiadomosciKierowcy lang={language} onUnreadChange={setUnreadMessages} />
             </>
           )}
 
@@ -353,10 +378,12 @@ function LanguageSwitch({
 function KategorieKierowcy({
   active,
   lang,
+  unreadMessages,
   onChange,
 }: {
   active: DriverKategoria;
   lang: DriverLanguage;
+  unreadMessages: number;
   onChange: (kategoria: DriverKategoria) => void;
 }) {
   const t = driverTexts(lang);
@@ -377,7 +404,7 @@ function KategorieKierowcy({
             type="button"
             onClick={() => onChange(item.id)}
             className={cn(
-              "flex-1 min-h-[40px] border-b-2 -mb-px px-1 py-2 text-[12px] font-medium transition-all duration-150",
+              "relative flex-1 min-h-[40px] border-b-2 -mb-px px-1 py-2 text-[12px] font-medium transition-all duration-150",
               selected
                 ? "border-amber-brand text-white font-bold"
                 : "border-transparent text-dim hover:text-ink"
@@ -385,6 +412,11 @@ function KategorieKierowcy({
           >
             <span className="hidden min-[390px]:inline">{item.label}</span>
             <span className="min-[390px]:hidden">{item.short}</span>
+            {item.id === "wiadomosci" && unreadMessages > 0 && (
+              <span className="absolute right-1 top-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-black leading-none text-white shadow">
+                {unreadMessages > 9 ? "9+" : unreadMessages}
+              </span>
+            )}
           </button>
         );
       })}

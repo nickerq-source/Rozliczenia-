@@ -8,6 +8,7 @@ export const DRIVER_VISIBLE_ACTIONS = [
   "obciazenie_dodane",
   "obciazenie_usuniete",
   "notatka_kierowca", // notatka napisana do kierowcy
+  "przypomnienie_kierowca", // przypomnienie o terminie notatki dla kierowcy
 ] as const;
 
 export function czyWidoczneDlaKierowcy(action: string): boolean {

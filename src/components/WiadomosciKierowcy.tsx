@@ -15,6 +15,8 @@ interface Wiadomosc {
   tresc: string;
   autor: string;
   odKierowcy: boolean;
+  dataWydarzenia?: string | null;
+  readByDriverAt?: string | null;
   dataUtworzenia: string;
 }
 
@@ -24,11 +26,19 @@ function formatCzas(iso: string): string {
   return `${p(d.getDate())}.${p(d.getMonth() + 1)} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
-export function WiadomosciKierowcy({ lang }: { lang: DriverLanguage }) {
+export function WiadomosciKierowcy({
+  lang,
+  onUnreadChange,
+}: {
+  lang: DriverLanguage;
+  onUnreadChange?: (count: number) => void;
+}) {
   const t = driverTexts(lang);
   const [lista, setLista] = useState<Wiadomosc[] | null>(null);
   const [tresc, setTresc] = useState("");
   const [busy, setBusy] = useState(false);
+  const [readBusyId, setReadBusyId] = useState<string | null>(null);
+  const [readErrorId, setReadErrorId] = useState<string | null>(null);
 
   const wczytaj = useCallback(async () => {
     try {
@@ -36,10 +46,12 @@ export function WiadomosciKierowcy({ lang }: { lang: DriverLanguage }) {
       if (!r.ok) return;
       const j = await r.json();
       setLista(j.notatki ?? []);
+      onUnreadChange?.(j.unreadCount ?? 0);
     } catch {
       setLista([]);
+      onUnreadChange?.(0);
     }
-  }, []);
+  }, [onUnreadChange]);
 
   useEffect(() => {
     wczytaj();
@@ -63,6 +75,31 @@ export function WiadomosciKierowcy({ lang }: { lang: DriverLanguage }) {
       /* spróbuje ponownie */
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function potwierdzPrzeczytanie(id: string) {
+    if (readBusyId) return;
+    setReadBusyId(id);
+    setReadErrorId(null);
+    try {
+      const r = await fetch("/api/driver/notes", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, action: "read" }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error ?? t.messages.readError);
+      setLista((prev) =>
+        prev?.map((w) =>
+          w.id === id ? { ...w, readByDriverAt: j.readAt ?? new Date().toISOString() } : w
+        ) ?? prev
+      );
+      onUnreadChange?.(j.unreadCount ?? 0);
+    } catch {
+      setReadErrorId(id);
+    } finally {
+      setReadBusyId(null);
     }
   }
 
@@ -112,10 +149,42 @@ export function WiadomosciKierowcy({ lang }: { lang: DriverLanguage }) {
                   : "bg-surface2 border-line mr-6"
               )}
             >
+              {!w.odKierowcy && !w.readByDriverAt && (
+                <span className="mb-2 inline-flex items-center gap-1 rounded-full bg-red-500/15 border border-red-500/40 px-2 py-0.5 text-[10px] font-bold text-red-300">
+                  {t.messages.newNote} · {t.messages.unread}
+                </span>
+              )}
               <p className="text-sm text-ink whitespace-pre-wrap leading-snug">{w.tresc}</p>
+              {w.dataWydarzenia && (
+                <p className="mt-1 text-[11px] text-amber-brand tabular-nums">
+                  {w.dataWydarzenia.slice(8, 10)}.{w.dataWydarzenia.slice(5, 7)}.{w.dataWydarzenia.slice(0, 4)}
+                </p>
+              )}
               <p className="text-[11px] text-dim/60 mt-1">
                 {w.odKierowcy ? t.messages.you : w.autor} · {formatCzas(w.dataUtworzenia)}
               </p>
+              {!w.odKierowcy && (
+                <div className="mt-2">
+                  {w.readByDriverAt ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-green-soft border border-green-500/40 px-2 py-1 text-[11px] text-green-300">
+                      <IconCheck size={12} /> {t.messages.readConfirmed}
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => potwierdzPrzeczytanie(w.id)}
+                      disabled={readBusyId === w.id}
+                      className="inline-flex min-h-[34px] items-center gap-1.5 rounded-lg bg-amber-brand px-3 py-1.5 text-xs font-bold text-amber-ink disabled:opacity-50"
+                    >
+                      {readBusyId === w.id ? <IconLoader size={13} /> : <IconCheck size={13} />}
+                      {t.messages.confirmRead}
+                    </button>
+                  )}
+                  {readErrorId === w.id && (
+                    <p className="mt-1 text-[11px] text-red-300">{t.messages.readError}</p>
+                  )}
+                </div>
+              )}
             </div>
           ))
         )}

@@ -154,22 +154,39 @@ export function SkanParagonu({ typ, ustawienia, onZapisz, disabled }: Props) {
 
   return (
     <>
-      <label
-        className={`mt-3 w-full flex items-center justify-center gap-2 py-2.5 min-h-[44px] rounded-xl border border-dashed border-amber-brand/50 text-sm text-amber-brand transition-all duration-150 ${
-          disabled || busy ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-amber-brand/10"
-        }`}
-      >
-        {busy ? <IconLoader size={15} /> : <IconCamera size={15} />}
-        {busy ? "Odczytuję paragon…" : "📷 Dodaj ze zdjęcia (AI)"}
-        <input
-          type="file"
-          accept="image/*,.heic,.heif"
-          capture="environment"
-          className="hidden"
-          disabled={disabled || busy}
-          onChange={onPlik}
-        />
-      </label>
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <label
+          className={`w-full flex items-center justify-center gap-2 py-2.5 min-h-[44px] rounded-xl border border-dashed border-amber-brand/50 text-sm text-amber-brand transition-all duration-150 ${
+            disabled || busy ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-amber-brand/10"
+          }`}
+        >
+          {busy ? <IconLoader size={15} /> : <IconCamera size={15} />}
+          {busy ? "Odczytuję…" : "Zrób zdjęcie"}
+          <input
+            type="file"
+            accept="image/*,.heic,.heif"
+            capture="environment"
+            className="hidden"
+            disabled={disabled || busy}
+            onChange={onPlik}
+          />
+        </label>
+        <label
+          className={`w-full flex items-center justify-center gap-2 py-2.5 min-h-[44px] rounded-xl border border-dashed border-amber-brand/50 text-sm text-amber-brand transition-all duration-150 ${
+            disabled || busy ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-amber-brand/10"
+          }`}
+        >
+          {busy ? <IconLoader size={15} /> : <IconCamera size={15} />}
+          {busy ? "Odczytuję…" : "Wybierz z galerii"}
+          <input
+            type="file"
+            accept="image/*,.heic,.heif"
+            className="hidden"
+            disabled={disabled || busy}
+            onChange={onPlik}
+          />
+        </label>
+      </div>
 
       {modal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70" onClick={() => setModal(null)}>

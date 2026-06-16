@@ -110,6 +110,8 @@ export const DRIVER_TRANSLATIONS = {
       aiManual: "AI niedostępne — wpisz dane",
       aiRead: "Odczytano ze zdjęcia — sprawdź",
       readError: "Nie udało się odczytać zdjęcia. Wpisz dane ręcznie.",
+      takePhoto: "Zrób zdjęcie",
+      chooseGallery: "Wybierz z galerii",
       amountRequired: "Podaj kwotę tankowania (zł).",
       saveError: "Nie udało się zapisać tankowania.",
       connectionError: "Błąd połączenia. Spróbuj ponownie.",
@@ -136,6 +138,11 @@ export const DRIVER_TRANSLATIONS = {
       loading: "Ładowanie…",
       empty: "Brak wiadomości.",
       you: "Ty",
+      newNote: "Nowa notatka",
+      unread: "Nieprzeczytane",
+      confirmRead: "Potwierdzam, że przeczytałem",
+      readConfirmed: "Przeczytane",
+      readError: "Nie udało się potwierdzić przeczytania.",
     },
     notifications: {
       title: "Powiadomienia",
@@ -358,6 +365,8 @@ export const DRIVER_TRANSLATIONS = {
       aiManual: "AI недоступен — введи данные",
       aiRead: "Считано с фото — проверь",
       readError: "Не удалось считать фото. Введи данные вручную.",
+      takePhoto: "Сделать фото",
+      chooseGallery: "Выбрать из галереи",
       amountRequired: "Укажи сумму заправки (zł).",
       saveError: "Не удалось сохранить заправку.",
       connectionError: "Ошибка соединения. Попробуй снова.",
@@ -384,6 +393,11 @@ export const DRIVER_TRANSLATIONS = {
       loading: "Загрузка…",
       empty: "Нет сообщений.",
       you: "Ты",
+      newNote: "Новая заметка",
+      unread: "Не прочитано",
+      confirmRead: "Подтверждаю, что прочитал",
+      readConfirmed: "Прочитано",
+      readError: "Не удалось подтвердить прочтение.",
     },
     notifications: {
       title: "Уведомления",
@@ -558,6 +572,10 @@ export function driverNotificationDescription(lang: DriverLanguage, description:
   text = text.replace(
     /^(.+?) zaktualizował wypłatę kierowcy: (.+)$/u,
     "$1 обновил выплату водителя: $2"
+  );
+  text = text.replace(
+    /^Dziś: (.+)$/u,
+    "Сегодня: $1"
   );
 
   const monthPairs: Array<[string, string]> = [

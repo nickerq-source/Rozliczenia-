@@ -65,6 +65,7 @@ export function NotatkiPanel({ token, miesiac, notatki, userName, onUpdate, kana
       action: doKierowcy ? "notatka_kierowca" : "notatka",
       entity: "note",
       entityId: nowa.id,
+      url: doKierowcy ? "/driver?tab=wiadomosci" : "/dashboard",
       description: doKierowcy
         ? `${userName} napisał do kierowcy: ${trimmed.slice(0, 60)}${trimmed.length > 60 ? "…" : ""}`
         : `${userName} dodał notatkę: ${trimmed.slice(0, 60)}${trimmed.length > 60 ? "…" : ""}`,
@@ -198,6 +199,30 @@ export function NotatkiPanel({ token, miesiac, notatki, userName, onUpdate, kana
                 {n.odKierowcy && (
                   <span className="px-1.5 py-0.5 rounded-full bg-green-soft border border-green-500/40 text-[10px] text-green-300">
                     od kierowcy
+                  </span>
+                )}
+                {doKierowcy && !n.odKierowcy && (
+                  <span
+                    className={cn(
+                      "px-1.5 py-0.5 rounded-full border text-[10px] font-semibold",
+                      n.readByDriverAt
+                        ? "bg-green-soft border-green-500/40 text-green-300"
+                        : "bg-red-500/10 border-red-500/40 text-red-300"
+                    )}
+                    title={
+                      n.readByDriverAt
+                        ? `Przeczytane: ${formatCzas(n.readByDriverAt)}`
+                        : "Kierowca jeszcze nie potwierdził przeczytania"
+                    }
+                  >
+                    {n.readByDriverAt
+                      ? `Przeczytane · ${formatCzas(n.readByDriverAt)}`
+                      : "Nieprzeczytane"}
+                  </span>
+                )}
+                {doKierowcy && !n.odKierowcy && (
+                  <span className="px-1.5 py-0.5 rounded-full bg-surface border border-line text-[10px] text-dim">
+                    do kierowcy
                   </span>
                 )}
                 {wszystkieMiesiace && (

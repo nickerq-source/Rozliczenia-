@@ -227,7 +227,7 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
           <button
             type="button"
             onClick={() => { reset(); setOpen(true); }}
-            className="flex items-center justify-center gap-1.5 py-2.5 min-h-[44px] rounded-xl border border-dashed border-amber-brand/50 text-sm text-amber-brand hover:bg-amber-brand/10 transition-all"
+            className="col-span-2 flex items-center justify-center gap-1.5 py-2.5 min-h-[44px] rounded-xl border border-dashed border-amber-brand/50 text-sm text-amber-brand hover:bg-amber-brand/10 transition-all"
           >
             <IconPlus size={15} /> {t.fuel.manual}
           </button>
@@ -237,11 +237,26 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
             }`}
           >
             {busy ? <IconLoader size={15} /> : <IconCamera size={15} />}
-            {busy ? t.fuel.reading : t.fuel.photo}
+            {busy ? t.fuel.reading : t.fuel.takePhoto}
             <input
               type="file"
               accept="image/*,.heic,.heif"
               capture="environment"
+              className="hidden"
+              disabled={busy}
+              onChange={onZdjecie}
+            />
+          </label>
+          <label
+            className={`flex items-center justify-center gap-1.5 py-2.5 min-h-[44px] rounded-xl border border-dashed border-amber-brand/50 text-sm text-amber-brand transition-all ${
+              busy ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-amber-brand/10"
+            }`}
+          >
+            {busy ? <IconLoader size={15} /> : <IconCamera size={15} />}
+            {busy ? t.fuel.reading : t.fuel.chooseGallery}
+            <input
+              type="file"
+              accept="image/*,.heic,.heif"
               className="hidden"
               disabled={busy}
               onChange={onZdjecie}
