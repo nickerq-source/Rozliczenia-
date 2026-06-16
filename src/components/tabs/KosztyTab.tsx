@@ -2,6 +2,7 @@
 
 // Zakładka Koszty — sekcje: Dni kierowcy, Tankowanie, Inne koszty, Leasing
 
+import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 import {
@@ -58,6 +59,9 @@ import {
   IconCheck,
   IconAlertTriangle,
   IconPaperclip,
+  IconChartBar,
+  IconMoneybag,
+  IconPlus,
 } from "../ui/icons";
 import { logChange } from "@/lib/audit";
 import { SkanParagonu } from "../SkanParagonu";
@@ -149,11 +153,27 @@ const PAYER_OPTIONS: { id: KosztPayer; label: string }[] = [
 
 type PayerFilter = "all" | KosztPayer;
 type PodkategoriaKosztow = "all" | "tankowanie" | "samochod_dzialalnosc";
+type WidokKosztow =
+  | "all"
+  | "wyplata"
+  | "tankowanie"
+  | "samochod"
+  | "rozliczenie"
+  | "statystyki";
 
 const PODKATEGORIE_KOSZTOW: { id: PodkategoriaKosztow; label: string }[] = [
   { id: "all", label: "wszystkie" },
   { id: "tankowanie", label: "Tankowanie" },
   { id: "samochod_dzialalnosc", label: "Samochód i działalność" },
+];
+
+const WIDOKI_KOSZTOW: { id: WidokKosztow; label: string; short: string }[] = [
+  { id: "all", label: "Wszystkie", short: "Wszystkie" },
+  { id: "wyplata", label: "Wypłata kierowcy", short: "Wypłata" },
+  { id: "tankowanie", label: "Tankowanie", short: "Paliwo" },
+  { id: "samochod", label: "Samochód i działalność", short: "Auto" },
+  { id: "rozliczenie", label: "Rozliczenie 50/50", short: "50/50" },
+  { id: "statystyki", label: "Statystyki tankowania", short: "Statystyki" },
 ];
 
 function statusDokumentu(wpis: KosztVatInfo): DocumentStatus {
@@ -168,6 +188,86 @@ function normalizePayer(value: KosztVatInfo["paidBy"] | string | undefined): Kos
 function podkategoriaKosztu(typ: "tankowanie" | "inne", kategoria: KategoriaKosztu | undefined): Exclude<PodkategoriaKosztow, "all"> {
   if (typ === "tankowanie" || kategoria === "paliwo_adblue") return "tankowanie";
   return "samochod_dzialalnosc";
+}
+
+function KosztySectionSwitch({
+  active,
+  onChange,
+}: {
+  active: WidokKosztow;
+  onChange: (value: WidokKosztow) => void;
+}) {
+  return (
+    <div className="sticky top-[128px] z-[2] -mx-3 overflow-x-auto bg-bg/75 px-3 py-2 backdrop-blur-xl sm:static sm:mx-0 sm:bg-transparent sm:px-0 sm:py-0">
+      <div className="flex gap-1.5">
+        {WIDOKI_KOSZTOW.map((widok) => (
+          <button
+            key={widok.id}
+            type="button"
+            onClick={() => onChange(widok.id)}
+            className={cn(
+              "shrink-0 rounded-full border px-3 py-2 text-xs font-extrabold transition-all",
+              active === widok.id
+                ? "border-amber-brand bg-amber-brand text-amber-ink"
+                : "border-line bg-surface/80 text-dim hover:border-amber-brand/50 hover:text-ink"
+            )}
+          >
+            <span className="hidden sm:inline">{widok.label}</span>
+            <span className="sm:hidden">{widok.short}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function KosztyMetricCard({
+  icon,
+  label,
+  value,
+  tone = "normal",
+  hint,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+  tone?: "normal" | "amber" | "green" | "red";
+  hint?: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-line bg-surface p-3">
+      <div className="mb-2 flex items-center gap-2">
+        <span
+          className={cn(
+            "flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border",
+            tone === "green"
+              ? "border-green-500/35 bg-green-soft text-green-300"
+              : tone === "red"
+              ? "border-red-500/35 bg-red-soft text-red-300"
+              : "border-amber-brand/35 bg-amber-brand/10 text-amber-brand"
+          )}
+        >
+          {icon}
+        </span>
+        <p className="text-[10px] font-extrabold uppercase tracking-wider text-dim">{label}</p>
+      </div>
+      <p
+        className={cn(
+          "tabular-nums text-lg font-extrabold",
+          tone === "green"
+            ? "text-green-300"
+            : tone === "red"
+            ? "text-red-300"
+            : tone === "amber"
+            ? "text-amber-brand"
+            : "text-white"
+        )}
+      >
+        {value}
+      </p>
+      {hint && <p className="mt-1 text-[10px] leading-snug text-dim/75">{hint}</p>}
+    </div>
+  );
 }
 
 function PayerSelect({
@@ -918,6 +1018,8 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
   const [rozwiniete, setRozwiniete] = useState<Record<string, boolean>>({});
   const [autoBusyId, setAutoBusyId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [widokKosztow, setWidokKosztow] = useState<WidokKosztow>("all");
+  const [quickActionsOpen, setQuickActionsOpen] = useState(false);
   // Paginacja list kosztów (1-indeksowana)
   const [stronaTank, setStronaTank] = useState(1);
   const [stronaInne, setStronaInne] = useState(1);
@@ -1583,6 +1685,41 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
 
   const sumaFuel = obliczKosztPaliwa(dane.tankowanie);
   const sumaInne = obliczInneKoszty(dane.inneKoszty);
+  const kosztyPodatkowe = useMemo(() => {
+    const entries: Array<KosztVatInfo & { koszt: number; domyslna: KategoriaKosztu }> = [
+      ...(dane.tankowanie ?? []).map((t) => ({
+        ...t,
+        kategoria: t.kategoria ?? ("paliwo_adblue" as KategoriaKosztu),
+        domyslna: "paliwo_adblue" as KategoriaKosztu,
+      })),
+      ...(dane.inneKoszty ?? []).map((k) => ({
+        ...k,
+        domyslna: "inne" as KategoriaKosztu,
+      })),
+    ];
+
+    return entries.reduce(
+      (acc, wpis) => {
+        const r = rozbijWpis(wpis, ustawienia, wpis.domyslna);
+        acc.brutto += r.brutto;
+        acc.netto += r.netto;
+        acc.vat += r.vat;
+        acc.vatDoOdliczenia += r.vatDoOdliczenia;
+        if (statusDokumentu(wpis) === "brak") acc.bezDokumentu += 1;
+        return acc;
+      },
+      { brutto: 0, netto: 0, vat: 0, vatDoOdliczenia: 0, bezDokumentu: 0 }
+    );
+  }, [dane.tankowanie, dane.inneKoszty, ustawienia]);
+  const fuelSummary = useMemo(
+    () => buildFuelStats(dane, ustawienia).summary,
+    [dane, ustawienia]
+  );
+  const showWyplata = widokKosztow === "all" || widokKosztow === "wyplata";
+  const showTankowanie = widokKosztow === "all" || widokKosztow === "tankowanie";
+  const showSamochod = widokKosztow === "all" || widokKosztow === "samochod";
+  const showRozliczenie = widokKosztow === "all" || widokKosztow === "rozliczenie";
+  const showStatystyki = widokKosztow === "all" || widokKosztow === "statystyki";
 
   // Paginacja: tyle stron ile trzeba, po KOSZTY_NA_STRONE pozycji.
   // Stronę klampujemy, żeby po usunięciu wpisów nie wisieć na nieistniejącej.
@@ -1598,8 +1735,60 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
 
   return (
     <div className="space-y-4">
+      <KosztySectionSwitch active={widokKosztow} onChange={setWidokKosztow} />
+
+      <div className="grid grid-cols-2 gap-2">
+        <KosztyMetricCard
+          icon={<IconMoneybag size={17} />}
+          label="Koszty brutto"
+          value={formatZl(kosztyPodatkowe.brutto + wynagrodzenie + parseNum(dane.leasing))}
+          hint="wpisy kosztów + wypłata + leasing"
+          tone="amber"
+        />
+        <KosztyMetricCard
+          icon={<IconChartBar size={17} />}
+          label="Netto z dokumentów"
+          value={formatZl(kosztyPodatkowe.netto)}
+          hint="bez wypłaty i leasingu"
+        />
+        <KosztyMetricCard
+          icon={<IconCheck size={17} />}
+          label="VAT do odliczenia"
+          value={formatZl(kosztyPodatkowe.vatDoOdliczenia)}
+          tone="green"
+        />
+        <KosztyMetricCard
+          icon={<IconAlertTriangle size={17} />}
+          label="Bez dokumentu"
+          value={`${kosztyPodatkowe.bezDokumentu}`}
+          hint="nie wchodzi do VAT"
+          tone={kosztyPodatkowe.bezDokumentu > 0 ? "red" : "green"}
+        />
+      </div>
+
+      <div className="rounded-2xl border border-line bg-surface/90 p-3">
+        <div className="flex items-center gap-2">
+          <IconGasStation size={18} className="text-amber-brand" />
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-extrabold uppercase tracking-wider text-dim">
+              Skrót tankowania
+            </p>
+            <p className="text-[11px] text-dim/75">
+              {fuelSummary.liczbaTankowan} tankowań · {formatLitry(fuelSummary.sumaLitrow)} · śr. {formatZlNaLitr(fuelSummary.sredniaBruttoZaLitr)}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setWidokKosztow("statystyki")}
+            className="rounded-full border border-amber-brand/40 px-3 py-1.5 text-xs font-bold text-amber-brand hover:bg-amber-brand/10"
+          >
+            Statystyki
+          </button>
+        </div>
+      </div>
+
       {/* ── SEKCJA: ZGŁOSZENIA KIEROWCY ──────────────────────────────────── */}
-      {oczekujace.length > 0 && (
+      {oczekujace.length > 0 && showWyplata && (
         <Card className="!border-amber-brand/50">
           <div className="flex items-center gap-2 mb-3">
             <IconAlertTriangle size={18} className="text-amber-brand" />
@@ -1671,7 +1860,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
       )}
 
       {/* ── PODKATEGORIA: WYPŁATA KIEROWCY ──────────────────────────────── */}
-      <Card>
+      {showWyplata && <Card>
         <CardTitle>Wypłata kierowcy</CardTitle>
         <p className="mb-3 text-xs text-dim">
           Dniówki, kółka, zlecenia, premie i dodatki kierowcy.
@@ -1691,7 +1880,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
 
         {/* Nagłówek kolumn */}
         <div className={cn(
-          "grid gap-2 text-xs font-bold uppercase tracking-wide text-dim mb-2 px-2",
+          "hidden gap-2 text-xs font-bold uppercase tracking-wide text-dim mb-2 px-2 sm:grid",
           miesiac === 6 ? "grid-cols-[1fr_4rem_4rem_6rem]" : "grid-cols-[1fr_4rem_6rem]"
         )}>
           <span>Dzień</span>
@@ -1724,7 +1913,105 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
                 {separator}
                 <div
                   className={cn(
-                    "grid gap-2 items-center rounded-xl py-1.5 px-2",
+                    "space-y-3 rounded-2xl border border-line/70 bg-surface2/55 p-3 sm:hidden",
+                    sporny && "ring-1 ring-amber-brand",
+                    aktywna && sob && "border-green-500/35",
+                    aktywna && nie && "border-yellow-500/35"
+                  )}
+                  style={
+                    sob && aktywna
+                      ? { background: "var(--sat-bg)" }
+                      : nie && aktywna
+                      ? { background: "var(--sun-bg)" }
+                      : undefined
+                  }
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className={cn("text-xl font-extrabold tabular-nums", aktywna && (sob || nie) ? "text-white" : "text-ink")}>
+                          {nrDnia(iso)}
+                        </span>
+                        <span className={cn(
+                          "text-sm font-bold",
+                          aktywna && (sob || nie)
+                            ? "text-white/75"
+                            : sob ? "text-green-400" : nie ? "text-yellow-400" : "text-dim"
+                        )}>
+                          {nazwaSkrotDnia(iso)}
+                        </span>
+                      </div>
+                      <select
+                        value={typDnia}
+                        onChange={(e) => setDayType(iso, e.target.value as DayType)}
+                        title="Typ dnia"
+                        className={cn("mt-2 min-h-[38px] rounded-full border px-3 py-1.5 text-sm font-extrabold", meta.chipCls)}
+                      >
+                        {TYPY_DNIA.map((t) => (
+                          <option key={t.id} value={t.id}>{t.krotki} — {t.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-white/55">Dniówka</p>
+                      {info?.dniowka ? (
+                        <p className="tabular-nums text-xl font-extrabold text-white">
+                          {formatZlCaly(info.dniowka)}
+                        </p>
+                      ) : (
+                        <p className="text-lg font-bold text-dim/50">—</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className={cn("grid gap-2", miesiac === 6 ? "grid-cols-2" : "grid-cols-1")}>
+                    <label className="text-[11px] font-bold uppercase tracking-wider text-dim">
+                      Kółka
+                      {wolny ? (
+                        <span className={cn("mt-1 flex min-h-[44px] items-center justify-center rounded-xl border px-3 text-sm font-extrabold", meta.chipCls)}>
+                          {meta.krotki}
+                        </span>
+                      ) : dzienMaKolka ? (
+                        <NumInput
+                          value={dzien.kolka || ""}
+                          onChange={(v) => setKolka(iso, v)}
+                          onFocus={() => startDayEdit(iso, "kolka", dzien.kolka)}
+                          onBlur={(e) => finishDayEdit(iso, "kolka", parseNum(e.currentTarget.value))}
+                          placeholder="0"
+                          className="mt-1 !text-center !text-lg"
+                        />
+                      ) : (
+                        <span className="mt-1 flex min-h-[44px] items-center justify-center rounded-xl border border-line bg-input text-dim/50">
+                          —
+                        </span>
+                      )}
+                    </label>
+
+                    {miesiac === 6 && (
+                      <label className="text-[11px] font-bold uppercase tracking-wider text-dim">
+                        Szkolenie
+                        {dzienMaKolka ? (
+                          <NumInput
+                            value={dzien.szkolenie || ""}
+                            onChange={(v) => setSzkolenie(iso, v)}
+                            onFocus={() => startDayEdit(iso, "szkolenie", dzien.szkolenie)}
+                            onBlur={(e) => finishDayEdit(iso, "szkolenie", parseNum(e.currentTarget.value))}
+                            placeholder="0"
+                            className="mt-1 !text-center !text-lg"
+                          />
+                        ) : (
+                          <span className="mt-1 flex min-h-[44px] items-center justify-center rounded-xl border border-line bg-input text-dim/50">
+                            —
+                          </span>
+                        )}
+                      </label>
+                    )}
+                  </div>
+                </div>
+
+                <div
+                  className={cn(
+                    "hidden gap-2 items-center rounded-xl py-1.5 px-2 sm:grid",
                     sporny && "ring-1 ring-amber-brand",
                     miesiac === 6 ? "grid-cols-[1fr_4rem_4rem_6rem]" : "grid-cols-[1fr_4rem_6rem]"
                   )}
@@ -1914,10 +2201,10 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
             <span className="tabular-nums text-white text-lg">{formatZlCaly(wynagrodzenie)}</span>
           </div>
         </div>
-      </Card>
+      </Card>}
 
       {/* ── PODKATEGORIA: TANKOWANIE ────────────────────────────────────── */}
-      <Card>
+      {showTankowanie && <Card>
         <CardTitle>Tankowanie</CardTitle>
         <p className="mb-3 text-xs text-dim">
           Paliwo, AdBlue oraz faktury/paragony za tankowanie.
@@ -2023,18 +2310,22 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
             <span className="tabular-nums text-white font-bold">{formatZlCaly(sumaFuel)}</span>
           </div>
         )}
-      </Card>
+      </Card>}
 
-      <FuelStatsPanel dane={dane} ustawienia={ustawienia} miesiac={miesiac} />
+      {showStatystyki && (
+        <FuelStatsPanel dane={dane} ustawienia={ustawienia} miesiac={miesiac} />
+      )}
 
-      <RozliczenieKosztowPanel
-        dane={dane}
-        ustawienia={ustawienia}
-        miesiac={miesiac}
-      />
+      {showRozliczenie && (
+        <RozliczenieKosztowPanel
+          dane={dane}
+          ustawienia={ustawienia}
+          miesiac={miesiac}
+        />
+      )}
 
       {/* ── PODKATEGORIA: SAMOCHÓD I DZIAŁALNOŚĆ ────────────────────────── */}
-      <Card>
+      {showSamochod && <Card>
         <CardTitle>Samochód i działalność</CardTitle>
         <p className="mb-3 text-xs text-dim">
           Części, serwis, naprawy, opłaty, internet, telefon, wyposażenie i inne koszty firmowe.
@@ -2148,10 +2439,10 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
             <span className="tabular-nums text-white font-bold">{formatZlCaly(sumaInne)}</span>
           </div>
         )}
-      </Card>
+      </Card>}
 
       {/* ── SEKCJA: LEASING ──────────────────────────────────────────────── */}
-      <Card>
+      {showSamochod && <Card>
         <div className="flex items-center gap-3">
           <span className="shrink-0 p-2.5 rounded-xl bg-amber-brand/10 text-amber-brand">
             <IconCar size={22} />
@@ -2172,13 +2463,79 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
             </span>
           </div>
         </div>
-      </Card>
+      </Card>}
 
       {/* Info o domyślnym traktowaniu kosztów */}
       <p className="text-[11px] text-dim/60 text-center px-4">
         Domyślnie koszty są rozliczane podatkowo. Jeśli nie masz faktury/paragonu do rozliczenia,
         wyłącz „Rozlicz podatkowo” w szczegółach VAT — koszt zostanie w wyniku, ale bez VAT i podatku dochodowego.
       </p>
+
+      <button
+        type="button"
+        onClick={() => setQuickActionsOpen(true)}
+        className="fixed right-4 z-40 flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-brand text-amber-ink shadow-2xl transition-transform active:scale-95 sm:hidden"
+        style={{ bottom: "calc(env(safe-area-inset-bottom) + 5.75rem)" }}
+        aria-label="Szybkie dodawanie"
+      >
+        <IconPlus size={26} />
+      </button>
+
+      {quickActionsOpen && (
+        <div className="fixed inset-0 z-50 sm:hidden">
+          <button
+            type="button"
+            aria-label="Zamknij szybkie akcje"
+            className="absolute inset-0 bg-black/55"
+            onClick={() => setQuickActionsOpen(false)}
+          />
+          <div
+            className="absolute inset-x-3 mx-auto max-w-[480px] rounded-3xl border border-line bg-surface p-3 shadow-2xl animate-fade-in"
+            style={{ bottom: "calc(env(safe-area-inset-bottom) + 5.25rem)" }}
+          >
+            <p className="mb-2 px-1 text-xs font-extrabold uppercase tracking-wider text-dim">
+              Szybkie dodawanie
+            </p>
+            <div className="grid gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setWidokKosztow("tankowanie");
+                  addTankowanie();
+                  setQuickActionsOpen(false);
+                }}
+                className="flex items-center gap-3 rounded-2xl border border-line bg-surface2 px-4 py-3 text-left font-bold text-ink"
+              >
+                <IconGasStation size={20} className="text-amber-brand" />
+                Dodaj tankowanie
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setWidokKosztow("samochod");
+                  addInny();
+                  setQuickActionsOpen(false);
+                }}
+                className="flex items-center gap-3 rounded-2xl border border-line bg-surface2 px-4 py-3 text-left font-bold text-ink"
+              >
+                <IconPackage size={20} className="text-amber-brand" />
+                Dodaj koszt
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setWidokKosztow("wyplata");
+                  setQuickActionsOpen(false);
+                }}
+                className="flex items-center gap-3 rounded-2xl border border-line bg-surface2 px-4 py-3 text-left font-bold text-ink"
+              >
+                <IconUsers size={20} className="text-amber-brand" />
+                Przejdź do wypłaty kierowcy
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Toast */}
       {toast && (

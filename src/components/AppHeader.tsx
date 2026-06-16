@@ -1,10 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { SaveStatusBadge } from "./ui/SaveStatus";
 import { SaveStatus } from "@/hooks/useWorkspace";
 import { TabSwitch, TabName } from "./TabSwitch";
-import { IconTruck, IconLock, IconLogout } from "./ui/icons";
+import { IconTruck, IconLock, IconLogout, IconChevronDown } from "./ui/icons";
 import { getBrowserSupabase } from "@/lib/supabase-browser";
 import { POLSKIE_MIESIACE, MIESIACE_ZAKRESU } from "@/lib/dates";
 import { MiesiącId } from "@/lib/types";
@@ -21,6 +22,19 @@ interface AppHeaderProps {
   lockedMonths?: number[];
 }
 
+const MOBILE_MAIN_TABS: { id: TabName; label: string }[] = [
+  { id: "podsumowanie", label: "Podsum." },
+  { id: "zarobek", label: "Zarobek" },
+  { id: "koszty", label: "Koszty" },
+  { id: "raport", label: "Raport" },
+];
+
+const MOBILE_MORE_TABS: { id: TabName; label: string }[] = [
+  { id: "wiadomosci", label: "Wiadomości" },
+  { id: "legenda", label: "Legenda" },
+  { id: "ustawienia", label: "Ustawienia" },
+];
+
 export function AppHeader({
   saveStatus,
   aktywnyMiesiac,
@@ -32,6 +46,9 @@ export function AppHeader({
   lockedMonths = [],
 }: AppHeaderProps) {
   const router = useRouter();
+  const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
+  const mobileMoreTabs = showHistoria ? MOBILE_MORE_TABS : [];
+  const moreIsActive = mobileMoreTabs.some((tab) => tab.id === aktywnaZakladka);
 
   async function logout() {
     try {
@@ -103,8 +120,91 @@ export function AppHeader({
           active={aktywnaZakladka}
           onChange={onZakladkaChange}
           showHistoria={showHistoria}
+          className="hidden sm:flex"
         />
       </div>
+
+      {/* Mobilna nawigacja: główne zakładki na dole, reszta pod „Więcej”. */}
+      <nav
+        className="fixed inset-x-0 bottom-0 z-50 border-t border-line bg-bg/95 px-2 pt-1.5 shadow-2xl backdrop-blur-xl sm:hidden"
+        style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 0.375rem)" }}
+        aria-label="Nawigacja mobilna"
+      >
+        <div className="mx-auto grid max-w-[480px] grid-cols-5 gap-1">
+          {MOBILE_MAIN_TABS.map((tab) => {
+            const active = aktywnaZakladka === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => {
+                  setMobileMoreOpen(false);
+                  onZakladkaChange(tab.id);
+                }}
+                className={cn(
+                  "min-h-[48px] rounded-xl px-1 text-[11px] font-extrabold transition-all",
+                  active
+                    ? "bg-amber-brand text-amber-ink"
+                    : "text-dim hover:bg-surface2 hover:text-ink"
+                )}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => setMobileMoreOpen((v) => !v)}
+            disabled={mobileMoreTabs.length === 0}
+            className={cn(
+              "flex min-h-[48px] items-center justify-center gap-1 rounded-xl px-1 text-[11px] font-extrabold transition-all disabled:opacity-40",
+              moreIsActive || mobileMoreOpen
+                ? "bg-amber-brand text-amber-ink"
+                : "text-dim hover:bg-surface2 hover:text-ink"
+            )}
+          >
+            Więcej
+            <IconChevronDown size={12} className={cn("transition-transform", mobileMoreOpen && "rotate-180")} />
+          </button>
+        </div>
+      </nav>
+
+      {mobileMoreOpen && mobileMoreTabs.length > 0 && (
+        <div className="fixed inset-0 z-40 sm:hidden" role="presentation">
+          <button
+            type="button"
+            aria-label="Zamknij menu"
+            className="absolute inset-0 bg-black/45"
+            onClick={() => setMobileMoreOpen(false)}
+          />
+          <div
+            className="absolute inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+4.75rem)] mx-auto max-w-[480px] rounded-2xl border border-line bg-surface p-2 shadow-2xl animate-fade-in"
+          >
+            {mobileMoreTabs.map((tab) => {
+              const active = aktywnaZakladka === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => {
+                    setMobileMoreOpen(false);
+                    onZakladkaChange(tab.id);
+                  }}
+                  className={cn(
+                    "flex w-full items-center justify-between rounded-xl px-4 py-3 text-left text-sm font-bold transition-colors",
+                    active
+                      ? "bg-amber-brand text-amber-ink"
+                      : "text-ink hover:bg-surface2"
+                  )}
+                >
+                  {tab.label}
+                  {active && <span>✓</span>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </header>
   );
 }

@@ -30,12 +30,13 @@ interface TabSwitchProps {
   onChange: (tab: TabName) => void;
   // Wiadomości, Legenda i Ustawienia tylko dla admina
   showHistoria?: boolean;
+  className?: string;
 }
 
-export function TabSwitch({ active, onChange, showHistoria = false }: TabSwitchProps) {
+export function TabSwitch({ active, onChange, showHistoria = false, className }: TabSwitchProps) {
   const tabs = TABS.filter((t) => !TYLKO_ADMIN.includes(t.id) || showHistoria);
   return (
-    <div className="flex w-full">
+    <div className={cn("flex w-full", className)}>
       {tabs.map((tab) => (
         <button
           key={tab.id}
