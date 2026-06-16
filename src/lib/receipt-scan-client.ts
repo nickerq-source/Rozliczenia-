@@ -3,6 +3,8 @@
 import type { VatRate } from "./types";
 
 export interface ReceiptScanResult {
+  productLine?: string | null;
+  vatLine?: string | null;
   sprzedawca: string | null;
   nip: string | null;
   data: string | null;

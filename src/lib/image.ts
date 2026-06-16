@@ -37,12 +37,25 @@ export async function imageToCompressedDataUrl(file: File, maxSide = 2000, quali
       );
   });
 
-  const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+  // Paragony/faktury paliwowe są prawie zawsze pionowe. Gdy zdjęcie jest bokiem
+  // (częste przy telefonie), obracamy je przed OCR, bo Vision myli wtedy wiersze.
+  const rotateToPortrait = img.width > img.height * 1.12;
+  const sourceW = rotateToPortrait ? img.height : img.width;
+  const sourceH = rotateToPortrait ? img.width : img.height;
+  const scale = Math.min(1, maxSide / Math.max(sourceW, sourceH));
   const canvas = document.createElement("canvas");
-  canvas.width = Math.max(1, Math.round(img.width * scale));
-  canvas.height = Math.max(1, Math.round(img.height * scale));
+  canvas.width = Math.max(1, Math.round(sourceW * scale));
+  canvas.height = Math.max(1, Math.round(sourceH * scale));
   const ctx = canvas.getContext("2d");
   if (!ctx) return raw;
-  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  if (rotateToPortrait) {
+    const drawW = Math.max(1, Math.round(img.width * scale));
+    const drawH = Math.max(1, Math.round(img.height * scale));
+    ctx.translate(canvas.width, 0);
+    ctx.rotate(Math.PI / 2);
+    ctx.drawImage(img, 0, 0, drawW, drawH);
+  } else {
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  }
   return canvas.toDataURL("image/jpeg", quality);
 }

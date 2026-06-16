@@ -17,6 +17,8 @@ export const maxDuration = 60;
 const DOZWOLONE_VAT: VatRate[] = ["0", "0.05", "0.08", "0.23", "zw", "np"];
 
 interface OdczytParagonu {
+  productLine: string | null;
+  vatLine: string | null;
   sprzedawca: string | null;
   nip: string | null;
   data: string | null; // YYYY-MM-DD
@@ -36,6 +38,8 @@ interface OdczytParagonu {
 }
 
 const PUSTY: OdczytParagonu = {
+  productLine: null,
+  vatLine: null,
   sprzedawca: null,
   nip: null,
   data: null,
@@ -52,6 +56,8 @@ const PUSTY: OdczytParagonu = {
 
 const PROMPT = `Odczytaj dane z faktury lub paragonu za tankowanie. Zwróć WYŁĄCZNIE czysty JSON (bez markdown, bez komentarzy, bez tekstu wokół):
 {
+  "productLine": string | null,
+  "vatLine": string | null,
   "liters": number | null,
   "pricePerLiter": number | null,
   "grossAmount": number | null,
@@ -66,15 +72,19 @@ const PROMPT = `Odczytaj dane z faktury lub paragonu za tankowanie. Zwróć WYŁ
 }
 
 Jak czytać polskie faktury za paliwo:
-- Litry i cenę za litr bierz WYŁĄCZNIE z linii produktu, gdzie występuje LITR/L oraz znak * albo x.
-- Linia typu "86.10 LITR*6.29", "20.72 LITR * 6.29" lub "20,72 L x 6,29" znaczy: litry = 86.10 / 20.72, cenaZaLitr = 6.29.
+- Jeśli obraz jest obrócony bokiem, odczytaj go po mentalnym obróceniu.
+- productLine: przepisz dokładnie jedną linię produktu z paliwem, tę gdzie jest LITR/L/l i * albo x, np. "OLEJ NAPĘDOWY ... 20.72 LITR*6.29" albo "EFECTA DIESEL ... 85,44 l*7,23".
+- Litry i cenę za litr bierz WYŁĄCZNIE z productLine: litry = liczba bezpośrednio PRZED LITR/L/l, cena za litr = liczba bezpośrednio PO znaku * albo x.
+- Linia typu "86.10 LITR*6.29", "20.72 LITR * 6.29", "20,06L x 6,48" lub "85,44 l*7,23" znaczy: litry = 86.10 / 20.72 / 20.06 / 85.44, cenaZaLitr = 6.29 / 6.48 / 7.23.
 - NIE bierz litrów ani ceny za litr z tabeli VAT/podatku. Kolumny "Wart.VAT", "Podatek", "Stawka", "Wart.Netto", "Wart.Brutto" nie są litrami ani ceną za litr.
 - Liczba przy "Wart.VAT" albo "Podatek" (np. 40.12) to kwota VAT, nie litry.
 - "SUMA: PLN 130.33", "DO ZAPŁATY 130.33", "RAZEM 130,33" znaczy: kwotaBrutto = 130.33.
 - "Data sprzedaży: 06-06-2026" znaczy datę tankowania → zwróć "2026-06-06".
 - "STACJA PALIW MOYA" → sprzedawca = "MOYA".
 - "OLEJ NAPĘDOWY" / "ON" → nazwa "Olej napędowy"; "Pb95"/"Pb98" → benzyna.
-- VAT czytaj z widocznej stawki na dokumencie, np. 8% => "0.08", 23% => "0.23". Nie zgaduj VAT po typie paliwa.
+- vatLine: przepisz linię/tabelę ze stawką VAT, np. "Stawka 8%" albo "Kwota B: 08,00%".
+- VAT czytaj WYŁĄCZNIE z widocznej stawki na dokumencie: 8% lub 08,00% => "0.08", 23% lub 23,00% => "0.23". Nie zgaduj VAT po typie paliwa.
+- NIP: zwróć NIP sprzedawcy/stacji, nie NIP nabywcy. Szukaj przy sekcji "Sprzedawca", nagłówku stacji albo danych firmy stacji. Ignoruj "Nabywca" i "NIP Nabywcy".
 - Liczby z przecinkiem traktuj jak z kropką (20,72 = 20.72; 130,33 = 130.33).
 Liczby zwróć jako liczby (nie tekst). Jeżeli czegoś nie widzisz, zwróć null, nie zgaduj.`;
 
@@ -144,6 +154,69 @@ function normalizeDate(raw: unknown): string | null {
   return `${yyyy}-${dd.padStart(2, "0")}-${mm.padStart(2, "0")}`;
 }
 
+function parseFuelFromLine(raw: unknown): { litry: number; cena: number } | null {
+  if (typeof raw !== "string") return null;
+  const text = raw.replace(/\s+/g, " ");
+  const match = text.match(/(\d+(?:[,.]\d+)?)\s*(?:LITR|L)\s*[*x×]\s*(\d+(?:[,.]\d+)?)/i);
+  if (!match) return null;
+  const litry = toNum(match[1]);
+  const cena = toNum(match[2]);
+  if (litry == null || cena == null || litry <= 0 || cena <= 0 || cena > 12) return null;
+  return { litry, cena };
+}
+
+function nearestVatRate(rate: number): VatRate | null {
+  if (Math.abs(rate - 0.23) < 0.012) return "0.23";
+  if (Math.abs(rate - 0.08) < 0.012) return "0.08";
+  if (Math.abs(rate - 0.05) < 0.012) return "0.05";
+  if (Math.abs(rate) < 0.004) return "0";
+  return null;
+}
+
+function parseVatFromLine(raw: unknown): VatRate | null {
+  if (typeof raw !== "string") return null;
+  const text = raw.replace(/\s+/g, " ");
+  if (/(^|[^\d])23(?:[,.]00)?\s*%/.test(text)) return "0.23";
+  if (/(^|[^\d])0?8(?:[,.]00)?\s*%/.test(text)) return "0.08";
+  if (/(^|[^\d])0?5(?:[,.]00)?\s*%/.test(text)) return "0.05";
+  if (/(^|[^\d])0(?:[,.]00)?\s*%/.test(text)) {
+    // Nie kończymy od razu: czasem AI myli "8%" jako "0%", ale obok są
+    // netto/VAT/brutto i z nich da się odzyskać stawkę.
+  }
+
+  const nums = [...text.matchAll(/\d+(?:[,.]\d+)?/g)]
+    .map((m) => toNum(m[0]))
+    .filter((n): n is number => n != null);
+
+  for (let i = 0; i < nums.length; i += 1) {
+    for (let j = 0; j < nums.length; j += 1) {
+      for (let k = 0; k < nums.length; k += 1) {
+        if (i === j || i === k || j === k) continue;
+        const net = nums[i];
+        const vat = nums[j];
+        const gross = nums[k];
+        if (net < 10 || vat <= 0 || gross < 10) continue;
+        if (Math.abs(net + vat - gross) > 0.08) continue;
+        const rate = nearestVatRate(vat / net);
+        if (rate) return rate;
+      }
+    }
+  }
+
+  if (/(^|[^\d])0(?:[,.]00)?\s*%/.test(text)) return "0";
+  return null;
+}
+
+function normalizeStation(value: string | null): string | null {
+  if (!value) return null;
+  const upper = value.toUpperCase();
+  if (upper.includes("MOYA")) return "MOYA";
+  if (upper.includes("ORLEN")) return "ORLEN";
+  if (upper.includes("BP")) return "BP";
+  if (upper.includes("SHELL")) return "Shell";
+  return value;
+}
+
 function walidujVat(raw: unknown): VatRate | null {
   if (typeof raw === "string" && DOZWOLONE_VAT.includes(raw as VatRate)) return raw as VatRate;
   if (typeof raw === "number") {
@@ -164,6 +237,11 @@ function waliduj(raw: unknown): OdczytParagonu {
   let kwota = dodatni(toNum(o.kwotaBrutto ?? o.grossAmount));
   let litry = dodatni(toNum(o.litry ?? o.liters));
   let cena = dodatni(toNum(o.cenaZaLitr ?? o.pricePerLiter));
+  const parsedFuel = parseFuelFromLine(o.productLine);
+  if (parsedFuel) {
+    litry = parsedFuel.litry;
+    cena = parsedFuel.cena;
+  }
 
   // Jeżeli AI pomyli kwotę VAT/podatku z litrami, często wychodzi absurdalna
   // cena za litr (np. 541,57 / 40,12 = 13,50). Lepiej zostawić pola puste
@@ -186,12 +264,22 @@ function waliduj(raw: unknown): OdczytParagonu {
   }
 
   const fuelType = textOrNull(o.fuelType ?? o.nazwa, 60);
+  const vatLine = textOrNull(o.vatLine, 220);
+  const parsedVat = parseVatFromLine(vatLine);
+  const rawVat = walidujVat(o.vatRate);
+  const vatRate =
+    parsedVat ??
+    (rawVat === "0.23" && !/(^|[^\d])23(?:[,.]00)?\s*%/.test(vatLine ?? "")
+      ? null
+      : rawVat);
   const result = {
-    sprzedawca: textOrNull(o.sprzedawca ?? o.station, 120),
+    productLine: textOrNull(o.productLine, 220),
+    vatLine,
+    sprzedawca: normalizeStation(textOrNull(o.sprzedawca ?? o.station, 120)),
     nip: typeof o.nip === "string" ? o.nip.replace(/[^0-9]/g, "").slice(0, 15) || null : null,
     data: dataStr,
     kwotaBrutto: r2(kwota),
-    vatRate: walidujVat(o.vatRate),
+    vatRate,
     nazwa: fuelType,
     litry: r2(litry),
     cenaZaLitr: r2(cena),
@@ -211,7 +299,12 @@ function waliduj(raw: unknown): OdczytParagonu {
 
   return {
     ...result,
-    needsReview: result.needsReview || result.confidence < 0.8 || !hasImportant || suspiciousFuelUnit,
+    needsReview:
+      result.needsReview ||
+      result.confidence < 0.8 ||
+      !hasImportant ||
+      suspiciousFuelUnit ||
+      (rawVat === "0.23" && result.vatRate == null),
     _empty: !hasImportant,
   };
 }
