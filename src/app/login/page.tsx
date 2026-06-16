@@ -28,6 +28,22 @@ export default function LoginPage() {
     if (saved) setLogin(saved);
   }, []);
 
+  // Jeśli użytkownik ma jeszcze ważną sesję, nie pokazuj mu ponownie logowania.
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const { data: { session } } = await getBrowserSupabase().auth.getSession();
+        if (active && session) window.location.replace("/dashboard");
+      } catch {
+        // Brak sesji albo chwilowy problem — zostajemy na formularzu logowania.
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setError(false);

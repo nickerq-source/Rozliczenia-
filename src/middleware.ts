@@ -4,8 +4,9 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { AUTH_COOKIE_OPTIONS } from "@/lib/auth-config";
 
-const PUBLIC_PATHS = ["/login", "/api", "/_next", "/favicon", "/sw.js", "/papitrans-bg"];
+const PUBLIC_PATHS = ["/api", "/_next", "/favicon", "/sw.js", "/papitrans-bg"];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -22,6 +23,7 @@ export async function middleware(req: NextRequest) {
   if (!url || !key) return res;
 
   const supabase = createServerClient(url, key, {
+    cookieOptions: AUTH_COOKIE_OPTIONS,
     cookies: {
       getAll() {
         return req.cookies.getAll();
@@ -37,6 +39,14 @@ export async function middleware(req: NextRequest) {
   });
 
   const { data: { user } } = await supabase.auth.getUser();
+
+  if (pathname === "/login") {
+    if (!user) return res;
+    const dest = req.nextUrl.clone();
+    dest.pathname = "/dashboard";
+    dest.search = "";
+    return NextResponse.redirect(dest);
+  }
 
   if (!user) {
     const loginUrl = req.nextUrl.clone();
