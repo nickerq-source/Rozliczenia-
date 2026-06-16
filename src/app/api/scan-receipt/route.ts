@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { getSessionProfile } from "@/lib/supabase-server";
 import { VatRate } from "@/lib/types";
+import { getAnthropicApiKey } from "@/lib/anthropic-key";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -132,39 +133,6 @@ function parseDataUrl(dataUrl: string): { data: string } | null {
   if (!m) return null;
   // usuń ewentualne białe znaki z base64
   return { data: m[1].replace(/\s/g, "") };
-}
-
-function getAnthropicApiKey(): { key: string | null; error: string | null } {
-  const raw = process.env.ANTHROPIC_API_KEY;
-  if (!raw?.trim()) {
-    return {
-      key: null,
-      error: "Brak ANTHROPIC_API_KEY na serwerze. Dodaj tę zmienną w Vercel.",
-    };
-  }
-
-  const cleaned = raw.trim().replace(/^["']|["']$/g, "");
-  const compact = cleaned.replace(/\s+/g, "");
-  const token = compact.match(/sk-ant-[A-Za-z0-9_-]{20,}/)?.[0] ?? compact;
-  const invalidChar = [...token].find((ch) => /[^\x20-\x7E]/.test(ch));
-  if (invalidChar) {
-    const idx = [...token].findIndex((ch) => ch === invalidChar);
-    return {
-      key: null,
-      error:
-        `ANTHROPIC_API_KEY w Vercel zawiera niedozwolony znak przy pozycji ${idx} (kod ${invalidChar.charCodeAt(0)}). Wklej sam klucz Claude zaczynający się od sk-ant-.`,
-    };
-  }
-
-  if (!token.startsWith("sk-ant-")) {
-    return {
-      key: null,
-      error:
-        "ANTHROPIC_API_KEY w Vercel wygląda niepoprawnie. Wklej sam klucz Claude zaczynający się od sk-ant-.",
-    };
-  }
-
-  return { key: token, error: null };
 }
 
 function clamp01(n: number | null): number {
