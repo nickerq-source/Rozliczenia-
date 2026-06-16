@@ -98,6 +98,8 @@ export type ZrodloKategorii = "manual" | "rule" | "ai";
 
 export type DocumentStatus = "brak" | "paragon" | "faktura";
 
+export type KosztPayer = "Artur" | "Damian" | "Firma";
+
 export interface KosztZalacznik {
   id: string;
   typ: "dokument" | "licznik";
@@ -121,6 +123,7 @@ export interface KosztVatInfo {
   vatDeductible?: boolean; // domyślnie true
   vatDeductionPercent?: number; // 0 | 50 | 100, domyślnie 100
   taxNote?: string;
+  paidBy?: KosztPayer; // kto zapłacił koszt
   kategoria?: KategoriaKosztu; // domyślnie "inne"
   kategoriaZrodlo?: ZrodloKategorii; // domyślnie "manual"
   kategoriaConfidence?: number; // 0–1 (tylko AI)

@@ -188,6 +188,7 @@ export async function POST(req: NextRequest) {
     koszt,
     litry,
     dodaneBy: profile.name,
+    paidBy: "Firma",
     documentStatus: zalaczniki ? "paragon" : "brak",
     hasInvoice: true,
     supplierName: body.sprzedawca?.trim() || undefined,

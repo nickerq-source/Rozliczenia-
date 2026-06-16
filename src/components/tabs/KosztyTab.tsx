@@ -10,6 +10,7 @@ import {
   DocumentStatus,
   DzienKierowcy,
   KategoriaKosztu,
+  KosztPayer,
   KosztVatInfo,
   KosztZalacznik,
   MiesiącId,
@@ -18,7 +19,7 @@ import {
   WpisInnegoKosztu,
   ZgloszenieDnia,
 } from "@/lib/types";
-import { kategoriaLabel, domyslnyVatKategorii } from "@/lib/tax";
+import { KATEGORIE, kategoriaLabel, domyslnyVatKategorii, rozbijWpis } from "@/lib/tax";
 import { TYP_DNIA_LABEL, TYPY_DNIA, typDniaMeta, czyWolny, maKolka, maZlecenia } from "@/lib/day-type";
 import { kategoryzujLokalnie } from "@/lib/categorize";
 import {
@@ -100,7 +101,7 @@ function DatePill({
       type="date"
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="bg-amber-brand/10 border border-amber-brand/40 rounded-full px-3 py-2 min-h-[40px] text-sm text-amber-brand tabular-nums"
+      className="w-full bg-amber-brand/10 border border-amber-brand/40 rounded-full px-3 py-2 min-h-[40px] text-sm text-amber-brand tabular-nums sm:w-auto"
     />
   );
 }
@@ -140,9 +141,64 @@ const STATUSY_DOKUMENTU: { id: DocumentStatus; label: string }[] = [
   { id: "faktura", label: "faktura" },
 ];
 
+const PAYER_OPTIONS: { id: KosztPayer; label: string }[] = [
+  { id: "Artur", label: "Artur" },
+  { id: "Damian", label: "Damian" },
+  { id: "Firma", label: "Firma" },
+];
+
+type PayerFilter = "all" | KosztPayer;
+type PodkategoriaKosztow = "all" | "tankowanie" | "wyplata_kierowcy" | "samochod_dzialalnosc";
+
+const PODKATEGORIE_KOSZTOW: { id: PodkategoriaKosztow; label: string }[] = [
+  { id: "all", label: "wszystkie" },
+  { id: "tankowanie", label: "Tankowanie" },
+  { id: "wyplata_kierowcy", label: "Wypłata kierowcy" },
+  { id: "samochod_dzialalnosc", label: "Samochód i działalność" },
+];
+
 function statusDokumentu(wpis: KosztVatInfo): DocumentStatus {
   if (wpis.documentStatus) return wpis.documentStatus;
   return (wpis.hasInvoice ?? true) ? "faktura" : "brak";
+}
+
+function normalizePayer(value: KosztVatInfo["paidBy"] | string | undefined): KosztPayer {
+  return PAYER_OPTIONS.some((p) => p.id === value) ? (value as KosztPayer) : "Firma";
+}
+
+function podkategoriaKosztu(typ: "tankowanie" | "inne", kategoria: KategoriaKosztu | undefined): Exclude<PodkategoriaKosztow, "all"> {
+  if (typ === "tankowanie" || kategoria === "paliwo_adblue") return "tankowanie";
+  return "samochod_dzialalnosc";
+}
+
+function PayerSelect({
+  value,
+  onChange,
+  compact = false,
+  className,
+}: {
+  value?: KosztVatInfo["paidBy"];
+  onChange: (value: KosztPayer) => void;
+  compact?: boolean;
+  className?: string;
+}) {
+  return (
+    <label className={cn("block text-[11px] font-semibold text-dim", compact && "min-w-[118px]", className)}>
+      <span className="sr-only sm:not-sr-only">Kto zapłacił?</span>
+      <select
+        value={normalizePayer(value)}
+        onChange={(e) => onChange(e.target.value as KosztPayer)}
+        className="mt-0 sm:mt-1 w-full min-h-[40px] rounded-full border border-line bg-input px-3 py-2 text-xs font-bold text-ink"
+        title="Kto zapłacił koszt?"
+      >
+        {PAYER_OPTIONS.map((payer) => (
+          <option key={payer.id} value={payer.id}>
+            {payer.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
 }
 
 function readFileAsDataUrl(file: File): Promise<string> {
@@ -372,6 +428,49 @@ function FuelStatsRowView({ row }: { row: FuelStatsRow }) {
   );
 }
 
+function FuelStatsMobileCard({ row }: { row: FuelStatsRow }) {
+  return (
+    <div className={cn("rounded-xl border border-line bg-surface2/60 p-3", row.pomijanyPowod && "opacity-60")}>
+      <div className="mb-2 flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-sm font-bold text-white">{row.stacja ?? "Tankowanie"}</p>
+          <p className="text-[11px] text-dim">
+            {row.data} · {row.kierowca ?? "bez kierowcy"}
+          </p>
+        </div>
+        <span className="shrink-0 rounded-full border border-amber-brand/35 bg-amber-brand/10 px-2 py-0.5 text-[11px] font-bold text-amber-brand">
+          {formatLitry(row.litry)}
+        </span>
+      </div>
+      <div className="grid grid-cols-2 gap-2 text-[11px]">
+        <div>
+          <p className="text-dim">Brutto</p>
+          <p className="tabular-nums font-bold text-white">{formatZl(row.brutto)}</p>
+        </div>
+        <div>
+          <p className="text-dim">Netto</p>
+          <p className="tabular-nums font-bold text-ink">{formatZl(row.netto)}</p>
+        </div>
+        <div>
+          <p className="text-dim">VAT</p>
+          <p className="tabular-nums font-bold text-ink">{formatZl(row.vat)}</p>
+        </div>
+        <div>
+          <p className="text-dim">Cena brutto/l</p>
+          <p className="tabular-nums font-bold text-ink">{formatZlNaLitr(row.cenaBruttoZaLitr)}</p>
+        </div>
+      </div>
+      <div className="mt-2">
+        {row.pomijanyPowod ? (
+          <span className="text-[11px] text-red-300">{row.pomijanyPowod}</span>
+        ) : (
+          <ZalacznikPreview zalaczniki={row.zalaczniki} compact />
+        )}
+      </div>
+    </div>
+  );
+}
+
 function FuelStatsPanel({
   dane,
   ustawienia,
@@ -447,7 +546,17 @@ function FuelStatsPanel({
         <FuelStatsValue label="Pominięto" value={`${s.pominiete}`} />
       </div>
 
-      <div className="mt-4 overflow-x-auto rounded-xl border border-line">
+      <div className="mt-4 space-y-2 sm:hidden">
+        {stats.rows.length === 0 ? (
+          <div className="rounded-xl border border-line bg-surface2/60 px-3 py-6 text-center text-sm text-dim">
+            Brak tankowań w tym miesiącu.
+          </div>
+        ) : (
+          stats.rows.map((row) => <FuelStatsMobileCard key={row.id} row={row} />)
+        )}
+      </div>
+
+      <div className="mt-4 hidden overflow-x-auto rounded-xl border border-line sm:block">
         <table className="min-w-[980px] w-full text-left text-xs">
           <thead className="bg-surface2 text-[10px] uppercase tracking-wide text-dim">
             <tr>
@@ -481,6 +590,304 @@ function FuelStatsPanel({
   );
 }
 
+type RozliczenieKosztu = {
+  id: string;
+  nazwa: string;
+  paidBy: KosztPayer;
+  kategoria: KategoriaKosztu;
+  podkategoria: Exclude<PodkategoriaKosztow, "all">;
+  netto: number;
+  vat: number;
+  brutto: number;
+};
+
+type PayerSuma = {
+  paidBy: KosztPayer | "Razem";
+  liczba: number;
+  netto: number;
+  vat: number;
+  brutto: number;
+};
+
+function emptyPayerSuma(paidBy: PayerSuma["paidBy"]): PayerSuma {
+  return { paidBy, liczba: 0, netto: 0, vat: 0, brutto: 0 };
+}
+
+function addToSuma(suma: PayerSuma, koszt: Pick<RozliczenieKosztu, "netto" | "vat" | "brutto">) {
+  suma.liczba += 1;
+  suma.netto += koszt.netto;
+  suma.vat += koszt.vat;
+  suma.brutto += koszt.brutto;
+}
+
+function rozliczenieRows(pozycje: RozliczenieKosztu[]): PayerSuma[] {
+  const map = new Map<KosztPayer | "Razem", PayerSuma>([
+    ["Artur", emptyPayerSuma("Artur")],
+    ["Damian", emptyPayerSuma("Damian")],
+    ["Firma", emptyPayerSuma("Firma")],
+    ["Razem", emptyPayerSuma("Razem")],
+  ]);
+
+  for (const koszt of pozycje) {
+    addToSuma(map.get(koszt.paidBy)!, koszt);
+    addToSuma(map.get("Razem")!, koszt);
+  }
+
+  return ["Artur", "Damian", "Firma", "Razem"].map((x) => map.get(x as PayerSuma["paidBy"])!);
+}
+
+function RozliczenieRowView({ row }: { row: PayerSuma }) {
+  const isTotal = row.paidBy === "Razem";
+  return (
+    <tr className={cn("border-t border-line/60", isTotal && "bg-surface2 font-bold text-white")}>
+      <td className="px-3 py-2 text-ink">{row.paidBy}</td>
+      <td className="px-3 py-2 text-right tabular-nums text-dim">{row.liczba}</td>
+      <td className="px-3 py-2 text-right tabular-nums text-ink">{formatZl(row.netto)}</td>
+      <td className="px-3 py-2 text-right tabular-nums text-ink">{formatZl(row.vat)}</td>
+      <td className="px-3 py-2 text-right tabular-nums text-white">{formatZl(row.brutto)}</td>
+    </tr>
+  );
+}
+
+function RozliczenieMobileCard({ row }: { row: PayerSuma }) {
+  const isTotal = row.paidBy === "Razem";
+  return (
+    <div className={cn("rounded-xl border border-line bg-surface2/60 p-3", isTotal && "border-amber-brand/35 bg-amber-brand/10")}>
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="text-sm font-bold text-white">{row.paidBy}</p>
+        <span className="rounded-full border border-line px-2 py-0.5 text-[11px] text-dim">
+          {row.liczba} kosztów
+        </span>
+      </div>
+      <div className="grid grid-cols-3 gap-2 text-[11px]">
+        <div>
+          <p className="text-dim">Netto</p>
+          <p className="tabular-nums font-bold text-ink">{formatZl(row.netto)}</p>
+        </div>
+        <div>
+          <p className="text-dim">VAT</p>
+          <p className="tabular-nums font-bold text-ink">{formatZl(row.vat)}</p>
+        </div>
+        <div>
+          <p className="text-dim">Brutto</p>
+          <p className="tabular-nums font-bold text-white">{formatZl(row.brutto)}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function RozliczenieKosztowPanel({
+  dane,
+  ustawienia,
+  miesiac,
+  wynagrodzenie,
+}: {
+  dane: DaneMiesiaca;
+  ustawienia: UstawieniaPodatkowe;
+  miesiac: MiesiącId;
+  wynagrodzenie: number;
+}) {
+  const [podkategoria, setPodkategoria] = useState<PodkategoriaKosztow>("all");
+  const [kategoria, setKategoria] = useState<"all" | KategoriaKosztu>("all");
+  const [payer, setPayer] = useState<PayerFilter>("all");
+
+  const pozycje = useMemo<RozliczenieKosztu[]>(() => {
+    const rows: RozliczenieKosztu[] = [];
+
+    for (const t of dane.tankowanie ?? []) {
+      if (parseNum(t.koszt) <= 0) continue;
+      const wpis = { ...t, kategoria: t.kategoria ?? ("paliwo_adblue" as KategoriaKosztu) };
+      const r = rozbijWpis(wpis, ustawienia, "paliwo_adblue");
+      rows.push({
+        id: t.id,
+        nazwa: "Tankowanie",
+        paidBy: normalizePayer(t.paidBy),
+        kategoria: r.kategoria,
+        podkategoria: "tankowanie",
+        netto: r.netto,
+        vat: r.vatDoOdliczenia,
+        brutto: r.brutto,
+      });
+    }
+
+    for (const k of dane.inneKoszty ?? []) {
+      if (parseNum(k.koszt) <= 0) continue;
+      const r = rozbijWpis(k, ustawienia, "inne");
+      rows.push({
+        id: k.id,
+        nazwa: k.nazwa || "Koszt",
+        paidBy: normalizePayer(k.paidBy),
+        kategoria: r.kategoria,
+        podkategoria: podkategoriaKosztu("inne", r.kategoria),
+        netto: r.netto,
+        vat: r.vatDoOdliczenia,
+        brutto: r.brutto,
+      });
+    }
+
+    if (wynagrodzenie > 0) {
+      rows.push({
+        id: "wyplata-kierowcy",
+        nazwa: "Wypłata kierowcy",
+        paidBy: "Firma",
+        kategoria: "inne",
+        podkategoria: "wyplata_kierowcy",
+        netto: wynagrodzenie,
+        vat: 0,
+        brutto: wynagrodzenie,
+      });
+    }
+
+    return rows;
+  }, [dane.tankowanie, dane.inneKoszty, ustawienia, wynagrodzenie]);
+
+  const przefiltrowane = useMemo(
+    () =>
+      pozycje.filter((koszt) => {
+        if (podkategoria !== "all" && koszt.podkategoria !== podkategoria) return false;
+        if (kategoria !== "all" && koszt.kategoria !== kategoria) return false;
+        if (payer !== "all" && koszt.paidBy !== payer) return false;
+        return true;
+      }),
+    [pozycje, podkategoria, kategoria, payer]
+  );
+
+  const rows = useMemo(() => rozliczenieRows(przefiltrowane), [przefiltrowane]);
+  const arturPaid = rows.find((r) => r.paidBy === "Artur")?.brutto ?? 0;
+  const damianPaid = rows.find((r) => r.paidBy === "Damian")?.brutto ?? 0;
+  const firmaPaid = rows.find((r) => r.paidBy === "Firma")?.brutto ?? 0;
+  const privateTotal = arturPaid + damianPaid;
+  const eachShare = privateTotal / 2;
+  const diff = Math.round((arturPaid - eachShare) * 100) / 100;
+  const settlement =
+    Math.abs(diff) < 0.01
+      ? "Artur i Damian są rozliczeni na zero."
+      : diff > 0
+      ? `Damian powinien oddać Arturowi: ${formatZl(diff)}`
+      : `Artur powinien oddać Damianowi: ${formatZl(Math.abs(diff))}`;
+
+  return (
+    <Card>
+      <div className="mb-3 flex items-start gap-2">
+        <IconUsers size={18} className="mt-0.5 text-amber-brand" />
+        <div className="min-w-0 flex-1">
+          <CardTitle className="mb-1">Rozliczenie kosztów</CardTitle>
+          <p className="text-[11px] text-dim">
+            {POLSKIE_MIESIACE[miesiac]} 2026 · płatnik i rozbicie netto/VAT/brutto według filtrów.
+          </p>
+        </div>
+      </div>
+
+      <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <label className="text-[11px] font-semibold text-dim">
+          Podkategoria
+          <select
+            value={podkategoria}
+            onChange={(e) => setPodkategoria(e.target.value as PodkategoriaKosztow)}
+            className="mt-1 w-full min-h-[42px] rounded-lg border border-line bg-input px-2 py-2 text-sm text-ink"
+          >
+            {PODKATEGORIE_KOSZTOW.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-[11px] font-semibold text-dim">
+          Kategoria
+          <select
+            value={kategoria}
+            onChange={(e) => setKategoria(e.target.value as "all" | KategoriaKosztu)}
+            className="mt-1 w-full min-h-[42px] rounded-lg border border-line bg-input px-2 py-2 text-sm text-ink"
+          >
+            <option value="all">wszystkie</option>
+            {KATEGORIE.map((k) => (
+              <option key={k.id} value={k.id}>
+                {k.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-[11px] font-semibold text-dim">
+          Kto zapłacił
+          <select
+            value={payer}
+            onChange={(e) => setPayer(e.target.value as PayerFilter)}
+            className="mt-1 w-full min-h-[42px] rounded-lg border border-line bg-input px-2 py-2 text-sm text-ink"
+          >
+            <option value="all">wszyscy</option>
+            {PAYER_OPTIONS.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <div className="space-y-2 sm:hidden">
+        {rows.map((row) => (
+          <RozliczenieMobileCard key={row.paidBy} row={row} />
+        ))}
+      </div>
+
+      <div className="hidden overflow-x-auto rounded-xl border border-line sm:block">
+        <table className="w-full text-left text-xs">
+          <thead className="bg-surface2 text-[10px] uppercase tracking-wide text-dim">
+            <tr>
+              <th className="px-3 py-2">Kto zapłacił</th>
+              <th className="px-3 py-2 text-right">Liczba</th>
+              <th className="px-3 py-2 text-right">Suma netto</th>
+              <th className="px-3 py-2 text-right">Suma VAT</th>
+              <th className="px-3 py-2 text-right">Suma brutto</th>
+            </tr>
+          </thead>
+          <tbody>{rows.map((row) => <RozliczenieRowView key={row.paidBy} row={row} />)}</tbody>
+        </table>
+      </div>
+
+      <div className="mt-3 rounded-2xl border border-amber-brand/35 bg-amber-brand/10 p-3">
+        <p className="mb-2 text-xs font-bold uppercase tracking-wider text-amber-brand">
+          Rozliczenie 50/50 Artur / Damian
+        </p>
+        <div className="grid grid-cols-1 gap-1 text-sm sm:grid-cols-2">
+          <div className="flex justify-between gap-3">
+            <span className="text-dim">Artur zapłacił</span>
+            <span className="tabular-nums font-bold text-white">{formatZl(arturPaid)}</span>
+          </div>
+          <div className="flex justify-between gap-3">
+            <span className="text-dim">Damian zapłacił</span>
+            <span className="tabular-nums font-bold text-white">{formatZl(damianPaid)}</span>
+          </div>
+          <div className="flex justify-between gap-3">
+            <span className="text-dim">Firma zapłaciła</span>
+            <span className="tabular-nums font-bold text-white">{formatZl(firmaPaid)}</span>
+          </div>
+          <div className="flex justify-between gap-3">
+            <span className="text-dim">Koszty prywatne</span>
+            <span className="tabular-nums font-bold text-white">{formatZl(privateTotal)}</span>
+          </div>
+          <div className="flex justify-between gap-3">
+            <span className="text-dim">Udział Artura</span>
+            <span className="tabular-nums font-bold text-white">{formatZl(eachShare)}</span>
+          </div>
+          <div className="flex justify-between gap-3">
+            <span className="text-dim">Udział Damiana</span>
+            <span className="tabular-nums font-bold text-white">{formatZl(eachShare)}</span>
+          </div>
+        </div>
+        <p className="mt-3 rounded-xl bg-surface/70 px-3 py-2 text-sm font-bold text-white">
+          {settlement}
+        </p>
+        <p className="mt-2 text-[11px] text-dim">
+          Do długu 50/50 liczą się tylko koszty oznaczone jako Artur albo Damian. Firma jest pokazana osobno.
+        </p>
+      </div>
+    </Card>
+  );
+}
+
 export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia, focusZgloszenieId }: Props) {
   // Rozwinięte panele szczegółów VAT (klucz: id wpisu)
   const [rozwiniete, setRozwiniete] = useState<Record<string, boolean>>({});
@@ -493,6 +900,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
   const [innaStawka, setInnaStawka] = useState<Record<string, boolean>>({});
   // Id wpisów już objętych automatycznym backfillem (żeby nie powtarzać AI)
   const backfillDone = useRef<Set<string>>(new Set());
+  const payerBackfillDone = useRef<Set<MiesiącId>>(new Set());
   const notifiedCostValues = useRef<Record<string, string>>({});
   const dayEditStart = useRef<Record<string, number>>({});
 
@@ -863,6 +1271,28 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dane.tankowanie, dane.inneKoszty]);
 
+  // Stare wpisy z JSONB nie miały pola paidBy. Uzupełniamy je raz na miesiąc,
+  // żeby rozliczenie Artur/Damian/Firma nie miało pustych wartości.
+  useEffect(() => {
+    if (payerBackfillDone.current.has(miesiac)) return;
+    const needsBackfill =
+      (dane.tankowanie ?? []).some((t) => !t.paidBy) ||
+      (dane.inneKoszty ?? []).some((k) => !k.paidBy);
+    payerBackfillDone.current.add(miesiac);
+    if (!needsBackfill) return;
+    onUpdate((prev) => ({
+      ...prev,
+      tankowanie: (prev.tankowanie ?? []).map((t) => ({
+        ...t,
+        paidBy: normalizePayer(t.paidBy),
+      })),
+      inneKoszty: (prev.inneKoszty ?? []).map((k) => ({
+        ...k,
+        paidBy: normalizePayer(k.paidBy),
+      })),
+    }));
+  }, [dane.tankowanie, dane.inneKoszty, miesiac, onUpdate]);
+
   const allDays = getDniMiesiaca(miesiac);
   const {
     dniowki,
@@ -1027,7 +1457,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
       ...prev,
       tankowanie: [
         ...prev.tankowanie,
-        { id: uuidv4(), data: "", koszt: 0 },
+        { id: uuidv4(), data: "", koszt: 0, paidBy: "Firma" },
       ],
     }));
     setStronaTank(Math.ceil((dane.tankowanie.length + 1) / KOSZTY_NA_STRONE));
@@ -1035,10 +1465,11 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
 
   // Dodanie gotowego kosztu ze skanu paragonu (część B) + audit/push
   function dodajZeSkanu(wpis: WpisInnegoKosztu | WpisTankowania, typ: "inne" | "tankowanie") {
+    const wpisZPlatnikiem = { ...wpis, paidBy: normalizePayer(wpis.paidBy) };
     onUpdate((prev) =>
       typ === "tankowanie"
-        ? { ...prev, tankowanie: [...prev.tankowanie, wpis as WpisTankowania] }
-        : { ...prev, inneKoszty: [...prev.inneKoszty, wpis as WpisInnegoKosztu] }
+        ? { ...prev, tankowanie: [...prev.tankowanie, wpisZPlatnikiem as WpisTankowania] }
+        : { ...prev, inneKoszty: [...prev.inneKoszty, wpisZPlatnikiem as WpisInnegoKosztu] }
     );
     if (typ === "tankowanie") setStronaTank(Math.ceil((dane.tankowanie.length + 1) / KOSZTY_NA_STRONE));
     else setStronaInne(Math.ceil((dane.inneKoszty.length + 1) / KOSZTY_NA_STRONE));
@@ -1106,7 +1537,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
       ...prev,
       inneKoszty: [
         ...prev.inneKoszty,
-        { id: uuidv4(), data: "", nazwa: "", koszt: 0 },
+        { id: uuidv4(), data: "", nazwa: "", koszt: 0, paidBy: "Firma" },
       ],
     }));
     setStronaInne(Math.ceil((dane.inneKoszty.length + 1) / KOSZTY_NA_STRONE));
@@ -1462,13 +1893,13 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
         <CardTitle>Tankowanie</CardTitle>
         <div className="space-y-2">
           {tankowanieWidoczne.map((t) => (
-            <div key={t.id}>
-              <div className="flex gap-2 items-center">
+            <div key={t.id} className="rounded-xl border border-line/60 p-2 space-y-1.5">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-[auto_minmax(0,1fr)_auto_auto] sm:items-center">
                 <DatePill
                   value={t.data}
                   onChange={(v) => updateTankowanie(t.id, { data: v })}
                 />
-                <div className="flex-1">
+                <div className="min-w-0">
                   <NumInput
                     value={t.koszt}
                     onChange={(v) => updateTankowanie(t.id, { koszt: v })}
@@ -1476,17 +1907,25 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
                     placeholder="0"
                   />
                 </div>
-                <SzczegolyToggle
-                  open={!!rozwiniete[t.id]}
-                  onToggle={() => toggleSzczegoly(t.id)}
+                <PayerSelect
+                  value={t.paidBy}
+                  onChange={(paidBy) => updateTankowanie(t.id, { paidBy })}
+                  compact
+                  className="col-span-2 sm:col-span-1"
                 />
-                <button
-                  onClick={() => usunKoszt(t.id, "paliwo", t.koszt, t.data, "tankowanie")}
-                  className="shrink-0 p-2 min-h-[40px] rounded-lg text-red-400 hover:bg-red-soft transition-all duration-150"
-                  title="Usuń"
-                >
-                  <IconX size={16} />
-                </button>
+                <div className="col-span-2 flex justify-end gap-1 sm:col-span-1">
+                  <SzczegolyToggle
+                    open={!!rozwiniete[t.id]}
+                    onToggle={() => toggleSzczegoly(t.id)}
+                  />
+                  <button
+                    onClick={() => usunKoszt(t.id, "paliwo", t.koszt, t.data, "tankowanie")}
+                    className="shrink-0 p-2 min-h-[40px] rounded-lg text-red-400 hover:bg-red-soft transition-all duration-150"
+                    title="Usuń"
+                  >
+                    <IconX size={16} />
+                  </button>
+                </div>
               </div>
               {(t.litry || t.dodaneBy) && (
                 <p className="mt-1 text-[11px] text-dim flex items-center gap-1.5 flex-wrap">
@@ -1552,13 +1991,20 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
 
       <FuelStatsPanel dane={dane} ustawienia={ustawienia} miesiac={miesiac} />
 
+      <RozliczenieKosztowPanel
+        dane={dane}
+        ustawienia={ustawienia}
+        miesiac={miesiac}
+        wynagrodzenie={wynagrodzenie}
+      />
+
       {/* ── SEKCJA: INNE KOSZTY ──────────────────────────────────────────── */}
       <Card>
         <CardTitle>Inne koszty</CardTitle>
         <div className="space-y-2">
           {inneWidoczne.map((k) => (
             <div key={k.id} className="rounded-xl border border-line/60 p-2 space-y-1.5">
-              <div className="flex gap-2 items-center flex-wrap sm:flex-nowrap">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-[auto_minmax(0,1fr)_112px_auto_auto] sm:items-center">
                 <DatePill
                   value={k.data}
                   onChange={(v) => updateInny(k.id, { data: v })}
@@ -1569,9 +2015,9 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
                   onChange={(e) => updateInny(k.id, { nazwa: e.target.value })}
                   onBlur={() => autoKategoryzuj(k.id, k.nazwa, k.koszt, k.data, "inne")}
                   placeholder="Opis…"
-                  className="flex-1 min-w-32 bg-input border border-line rounded-[10px] px-3 py-2 text-[15px] text-ink placeholder:text-dim/50"
+                  className="col-span-2 min-w-0 bg-input border border-line rounded-[10px] px-3 py-2 text-[15px] text-ink placeholder:text-dim/50 sm:col-span-1"
                 />
-                <div className="w-28">
+                <div className="min-w-0">
                   <NumInput
                     value={k.koszt}
                     onChange={(v) => updateInny(k.id, { koszt: v })}
@@ -1579,17 +2025,25 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
                     placeholder="0"
                   />
                 </div>
-                <SzczegolyToggle
-                  open={!!rozwiniete[k.id]}
-                  onToggle={() => toggleSzczegoly(k.id)}
+                <PayerSelect
+                  value={k.paidBy}
+                  onChange={(paidBy) => updateInny(k.id, { paidBy })}
+                  compact
+                  className="min-w-0"
                 />
-                <button
-                  onClick={() => usunKoszt(k.id, k.nazwa || "inny", k.koszt, k.data, "inne")}
-                  className="shrink-0 p-2 min-h-[40px] rounded-lg text-red-400 hover:bg-red-soft transition-all duration-150"
-                  title="Usuń"
-                >
-                  <IconX size={16} />
-                </button>
+                <div className="col-span-2 flex justify-end gap-1 sm:col-span-1">
+                  <SzczegolyToggle
+                    open={!!rozwiniete[k.id]}
+                    onToggle={() => toggleSzczegoly(k.id)}
+                  />
+                  <button
+                    onClick={() => usunKoszt(k.id, k.nazwa || "inny", k.koszt, k.data, "inne")}
+                    className="shrink-0 p-2 min-h-[40px] rounded-lg text-red-400 hover:bg-red-soft transition-all duration-150"
+                    title="Usuń"
+                  >
+                    <IconX size={16} />
+                  </button>
+                </div>
               </div>
 
               {/* Kategoria + ostrzeżenia + zatwierdzanie AI */}

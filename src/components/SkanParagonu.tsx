@@ -7,6 +7,7 @@ import { useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 import {
   KategoriaKosztu,
+  KosztPayer,
   KosztZalacznik,
   UstawieniaPodatkowe,
   VatRate,
@@ -30,6 +31,12 @@ const STAWKI: { id: VatRate; label: string }[] = [
   { id: "0", label: "0%" },
   { id: "zw", label: "zw." },
   { id: "np", label: "np." },
+];
+
+const PLATNICY: { id: KosztPayer; label: string }[] = [
+  { id: "Firma", label: "Firma" },
+  { id: "Artur", label: "Artur" },
+  { id: "Damian", label: "Damian" },
 ];
 
 interface Props {
@@ -56,6 +63,7 @@ export function SkanParagonu({ typ, ustawienia, onZapisz, disabled }: Props) {
   const [fCena, setFCena] = useState("");
   const [fVat, setFVat] = useState<VatRate>("0.23");
   const [fKat, setFKat] = useState<KategoriaKosztu>("inne");
+  const [fPaidBy, setFPaidBy] = useState<KosztPayer>("Firma");
 
   const parseDecimal = (v: string) => {
     const n = parseFloat(v.replace(",", "."));
@@ -84,6 +92,7 @@ export function SkanParagonu({ typ, ustawienia, onZapisz, disabled }: Props) {
       setFCena(odczyt.cenaZaLitr != null ? String(odczyt.cenaZaLitr) : "");
       setFVat(odczyt.vatRate ?? domyslnyVatKategorii(kat, ustawienia).vatRate);
       setFKat(kat);
+      setFPaidBy("Firma");
       setModal({ dataUrl, odczyt });
     } catch (error) {
       alert(error instanceof Error ? error.message : "Nie udało się odczytać zdjęcia. Spróbuj ponownie lub dodaj koszt ręcznie.");
@@ -134,6 +143,7 @@ export function SkanParagonu({ typ, ustawienia, onZapisz, disabled }: Props) {
       supplierNip: fNip || undefined,
       invoiceNumber: modal?.odczyt.documentNumber || undefined,
       amountMode: "brutto" as const,
+      paidBy: fPaidBy,
       vatRate: fVat,
       vatDeductible: fVat !== "zw" && fVat !== "np",
       vatDeductionPercent: fVat === "zw" || fVat === "np" ? 0 : defVat.vatDeductionPercent,
@@ -254,6 +264,12 @@ export function SkanParagonu({ typ, ustawienia, onZapisz, disabled }: Props) {
                 Kategoria
                 <select value={fKat} onChange={(e) => setFKat(e.target.value as KategoriaKosztu)} className="mt-0.5 w-full bg-input border border-line rounded-lg px-2 py-1.5 text-sm text-ink">
                   {KATEGORIE.map((k) => <option key={k.id} value={k.id}>{k.label}</option>)}
+                </select>
+              </label>
+              <label className="text-dim">
+                Kto zapłacił?
+                <select value={fPaidBy} onChange={(e) => setFPaidBy(e.target.value as KosztPayer)} className="mt-0.5 w-full bg-input border border-line rounded-lg px-2 py-1.5 text-sm text-ink">
+                  {PLATNICY.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
                 </select>
               </label>
             </div>
