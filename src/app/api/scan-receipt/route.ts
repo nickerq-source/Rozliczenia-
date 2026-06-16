@@ -381,13 +381,26 @@ export async function POST(req: NextRequest) {
   const mediaType = wykryjFormat(image.data);
   if (!mediaType) {
     // np. HEIC/HEIF z iPhone'a, którego przeglądarka nie przekonwertowała
-    return NextResponse.json({ ...PUSTY, _badFormat: true }, { status: 415 });
+    return NextResponse.json(
+      {
+        ...PUSTY,
+        _badFormat: true,
+        error: "Nieobsługiwany format zdjęcia. Użyj JPG, PNG albo WebP.",
+      },
+      { status: 415 }
+    );
   }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    // Brak klucza → puste pola do ręcznego wpisania (bez crasha)
-    return NextResponse.json({ ...PUSTY, _noKey: true });
+    return NextResponse.json(
+      {
+        ...PUSTY,
+        _noKey: true,
+        error: "Brak ANTHROPIC_API_KEY na serwerze. Dodaj tę zmienną w Vercel.",
+      },
+      { status: 503 }
+    );
   }
 
   try {
@@ -420,9 +433,25 @@ export async function POST(req: NextRequest) {
     const match = text.match(/\{[\s\S]*\}/);
     if (!match) {
       if (process.env.NODE_ENV !== "production") console.log("[scan-receipt] brak JSON w odpowiedzi:", text.slice(0, 300));
-      return NextResponse.json({ ...PUSTY, _empty: true });
+      return NextResponse.json(
+        {
+          ...PUSTY,
+          _empty: true,
+          error: "Claude nie zwrócił poprawnego JSON ze zdjęcia. Spróbuj wyraźniejsze zdjęcie.",
+        },
+        { status: 422 }
+      );
     }
     const wynik = waliduj(JSON.parse(match[0]));
+    if (wynik._empty) {
+      return NextResponse.json(
+        {
+          ...wynik,
+          error: "Nie udało się wyciągnąć danych z tego zdjęcia. Spróbuj zrobić zdjęcie bliżej, prosto i przy lepszym świetle.",
+        },
+        { status: 422 }
+      );
+    }
     if (process.env.NODE_ENV !== "production") {
       console.log("[scan-receipt] odczyt:", JSON.stringify({
         ...wynik,
@@ -436,7 +465,14 @@ export async function POST(req: NextRequest) {
     const status = (e as { status?: number })?.status;
     const apiMsg = (e as { error?: { error?: { message?: string } } })?.error?.error?.message;
     console.error("[scan-receipt] AI error:", status ?? "", apiMsg ?? (e instanceof Error ? e.message : e));
-    // Nie crashuj — zostaw użytkownikowi puste pola (z flagą błędu)
-    return NextResponse.json({ ...PUSTY, _apiError: true });
+    const message = apiMsg ?? (e instanceof Error ? e.message : "Nieznany błąd Claude OCR.");
+    return NextResponse.json(
+      {
+        ...PUSTY,
+        _apiError: true,
+        error: `Błąd Claude OCR: ${message}`,
+      },
+      { status: 502 }
+    );
   }
 }
