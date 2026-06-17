@@ -19,7 +19,7 @@ export const maxDuration = 30;
  */
 
 const KATEGORIE: KategoriaKosztu[] = [
-  "serwis", "czesci", "paliwo_adblue", "parking", "myjnia", "oplaty",
+  "leasing", "serwis", "czesci", "naprawy", "przeglad", "paliwo_adblue", "parking", "myjnia", "oplaty",
   "ksiegowosc", "ubezpieczenie", "telefon_aplikacje", "internet",
   "wyposazenie", "art_spozywcze", "inne",
 ];
@@ -103,15 +103,15 @@ const PROMPT_SYSTEM = `Jesteś księgowym klasyfikującym koszty polskiej firmy 
 Dobierasz kategorię ORAZ właściwą polską stawkę VAT dla danego towaru/usługi.
 Zwróć wyłącznie JSON, bez komentarzy.
 
-Dozwolone kategorie: serwis, czesci, paliwo_adblue, parking, myjnia, oplaty,
+Dozwolone kategorie: leasing, serwis, czesci, naprawy, przeglad, paliwo_adblue, parking, myjnia, oplaty,
 ksiegowosc, ubezpieczenie, telefon_aplikacje, internet, wyposazenie,
 art_spozywcze, inne.
 
 Dozwolone stawki VAT: 0, 0.05, 0.08, 0.23, "zw", "np".
 
 POLSKIE STAWKI VAT — dobieraj wg rzeczywistego towaru/usługi, NIE domyślaj 23% gdy produkt ma niższą:
-- 0.23 (podstawowa): części, oleje, opony, narzędzia, elektronika, paliwo, AdBlue,
-  myjnia, parking, serwis/naprawa, telefon, internet, odzież robocza, większość usług.
+- 0.23 (podstawowa): leasing, części, oleje, opony, narzędzia, elektronika, paliwo, AdBlue,
+  myjnia, parking, serwis/naprawa/przegląd, telefon, internet, odzież robocza, większość usług.
 - 0.08: usługi gastronomiczne i catering, hotele/noclegi, transport pasażerski,
   niektóre dania gotowe i napoje w gastronomii.
 - 0.05: podstawowe artykuły spożywcze (chleb, pieczywo, nabiał, mleko, mięso, owoce,

@@ -8,6 +8,10 @@ import { KategoriaKosztu, VatRate } from "./types";
 // zanim ogólniejsze słowa trafią w inną kategorię.
 const REGULY: { kategoria: KategoriaKosztu; slowa: string[] }[] = [
   {
+    kategoria: "leasing",
+    slowa: ["leasing", "rata leasing", "rata leasingu", "leasingowa", "leasingu"],
+  },
+  {
     kategoria: "paliwo_adblue",
     slowa: ["adblue", "paliwo", "diesel", "benzyna", "orlen", "shell", "circle k", "moya"],
   },
@@ -21,11 +25,19 @@ const REGULY: { kategoria: KategoriaKosztu; slowa: string[] }[] = [
     ],
   },
   {
+    kategoria: "naprawy",
+    slowa: ["naprawa", "naprawy", "wymiana", "robocizna", "warsztat", "mechanik"],
+  },
+  {
     kategoria: "serwis",
     slowa: [
-      "mechanik", "naprawa", "wymiana", "robocizna", "warsztat", "diagnostyka",
+      "serwis", "diagnostyka",
       "geometria", "wulkanizacja", "przegląd serwisowy", "przeglad serwisowy",
     ],
+  },
+  {
+    kategoria: "przeglad",
+    slowa: ["przegląd", "przeglad", "badanie techniczne"],
   },
   { kategoria: "parking", slowa: ["parking", "postój", "postoj"] },
   { kategoria: "myjnia", slowa: ["myjnia", "mycie", "pranie tapicerki"] },
@@ -71,7 +83,7 @@ const REGULY: { kategoria: KategoriaKosztu; slowa: string[] }[] = [
     kategoria: "oplaty",
     slowa: [
       "opłata", "oplata", "urząd", "urzad", "skarbówka", "skarbowka", "podatek",
-      "przegląd", "przeglad", "badanie techniczne", "viatoll", "e-toll", "etoll",
+      "viatoll", "e-toll", "etoll",
       "autostrada", "bramka",
     ],
   },

@@ -12,7 +12,7 @@ import {
   WpisInnegoKosztu,
   WpisTankowania,
 } from "@/lib/types";
-import { obliczWynikMiesiaca, formatZl, formatZlCaly, sumaObciazen } from "@/lib/business-logic";
+import { czyKosztLeasingu, obliczWynikMiesiaca, formatZl, formatZlCaly, sumaObciazen } from "@/lib/business-logic";
 import { POLSKIE_MIESIACE } from "@/lib/dates";
 import { Card } from "../ui/Card";
 import { PodatkiCard } from "../PodatkiCard";
@@ -222,7 +222,8 @@ export function PodsumowanieTab({
         });
       }
     }
-    if (wynik.leasing > 0) {
+    const leasingZWpisow = dane.inneKoszty.some(czyKosztLeasingu);
+    if (wynik.leasing > 0 && !leasingZWpisow) {
       dodatkowe.push({
         data: "",
         typ: "leasing",

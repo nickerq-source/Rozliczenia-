@@ -172,8 +172,11 @@ export interface DzienKierowcy {
 
 /** Kategorie kosztów (wartość w bazie — etykiety UI w tax.ts) */
 export type KategoriaKosztu =
+  | "leasing"
   | "serwis"
   | "czesci"
+  | "naprawy"
+  | "przeglad"
   | "paliwo_adblue"
   | "parking"
   | "myjnia"
@@ -228,6 +231,10 @@ export interface KosztVatInfo {
   kategoriaConfidence?: number; // 0–1 (tylko AI)
   kategoriaPotwierdzona?: boolean; // admin zatwierdził wynik AI
   vatZrodlo?: ZrodloKategorii; // domyślnie "rule"
+  includeInSplit?: boolean; // czy koszt wchodzi do rozliczenia 50/50; domyślnie true
+  settleWithCompany?: boolean; // gdy paidBy=Firma: rozliczać po 50% wobec Firmy
+  leasingMonth?: string; // YYYY-MM dla rat leasingu
+  opis?: string;
 }
 
 export interface WpisTankowania extends KosztVatInfo {
@@ -305,7 +312,7 @@ export interface DaneMiesiaca {
   dni: Record<string, DzienKierowcy>; // klucz: "2026-06-01"
   tankowanie: WpisTankowania[];
   inneKoszty: WpisInnegoKosztu[];
-  leasing: number; // domyślnie 2300
+  leasing: number; // legacy: stara miesięczna rata; nowe raty zapisujemy w inneKoszty jako kategoria "leasing"
   wyplata?: WyplataInfo;
   zamkniety?: MonthLock;
   zgloszenia?: ZgloszenieDnia[]; // weryfikacje dni przez kierowcę

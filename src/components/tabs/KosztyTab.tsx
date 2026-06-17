@@ -33,6 +33,8 @@ import {
   obliczWynagrodzenie,
   obliczKosztPaliwa,
   obliczInneKoszty,
+  obliczKosztLeasingu,
+  czyKosztLeasingu,
   formatZl,
   formatZlCaly,
   parseNum,
@@ -154,7 +156,7 @@ const PAYER_OPTIONS: { id: KosztPayer; label: string }[] = [
 ];
 
 type PayerFilter = "all" | KosztPayer;
-type PodkategoriaKosztow = "all" | "tankowanie" | "samochod_dzialalnosc";
+type PodkategoriaKosztow = "all" | "tankowanie" | "leasing" | "samochod_dzialalnosc";
 type WidokKosztow =
   | "podsumowanie"
   | "wyplata"
@@ -166,6 +168,7 @@ type WidokKosztow =
 const PODKATEGORIE_KOSZTOW: { id: PodkategoriaKosztow; label: string }[] = [
   { id: "all", label: "wszystkie" },
   { id: "tankowanie", label: "Tankowanie" },
+  { id: "leasing", label: "Leasing" },
   { id: "samochod_dzialalnosc", label: "Samochód i działalność" },
 ];
 
@@ -188,8 +191,18 @@ function normalizePayer(value: KosztVatInfo["paidBy"] | string | undefined): Kos
   return PAYER_OPTIONS.some((p) => p.id === value) ? (value as KosztPayer) : "Firma";
 }
 
+function kosztWchodziDo5050(wpis: KosztVatInfo): boolean {
+  return wpis.includeInSplit ?? true;
+}
+
+function kosztRozliczanyZFirma(wpis: KosztVatInfo): boolean {
+  if (normalizePayer(wpis.paidBy) !== "Firma") return false;
+  return wpis.settleWithCompany ?? wpis.kategoria === "leasing";
+}
+
 function podkategoriaKosztu(typ: "tankowanie" | "inne", kategoria: KategoriaKosztu | undefined): Exclude<PodkategoriaKosztow, "all"> {
   if (typ === "tankowanie" || kategoria === "paliwo_adblue") return "tankowanie";
+  if (kategoria === "leasing") return "leasing";
   return "samochod_dzialalnosc";
 }
 
@@ -785,6 +798,8 @@ type RozliczenieKosztu = {
   netto: number;
   vat: number;
   brutto: number;
+  includeInSplit: boolean;
+  settleWithCompany: boolean;
 };
 
 type PayerSuma = {
@@ -892,6 +907,8 @@ function RozliczenieKosztowPanel({
         netto: r.netto,
         vat: r.vat,
         brutto: r.brutto,
+        includeInSplit: kosztWchodziDo5050(t),
+        settleWithCompany: kosztRozliczanyZFirma({ ...t, kategoria: r.kategoria }),
       });
     }
 
@@ -907,6 +924,8 @@ function RozliczenieKosztowPanel({
         netto: r.netto,
         vat: r.vat,
         brutto: r.brutto,
+        includeInSplit: kosztWchodziDo5050(k),
+        settleWithCompany: kosztRozliczanyZFirma({ ...k, kategoria: r.kategoria }),
       });
     }
 
@@ -927,6 +946,7 @@ function RozliczenieKosztowPanel({
   const doRozliczenia5050 = useMemo(
     () =>
       pozycje.filter((koszt) => {
+        if (!koszt.includeInSplit) return false;
         if (podkategoria !== "all" && koszt.podkategoria !== podkategoria) return false;
         if (kategoria !== "all" && koszt.kategoria !== kategoria) return false;
         return true;
@@ -935,12 +955,21 @@ function RozliczenieKosztowPanel({
   );
 
   const rows = useMemo(() => rozliczenieRows(przefiltrowane), [przefiltrowane]);
-  const rows5050 = useMemo(() => rozliczenieRows(doRozliczenia5050), [doRozliczenia5050]);
+  const prywatne5050 = useMemo(
+    () => doRozliczenia5050.filter((koszt) => koszt.paidBy === "Artur" || koszt.paidBy === "Damian"),
+    [doRozliczenia5050]
+  );
+  const firmowe5050 = useMemo(
+    () => doRozliczenia5050.filter((koszt) => koszt.paidBy === "Firma" && koszt.settleWithCompany),
+    [doRozliczenia5050]
+  );
+  const rows5050 = useMemo(() => rozliczenieRows(prywatne5050), [prywatne5050]);
   const arturPaid = rows5050.find((r) => r.paidBy === "Artur")?.brutto ?? 0;
   const damianPaid = rows5050.find((r) => r.paidBy === "Damian")?.brutto ?? 0;
-  const firmaPaid = rows5050.find((r) => r.paidBy === "Firma")?.brutto ?? 0;
+  const firmaPaid = firmowe5050.reduce((sum, koszt) => sum + koszt.brutto, 0);
   const privateTotal = arturPaid + damianPaid;
   const eachShare = privateTotal / 2;
+  const firmShare = firmaPaid / 2;
   const diff = Math.round((arturPaid - eachShare) * 100) / 100;
   const settlement =
     Math.abs(diff) < 0.01
@@ -1043,7 +1072,7 @@ function RozliczenieKosztowPanel({
             <span className="tabular-nums font-bold text-white">{formatZl(damianPaid)}</span>
           </div>
           <div className="flex justify-between gap-3">
-            <span className="text-dim">Firma zapłaciła</span>
+            <span className="text-dim">Firma do rozliczenia</span>
             <span className="tabular-nums font-bold text-white">{formatZl(firmaPaid)}</span>
           </div>
           <div className="flex justify-between gap-3">
@@ -1058,12 +1087,29 @@ function RozliczenieKosztowPanel({
             <span className="text-dim">Udział Damiana</span>
             <span className="tabular-nums font-bold text-white">{formatZl(eachShare)}</span>
           </div>
+          {firmaPaid > 0 && (
+            <>
+              <div className="flex justify-between gap-3">
+                <span className="text-dim">Artur wobec Firmy</span>
+                <span className="tabular-nums font-bold text-white">{formatZl(firmShare)}</span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-dim">Damian wobec Firmy</span>
+                <span className="tabular-nums font-bold text-white">{formatZl(firmShare)}</span>
+              </div>
+            </>
+          )}
         </div>
         <p className="mt-3 rounded-xl bg-surface/70 px-3 py-2 text-sm font-bold text-white">
           {settlement}
         </p>
+        {firmaPaid > 0 && (
+          <p className="mt-2 rounded-xl border border-green-500/25 bg-green-soft px-3 py-2 text-sm font-bold text-green-200">
+            Do rozliczenia wobec Firmy: Artur {formatZl(firmShare)} · Damian {formatZl(firmShare)}.
+          </p>
+        )}
         <p className="mt-2 text-[11px] text-dim">
-          Do długu 50/50 liczą się tylko koszty oznaczone jako Artur albo Damian. Filtr „Kto zapłacił” zawęża tabelę, ale samo 50/50 zawsze porównuje Artura i Damiana.
+          Prywatne 50/50 liczy tylko koszty Artur/Damian z włączonym rozliczeniem. Koszty opłacone przez Firmę trafiają osobno do rozliczenia wobec Firmy, jeśli mają włączony taki przełącznik.
         </p>
       </div>
     </Card>
@@ -1773,14 +1819,15 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
   // ─── INNE KOSZTY ─────────────────────────────────────────────────────────────
 
   function addInny() {
+    const liczbaInnych = dane.inneKoszty.filter((k) => !czyKosztLeasingu(k)).length;
     onUpdate((prev) => ({
       ...prev,
       inneKoszty: [
         ...prev.inneKoszty,
-        { id: uuidv4(), data: "", nazwa: "", koszt: 0, paidBy: "Firma" },
+        { id: uuidv4(), data: "", nazwa: "", koszt: 0, paidBy: "Firma", includeInSplit: true },
       ],
     }));
-    setStronaInne(Math.ceil((dane.inneKoszty.length + 1) / KOSZTY_NA_STRONE));
+    setStronaInne(Math.ceil((liczbaInnych + 1) / KOSZTY_NA_STRONE));
   }
 
   function updateInny(id: string, patch: Partial<WpisInnegoKosztu>) {
@@ -1796,9 +1843,44 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
     onUpdate((prev) => ({ ...prev, leasing: val }));
   }
 
+  function addLeasing() {
+    const leasingMonth = `2026-${String(miesiac).padStart(2, "0")}`;
+    const istnieje = dane.inneKoszty.some((k) => k.kategoria === "leasing" && k.leasingMonth === leasingMonth);
+    if (istnieje && !window.confirm("Rata leasingu za ten miesiąc już istnieje. Dodać kolejną?")) {
+      return;
+    }
+
+    const kwotaStartowa = parseNum(dane.leasing);
+    onUpdate((prev) => ({
+      ...prev,
+      inneKoszty: [
+        ...prev.inneKoszty,
+        {
+          id: uuidv4(),
+          data: "",
+          nazwa: `Leasing ${leasingMonth}`,
+          koszt: kwotaStartowa,
+          paidBy: "Firma",
+          kategoria: "leasing",
+          kategoriaZrodlo: "manual",
+          amountMode: "brutto",
+          vatRate: "0.23",
+          vatDeductible: true,
+          vatDeductionPercent: 100,
+          hasInvoice: true,
+          documentStatus: "faktura",
+          includeInSplit: true,
+          settleWithCompany: true,
+          leasingMonth,
+        },
+      ],
+    }));
+    showToast("Dodano ratę leasingu");
+  }
+
   const sumaFuel = obliczKosztPaliwa(dane.tankowanie);
   const sumaInne = obliczInneKoszty(dane.inneKoszty);
-  const leasing = parseNum(dane.leasing);
+  const leasing = obliczKosztLeasingu(dane);
   const kosztyPodatkowe = useMemo(() => {
     const entries: Array<KosztVatInfo & { koszt: number; domyslna: KategoriaKosztu }> = [
       ...(dane.tankowanie ?? []).map((t) => ({
@@ -1832,15 +1914,17 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
   const platnicyKosztow = useMemo(() => {
     const sums: Record<KosztPayer, number> = { Artur: 0, Damian: 0, Firma: 0 };
     const count: Record<KosztPayer, number> = { Artur: 0, Damian: 0, Firma: 0 };
+    let firmaDoRozliczenia = 0;
     const rows = [
       ...(dane.tankowanie ?? []),
       ...(dane.inneKoszty ?? []),
-    ].filter((x) => parseNum(x.koszt) > 0);
+    ].filter((x) => parseNum(x.koszt) > 0 && kosztWchodziDo5050(x));
 
     for (const row of rows) {
       const payer = normalizePayer(row.paidBy);
       sums[payer] += parseNum(row.koszt);
       count[payer] += 1;
+      if (kosztRozliczanyZFirma(row)) firmaDoRozliczenia += parseNum(row.koszt);
     }
 
     const prywatne = sums.Artur + sums.Damian;
@@ -1853,7 +1937,17 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
         ? `Damian oddaje Arturowi ${formatZl(diff)}.`
         : `Artur oddaje Damianowi ${formatZl(Math.abs(diff))}.`;
 
-    return { sums, count, prywatne, polowa, diff, rozliczenie, liczba: rows.length };
+    return {
+      sums,
+      count,
+      prywatne,
+      polowa,
+      diff,
+      rozliczenie,
+      liczba: rows.length,
+      firmaDoRozliczenia,
+      firmaPolowa: firmaDoRozliczenia / 2,
+    };
   }, [dane.tankowanie, dane.inneKoszty]);
   const sumaKosztow = wynagrodzenie + sumaFuel + sumaInne + leasing;
   const glowneKoszty = [
@@ -1884,9 +1978,11 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
   const tankTotalStron = Math.max(1, Math.ceil(dane.tankowanie.length / KOSZTY_NA_STRONE));
   const tankStrona = Math.min(stronaTank, tankTotalStron);
   const tankowanieWidoczne = dane.tankowanie.slice((tankStrona - 1) * KOSZTY_NA_STRONE, tankStrona * KOSZTY_NA_STRONE);
-  const inneTotalStron = Math.max(1, Math.ceil(dane.inneKoszty.length / KOSZTY_NA_STRONE));
+  const leasingEntries = dane.inneKoszty.filter((k) => czyKosztLeasingu(k));
+  const inneBezLeasingu = dane.inneKoszty.filter((k) => !czyKosztLeasingu(k));
+  const inneTotalStron = Math.max(1, Math.ceil(inneBezLeasingu.length / KOSZTY_NA_STRONE));
   const inneStrona = Math.min(stronaInne, inneTotalStron);
-  const inneWidoczne = dane.inneKoszty.slice((inneStrona - 1) * KOSZTY_NA_STRONE, inneStrona * KOSZTY_NA_STRONE);
+  const inneWidoczne = inneBezLeasingu.slice((inneStrona - 1) * KOSZTY_NA_STRONE, inneStrona * KOSZTY_NA_STRONE);
 
   // Numer tygodnia rośnie przy każdym poniedziałku (poza pierwszym dniem)
   let weekNum = 1;
@@ -1980,6 +2076,11 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
           <p className="mt-3 rounded-xl border border-amber-brand/30 bg-amber-brand/10 px-3 py-2 text-xs font-bold text-amber-brand">
             {platnicyKosztow.rozliczenie}
           </p>
+          {platnicyKosztow.firmaDoRozliczenia > 0 && (
+            <p className="mt-2 rounded-xl border border-green-500/25 bg-green-soft px-3 py-2 text-xs font-bold text-green-200">
+              Wobec Firmy: Artur {formatZl(platnicyKosztow.firmaPolowa)} · Damian {formatZl(platnicyKosztow.firmaPolowa)}.
+            </p>
+          )}
         </div>
 
         <div className="mt-4 rounded-2xl border border-green-500/25 bg-green-soft/60 p-3">
@@ -2673,7 +2774,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
           ustawienia={ustawienia}
           onZapisz={(w) => dodajZeSkanu(w, "inne")}
         />
-        {dane.inneKoszty.length > 0 && (
+        {inneBezLeasingu.length > 0 && (
           <div className="flex items-center gap-2 mt-3 rounded-2xl bg-surface2 border border-line px-4 py-3">
             <IconPackage size={18} className="text-amber-brand" />
             <span className="text-sm text-dim flex-1">Suma samochód i działalność</span>
@@ -2684,26 +2785,235 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
 
       {/* ── SEKCJA: LEASING ──────────────────────────────────────────────── */}
       {showSamochod && <Card>
-        <div className="flex items-center gap-3">
-          <span className="shrink-0 p-2.5 rounded-xl bg-amber-brand/10 text-amber-brand">
+        <div className="mb-3 flex items-start gap-3">
+          <span className="shrink-0 rounded-xl bg-amber-brand/10 p-2.5 text-amber-brand">
             <IconCar size={22} />
           </span>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-bold text-white">Rata leasingu</p>
-            <p className="text-xs text-dim">odejmowane co miesiąc</p>
+          <div className="min-w-0 flex-1">
+            <CardTitle className="mb-1">Leasing</CardTitle>
+            <p className="text-xs text-dim">
+              Raty leasingowe jako osobne koszty: płatnik, dokument, VAT i rozliczenie 50/50.
+            </p>
           </div>
-          <div className="w-36 relative">
-            <NumInput
-              value={dane.leasing}
-              onChange={setLeasing}
-              placeholder="2300"
-              className="!text-lg !py-2.5 !pr-10"
-            />
-            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-dim pointer-events-none">
-              zł
-            </span>
-          </div>
+          <span className="shrink-0 rounded-full border border-amber-brand/35 bg-amber-brand/10 px-2.5 py-1 text-xs font-bold text-amber-brand">
+            {formatZl(leasing)}
+          </span>
         </div>
+
+        {parseNum(dane.leasing) > 0 && leasingEntries.length === 0 && (
+          <div className="mb-3 rounded-2xl border border-amber-brand/35 bg-amber-brand/10 p-3">
+            <p className="text-xs font-bold text-amber-brand">Stara rata leasingu</p>
+            <p className="mt-1 text-xs text-dim">
+              W danych jest jeszcze stara kwota miesięczna. Możesz ją przepisać jako normalną ratę leasingu z płatnikiem i dokumentem.
+            </p>
+            <div className="mt-2 grid grid-cols-[1fr_auto] gap-2">
+              <NumInput
+                value={dane.leasing}
+                onChange={setLeasing}
+                placeholder="2300"
+                className="!text-base"
+              />
+              <button
+                type="button"
+                onClick={addLeasing}
+                className="rounded-xl bg-amber-brand px-3 py-2 text-sm font-extrabold text-amber-ink"
+              >
+                Przepisz
+              </button>
+            </div>
+          </div>
+        )}
+
+        {parseNum(dane.leasing) > 0 && leasingEntries.length > 0 && (
+          <p className="mb-3 rounded-xl border border-line bg-surface2/70 px-3 py-2 text-[11px] text-dim">
+            Stara kwota leasingu {formatZl(dane.leasing)} jest zostawiona w danych historycznych, ale nie jest doliczana, bo masz już raty leasingowe jako wpisy kosztów.
+          </p>
+        )}
+
+        <div className="space-y-2">
+          {leasingEntries.map((k) => {
+            const payer = normalizePayer(k.paidBy);
+            const splitOn = kosztWchodziDo5050(k);
+            const companyOn = kosztRozliczanyZFirma(k);
+            const half = parseNum(k.koszt) / 2;
+            const duplicate = leasingEntries.some(
+              (x) => x.id !== k.id && x.leasingMonth && x.leasingMonth === k.leasingMonth
+            );
+            const efekt =
+              !splitOn
+                ? "Nie wchodzi do rozliczenia 50/50."
+                : payer === "Artur"
+                ? `Damian oddaje Arturowi ${formatZl(half)}.`
+                : payer === "Damian"
+                ? `Artur oddaje Damianowi ${formatZl(half)}.`
+                : companyOn
+                ? `Wobec Firmy: Artur ${formatZl(half)}, Damian ${formatZl(half)}.`
+                : "Tylko koszt firmowy — bez długu wobec Firmy.";
+
+            return (
+              <div key={k.id} className="rounded-2xl border border-line/70 bg-surface2/40 p-3 space-y-2">
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-dim">
+                    Miesiąc raty
+                    <input
+                      type="month"
+                      value={k.leasingMonth ?? `2026-${String(miesiac).padStart(2, "0")}`}
+                      onChange={(e) => updateInny(k.id, { leasingMonth: e.target.value })}
+                      className="mt-1 min-h-[42px] w-full rounded-[10px] border border-line bg-input px-3 py-2 text-[15px] text-ink"
+                    />
+                  </label>
+                  <label className="text-[11px] font-bold uppercase tracking-wider text-dim">
+                    Data płatności
+                    <DatePill
+                      value={k.data}
+                      onChange={(v) => updateInny(k.id, { data: v })}
+                    />
+                  </label>
+                </div>
+
+                {duplicate && (
+                  <p className="rounded-xl border border-amber-brand/35 bg-amber-brand/10 px-3 py-2 text-xs font-bold text-amber-brand">
+                    Uwaga: jest już inna rata leasingu dla tego miesiąca.
+                  </p>
+                )}
+
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_130px_auto_auto] sm:items-center">
+                  <input
+                    type="text"
+                    value={k.nazwa}
+                    onChange={(e) => updateInny(k.id, { nazwa: e.target.value })}
+                    placeholder="np. Leasing auta"
+                    className="min-w-0 rounded-[10px] border border-line bg-input px-3 py-2 text-[15px] text-ink placeholder:text-dim/50"
+                  />
+                  <NumInput
+                    value={k.koszt}
+                    onChange={(v) => updateInny(k.id, { koszt: v })}
+                    onBlur={() => pushKoszt(k.id, k.nazwa || "leasing", k.koszt, k)}
+                    placeholder="0"
+                  />
+                  <PayerSelect
+                    value={k.paidBy}
+                    onChange={(paidBy) =>
+                      updateInny(k.id, {
+                        paidBy,
+                        settleWithCompany: paidBy === "Firma" ? k.settleWithCompany ?? true : false,
+                      })
+                    }
+                    compact
+                  />
+                  <div className="flex justify-end gap-1">
+                    <SzczegolyToggle
+                      open={!!rozwiniete[k.id]}
+                      onToggle={() => toggleSzczegoly(k.id)}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => usunKoszt(k.id, k.nazwa || "leasing", k.koszt, k.data, "inne")}
+                      className="shrink-0 rounded-lg p-2 text-red-400 transition-all duration-150 hover:bg-red-soft"
+                      title="Usuń"
+                    >
+                      <IconX size={16} />
+                    </button>
+                  </div>
+                </div>
+
+                <textarea
+                  value={k.opis ?? ""}
+                  onChange={(e) => updateInny(k.id, { opis: e.target.value })}
+                  placeholder="Opis / uwagi do raty leasingu…"
+                  rows={2}
+                  className="w-full rounded-[10px] border border-line bg-input px-3 py-2 text-sm text-ink placeholder:text-dim/50"
+                />
+
+                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => updateInny(k.id, { includeInSplit: !splitOn })}
+                    className={cn(
+                      "rounded-xl border px-3 py-2 text-left text-xs font-bold transition-all",
+                      splitOn
+                        ? "border-green-500/35 bg-green-soft text-green-200"
+                        : "border-line bg-input text-dim"
+                    )}
+                  >
+                    {splitOn ? "✓ Wchodzi do rozliczenia 50/50" : "Nie wchodzi do 50/50"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={payer !== "Firma"}
+                    onClick={() => updateInny(k.id, { settleWithCompany: !companyOn })}
+                    className={cn(
+                      "rounded-xl border px-3 py-2 text-left text-xs font-bold transition-all disabled:opacity-45",
+                      companyOn
+                        ? "border-amber-brand/35 bg-amber-brand/10 text-amber-brand"
+                        : "border-line bg-input text-dim"
+                    )}
+                  >
+                    {payer === "Firma"
+                      ? companyOn
+                        ? "✓ Rozlicz wobec Firmy"
+                        : "Tylko koszt firmowy"
+                      : "Dostępne tylko dla płatnika Firma"}
+                  </button>
+                </div>
+
+                <p className="rounded-xl border border-line/70 bg-input/70 px-3 py-2 text-xs font-bold text-ink">
+                  Efekt: {efekt}
+                </p>
+
+                <div className="grid grid-cols-1 gap-1.5">
+                  <KategoriaBadge
+                    wpis={k}
+                    onZmienKategorie={(nowa) =>
+                      zmienKategorie(k.id, k.nazwa || "leasing", k.kategoria, nowa, "inne")
+                    }
+                    onZatwierdzAI={() => zatwierdzAI(k.id, k.nazwa || "leasing", "inne")}
+                    onAuto={() => autoKategoryzuj(k.id, k.nazwa, k.koszt, k.data, "inne", true)}
+                    autoBusy={autoBusyId === k.id}
+                  />
+                  <VatMiniInfo wpis={k} ustawienia={ustawienia} />
+                  <div className="grid grid-cols-1 gap-1.5 sm:flex sm:flex-wrap sm:items-center">
+                    <RozliczeniePodatkoweButton
+                      checked={czyRozliczanyPodatkowo(k)}
+                      onClick={() => {
+                        const patch = { hasInvoice: !czyRozliczanyPodatkowo(k) };
+                        updateInny(k.id, patch);
+                        logVatPatch(k.nazwa || "leasing", k.id, patch, k);
+                      }}
+                    />
+                    <DokumentyKosztu
+                      wpis={k}
+                      onStatus={(status) => zmienStatusDokumentu(k.id, k.nazwa || "leasing", status, "inne", k)}
+                      onAdd={(file, typ) => dodajZalacznik(k.id, k.nazwa || "leasing", file, typ, "inne")}
+                      onRemove={(zalacznikId) => usunZalacznik(k.id, zalacznikId, "inne")}
+                    />
+                  </div>
+                </div>
+
+                {rozwiniete[k.id] && (
+                  <KosztSzczegolyPanel
+                    wpis={k}
+                    ustawienia={ustawienia}
+                    onPatch={(patch) => {
+                      updateInny(k.id, patch);
+                      logVatPatch(k.nazwa || "leasing", k.id, patch, k);
+                    }}
+                    onAuto={() => autoKategoryzuj(k.id, k.nazwa, k.koszt, k.data, "inne", true)}
+                    autoBusy={autoBusyId === k.id}
+                  />
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <button
+          type="button"
+          onClick={addLeasing}
+          className="mt-3 w-full min-h-[44px] rounded-xl border border-dashed border-amber-brand/50 py-2.5 text-sm font-bold text-amber-brand transition-all duration-150 hover:bg-amber-brand/10"
+        >
+          + Dodaj ratę leasingu
+        </button>
       </Card>}
 
       {/* Info o domyślnym traktowaniu kosztów */}
@@ -2761,6 +3071,18 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
               >
                 <IconPackage size={20} className="text-amber-brand" />
                 Dodaj koszt
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  changeWidokKosztow("samochod");
+                  addLeasing();
+                  setQuickActionsOpen(false);
+                }}
+                className="flex items-center gap-3 rounded-2xl border border-line bg-surface2 px-4 py-3 text-left font-bold text-ink"
+              >
+                <IconCar size={20} className="text-amber-brand" />
+                Dodaj leasing
               </button>
             </div>
           </div>

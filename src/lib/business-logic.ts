@@ -7,6 +7,7 @@ import {
   WynikMiesiaca,
   FakturaWeek,
   UstawieniaPodatkowe,
+  WpisInnegoKosztu,
 } from "./types";
 import {
   getDniMiesiaca,
@@ -181,8 +182,18 @@ export function obliczKosztPaliwa(tankowanie: DaneMiesiaca["tankowanie"]): numbe
   return tankowanie.reduce((sum, t) => sum + parseNum(t.koszt), 0);
 }
 
+export function czyKosztLeasingu(koszt: Pick<WpisInnegoKosztu, "kategoria">): boolean {
+  return koszt.kategoria === "leasing";
+}
+
 export function obliczInneKoszty(inne: DaneMiesiaca["inneKoszty"]): number {
-  return inne.reduce((sum, t) => sum + parseNum(t.koszt), 0);
+  return inne.reduce((sum, t) => sum + (czyKosztLeasingu(t) ? 0 : parseNum(t.koszt)), 0);
+}
+
+export function obliczKosztLeasingu(daneM: Pick<DaneMiesiaca, "inneKoszty" | "leasing">): number {
+  const wpisyLeasingu = (daneM.inneKoszty ?? []).filter(czyKosztLeasingu);
+  if (wpisyLeasingu.length === 0) return parseNum(daneM.leasing);
+  return wpisyLeasingu.reduce((sum, t) => sum + parseNum(t.koszt), 0);
 }
 
 // ─── OBCIĄŻENIA KIEROWCY ───────────────────────────────────────────────────────
@@ -231,7 +242,7 @@ export function obliczWynikMiesiaca(
   );
   const paliwo = obliczKosztPaliwa(daneM.tankowanie);
   const inne = obliczInneKoszty(daneM.inneKoszty);
-  const leasing = parseNum(daneM.leasing);
+  const leasing = obliczKosztLeasingu(daneM);
 
   // ZUS pracodawcy — realny koszt na wierzchu pensji (gdy włączone oficjalne
   // wynagrodzenie i kierowca w tym miesiącu pracował).

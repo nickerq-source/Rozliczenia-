@@ -56,8 +56,11 @@ export function getUstawienia(data: WorkspaceData): UstawieniaPodatkowe {
 // ─── KATEGORIE ───────────────────────────────────────────────────────────────
 
 export const KATEGORIE: { id: KategoriaKosztu; label: string }[] = [
+  { id: "leasing", label: "leasing" },
   { id: "serwis", label: "serwis" },
   { id: "czesci", label: "części" },
+  { id: "naprawy", label: "naprawy" },
+  { id: "przeglad", label: "przegląd" },
   { id: "paliwo_adblue", label: "paliwo/AdBlue" },
   { id: "parking", label: "parking" },
   { id: "myjnia", label: "myjnia" },
@@ -82,10 +85,13 @@ export function domyslnyVatKategorii(
 ): { vatRate: VatRate; vatDeductible: boolean; vatDeductionPercent: number } {
   switch (kategoria) {
     case "paliwo_adblue":
+    case "leasing":
+    case "naprawy":
+    case "przeglad":
       return {
         vatRate: "0.23",
         vatDeductible: true,
-        vatDeductionPercent: ustawienia.fuelVatDeductionPercent,
+        vatDeductionPercent: kategoria === "paliwo_adblue" ? ustawienia.fuelVatDeductionPercent : 100,
       };
     case "ubezpieczenie":
       return { vatRate: "zw", vatDeductible: false, vatDeductionPercent: 0 };
@@ -291,6 +297,7 @@ function podstawyMiesiaca(m: MiesiącId, dane: DaneMiesiaca, u: UstawieniaPodatk
     ...((dane.tankowanie ?? []) as WpisTankowania[]).map((t) => ({ ...t, kategoria: t.kategoria ?? ("paliwo_adblue" as KategoriaKosztu) })),
     ...((dane.inneKoszty ?? []) as WpisInnegoKosztu[]),
   ];
+  const wpisyLeasingu = ((dane.inneKoszty ?? []) as WpisInnegoKosztu[]).filter((k) => k.kategoria === "leasing");
   for (const w of wpisy) {
     const r = rozbijWpis(w, u);
     kosztyNetto += r.netto;
@@ -299,7 +306,8 @@ function podstawyMiesiaca(m: MiesiącId, dane: DaneMiesiaca, u: UstawieniaPodatk
     kosztyBrutto += r.brutto;
   }
 
-  // Koszty bez VAT: wynagrodzenie kierowcy + leasing
+  // Koszty bez VAT: wynagrodzenie kierowcy + stary leasing liczbowy.
+  // Nowe raty leasingowe są normalnymi wpisami kosztów, więc są już w `wpisy`.
   const { wynagrodzenie } = obliczWynagrodzenie(m, dane.dni ?? {});
 
   // Miesiąc nieaktywny (brak sprzedaży, kosztów i pracy) nie wnosi nic do
@@ -326,10 +334,10 @@ function podstawyMiesiaca(m: MiesiącId, dane: DaneMiesiaca, u: UstawieniaPodatk
     ? round2(parseNum(u.pracownikBruttoMies) + zusPracodawcy)
     : wynagrodzenie;
 
-  const leasing = parseNum(dane.leasing);
-  const kosztyPodatkowe = round2(kosztyPitFaktury + wynagrodzeniePodatkowe + leasing);
+  const leasingLegacy = wpisyLeasingu.length > 0 ? 0 : parseNum(dane.leasing);
+  const kosztyPodatkowe = round2(kosztyPitFaktury + wynagrodzeniePodatkowe + leasingLegacy);
   const dochod = round2(sprzedazNetto - kosztyPodatkowe);
-  const zyskPrzedPodatkami = round2(przychodBrutto - wynagrodzenie - zusPracodawcy - kosztyBrutto - leasing);
+  const zyskPrzedPodatkami = round2(przychodBrutto - wynagrodzenie - zusPracodawcy - kosztyBrutto - leasingLegacy);
 
   return {
     sprzedazNetto: round2(sprzedazNetto),
