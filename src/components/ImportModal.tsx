@@ -890,8 +890,14 @@ export function ImportModal({
         ) : isPreview ? (
           <div className="px-5 pb-5 flex flex-col gap-2 shrink-0">
             <button
-              onClick={onReupload}
+              onClick={() => onConfirm(currentFiltered)}
               className="w-full py-2.5 rounded-xl bg-amber-brand text-amber-ink font-bold text-sm hover:bg-[#e09420] transition-colors"
+            >
+              Zapisz zmiany
+            </button>
+            <button
+              onClick={onReupload}
+              className="w-full py-2.5 rounded-xl border border-amber-brand/50 text-amber-brand font-bold text-sm hover:bg-amber-brand/10 transition-colors"
             >
               Wgraj inny PDF
             </button>

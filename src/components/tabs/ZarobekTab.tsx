@@ -196,6 +196,7 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
     const { fileName, invoiceNumber } = modal!;
     const filtered = nextFiltered ?? modal!.filtered;
     if (!filtered) return;
+    const isPreviewUpdate = modal!.mode === "preview";
     const clickedIdx = faktury.findIndex((f) => f.id === modal!.fakturaId);
     const target = resolveTargetWeek(filtered, clickedIdx);
 
@@ -263,11 +264,17 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
         comment: pdfImport.komentarz,
         manualAdditionsBrutto: pdfImport.manualAdditionsBrutto ?? 0,
       },
-      description: `${userName} dodał fakturę z PDF: ${formatZlCaly(filtered.brutto)} (tydzień ${target.idx + 1}, ${filtered.includedRows?.length ?? 0} poz.)`,
+      description: isPreviewUpdate
+        ? `${userName} zaktualizował komentarz/import PDF: ${formatZlCaly(filtered.brutto)} (tydzień ${target.idx + 1})`
+        : `${userName} dodał fakturę z PDF: ${formatZlCaly(filtered.brutto)} (tydzień ${target.idx + 1}, ${filtered.includedRows?.length ?? 0} poz.)`,
       url: `/admin?miesiac=${miesiac}&zakladka=zarobek`,
     });
 
     window.setTimeout(() => {
+      if (isPreviewUpdate) {
+        alert("Zapisano zmiany w imporcie PDF.");
+        return;
+      }
       const zakres =
         filtered.zakresOd && filtered.zakresDo
           ? `${formatRangeShort(filtered.zakresOd, filtered.zakresDo).replace("–", " – ")}`
