@@ -61,40 +61,41 @@ export function AppHeader({
   }
 
   return (
-    <header
-      className="sticky top-0 z-10 border-b border-line"
-      style={{
-        background: "rgba(10, 15, 12, 0.92)",
-        backdropFilter: "blur(12px)",
-        WebkitBackdropFilter: "blur(12px)",
-      }}
-    >
-      <div className="max-w-[720px] mx-auto px-3 sm:px-6 pt-2">
-        {/* Logo + użytkownik + status zapisu */}
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            <IconTruck size={20} className="text-amber-brand shrink-0" />
-            <div className="leading-none flex items-baseline gap-2">
-              <span className="logo-gem block text-[19px]">PapiTrans</span>
-              <span className="logo-subtitle hidden sm:inline text-[9px]">
-                El Jefe de la Ruta
-              </span>
+    <>
+      <header
+        className="sticky top-0 z-10 border-b border-line"
+        style={{
+          background: "rgba(10, 15, 12, 0.92)",
+          backdropFilter: "blur(12px)",
+          WebkitBackdropFilter: "blur(12px)",
+        }}
+      >
+        <div className="max-w-[720px] mx-auto px-3 sm:px-6 pt-2">
+          {/* Logo + użytkownik + status zapisu */}
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <IconTruck size={20} className="text-amber-brand shrink-0" />
+              <div className="leading-none flex items-baseline gap-2">
+                <span className="logo-gem block text-[19px]">PapiTrans</span>
+                <span className="logo-subtitle hidden sm:inline text-[9px]">
+                  El Jefe de la Ruta
+                </span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <SaveStatusBadge status={saveStatus} />
+              {userName && (
+                <span className="text-xs text-dim hidden sm:inline">{userName}</span>
+              )}
+              <button
+                onClick={logout}
+                title="Wyloguj"
+                className="p-1.5 rounded-lg text-dim hover:text-ink hover:bg-surface2 transition-colors"
+              >
+                <IconLogout size={16} />
+              </button>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <SaveStatusBadge status={saveStatus} />
-            {userName && (
-              <span className="text-xs text-dim hidden sm:inline">{userName}</span>
-            )}
-            <button
-              onClick={logout}
-              title="Wyloguj"
-              className="p-1.5 rounded-lg text-dim hover:text-ink hover:bg-surface2 transition-colors"
-            >
-              <IconLogout size={16} />
-            </button>
-          </div>
-        </div>
 
         {/* Przełącznik miesięcy — poziomy scroll na mobile */}
         <div className="flex gap-1 overflow-x-auto scrollbar-none pb-1.5">
@@ -122,15 +123,16 @@ export function AppHeader({
           showHistoria={showHistoria}
           className="hidden sm:flex"
         />
-      </div>
+        </div>
+      </header>
 
       {/* Mobilna nawigacja: główne zakładki na dole, reszta pod „Więcej”. */}
       <nav
-        className="fixed inset-x-0 bottom-0 z-50 border-t border-line bg-bg/95 px-2 pt-1.5 shadow-2xl backdrop-blur-xl sm:hidden"
-        style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 0.375rem)" }}
+        className="fixed inset-x-0 bottom-0 z-50 border-t border-line bg-bg/95 px-2 pt-1 shadow-2xl backdrop-blur-xl sm:hidden"
+        style={{ paddingBottom: "calc(env(safe-area-inset-bottom) + 0.25rem)" }}
         aria-label="Nawigacja mobilna"
       >
-        <div className="mx-auto grid max-w-[480px] grid-cols-5 gap-1">
+        <div className="mx-auto grid max-w-[440px] grid-cols-5 gap-1">
           {MOBILE_MAIN_TABS.map((tab) => {
             const active = aktywnaZakladka === tab.id;
             return (
@@ -142,7 +144,7 @@ export function AppHeader({
                   onZakladkaChange(tab.id);
                 }}
                 className={cn(
-                  "min-h-[48px] rounded-xl px-1 text-[11px] font-extrabold transition-all",
+                  "min-h-[42px] rounded-lg px-1 text-[10px] font-extrabold transition-all",
                   active
                     ? "bg-amber-brand text-amber-ink"
                     : "text-dim hover:bg-surface2 hover:text-ink"
@@ -157,7 +159,7 @@ export function AppHeader({
             onClick={() => setMobileMoreOpen((v) => !v)}
             disabled={mobileMoreTabs.length === 0}
             className={cn(
-              "flex min-h-[48px] items-center justify-center gap-1 rounded-xl px-1 text-[11px] font-extrabold transition-all disabled:opacity-40",
+              "flex min-h-[42px] items-center justify-center gap-1 rounded-lg px-1 text-[10px] font-extrabold transition-all disabled:opacity-40",
               moreIsActive || mobileMoreOpen
                 ? "bg-amber-brand text-amber-ink"
                 : "text-dim hover:bg-surface2 hover:text-ink"
@@ -205,6 +207,6 @@ export function AppHeader({
           </div>
         </div>
       )}
-    </header>
+    </>
   );
 }
