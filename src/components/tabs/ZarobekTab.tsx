@@ -182,15 +182,26 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
 
   // ─── ZAPISZ IMPORT DO STANU ────────────────────────────────────────────────
 
-  function handleConfirmImport() {
-    if (!modal?.filtered) return;
+  function handleConfirmImport(nextFiltered?: ImportModalProps["filtered"] | null) {
+    if (!modal?.filtered && !nextFiltered) return;
 
-    const { fileName, invoiceNumber, filtered, targetIdx, customRange } = modal;
+    const { fileName, invoiceNumber } = modal!;
+    const filtered = nextFiltered ?? modal!.filtered;
+    if (!filtered) return;
+    const clickedIdx = faktury.findIndex((f) => f.id === modal!.fakturaId);
+    const target = resolveTargetWeek(filtered, clickedIdx);
 
     const pdfImport: PDFImportData = {
       nazwaPliku: fileName,
       numerFaktury: invoiceNumber,
       filters: filtered.filters,
+      invoiceImportDateFrom: filtered.invoiceImportDateFrom ?? filtered.filters?.dateFrom ?? filtered.zakresOd,
+      invoiceImportDateTo: filtered.invoiceImportDateTo ?? filtered.filters?.dateTo ?? filtered.zakresDo,
+      manualDateRangeSelected: filtered.manualDateRangeSelected ?? false,
+      settlementVehiclePlate: filtered.settlementVehiclePlate ?? filtered.filters?.settlementVehiclePlate ?? null,
+      settlementVehicleMode: filtered.settlementVehicleMode ?? filtered.filters?.settlementVehicleMode ?? "none",
+      vehicleAssignmentRules: filtered.vehicleAssignmentRules,
+      recordOverrides: filtered.recordOverrides,
       ileKolek: filtered.ileKolek,
       ileZlecen: filtered.ileZlecen,
       sumaKm: filtered.sumaKm,
@@ -203,17 +214,18 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
       zakresDo: filtered.zakresDo,
       pozycjeUwzglednione: filtered.includedRows,
       pozycjeOdrzucone: filtered.rejectedRows,
+      sourceRows: filtered.sourceRows,
     };
 
     // Zapis do auto-wybranego tygodnia (na podstawie dat z PDF), nie do klikniętego
     onUpdate((prev) => {
       const newFaktury = [...faktury];
-      if (targetIdx >= 0 && targetIdx < newFaktury.length) {
-        newFaktury[targetIdx] = {
-          ...newFaktury[targetIdx],
+      if (target.idx >= 0 && target.idx < newFaktury.length) {
+        newFaktury[target.idx] = {
+          ...newFaktury[target.idx],
           kwota: filtered.brutto,
           pdfImport,
-          customRange,
+          customRange: target.customRange,
         };
       }
       return { ...prev, faktury: newFaktury };
@@ -224,17 +236,30 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
       userName,
       action: "faktura_zapisana",
       entity: "invoice",
-      entityId: faktury[targetIdx]?.id,
+      entityId: faktury[target.idx]?.id,
       newValue: {
         amount: filtered.brutto,
         source: "pdf",
         invoiceNumber,
         fileName,
-        week: targetIdx + 1,
+        week: target.idx + 1,
+        includedRows: filtered.includedRows?.length ?? 0,
+        rejectedRows: filtered.rejectedRows?.length ?? 0,
+        vehicle: pdfImport.settlementVehicleMode === "plate" ? pdfImport.settlementVehiclePlate : null,
       },
-      description: `${userName} dodał fakturę z PDF: ${formatZlCaly(filtered.brutto)} (tydzień ${targetIdx + 1})`,
+      description: `${userName} dodał fakturę z PDF: ${formatZlCaly(filtered.brutto)} (tydzień ${target.idx + 1}, ${filtered.includedRows?.length ?? 0} poz.)`,
       url: `/admin?miesiac=${miesiac}&zakladka=zarobek`,
     });
+
+    if ((filtered.rejectedRows?.length ?? 0) > 0) {
+      window.setTimeout(() => {
+        const zakres =
+          filtered.zakresOd && filtered.zakresDo
+            ? formatRangeShort(filtered.zakresOd, filtered.zakresDo)
+            : "wybrany zakres";
+        alert(`Zapisano ${filtered.includedRows?.length ?? 0} pozycji z zakresu ${zakres}.\nOdrzucono ${filtered.rejectedRows?.length ?? 0} pozycji — zobacz powody w podglądzie importu.`);
+      }, 50);
+    }
 
     setModal(null);
   }
@@ -282,6 +307,14 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
         filters: imp.filters,
         includedRows: imp.pozycjeUwzglednione,
         rejectedRows: imp.pozycjeOdrzucone,
+        sourceRows: imp.sourceRows,
+        vehicleAssignmentRules: imp.vehicleAssignmentRules,
+        recordOverrides: imp.recordOverrides,
+        settlementVehiclePlate: imp.settlementVehiclePlate,
+        settlementVehicleMode: imp.settlementVehicleMode,
+        invoiceImportDateFrom: imp.invoiceImportDateFrom,
+        invoiceImportDateTo: imp.invoiceImportDateTo,
+        manualDateRangeSelected: imp.manualDateRangeSelected,
       },
       isOverwrite: false,
       targetIdx: idx,

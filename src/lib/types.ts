@@ -14,6 +14,28 @@ export interface PDFImportFilter {
   vehicleType: string;
   dateFrom: string | null;
   dateTo: string | null;
+  settlementVehiclePlate?: string | null;
+  settlementVehicleMode?: "none" | "plate";
+}
+
+export interface PDFVehicleAssignmentRule {
+  id: string;
+  driverName: string;
+  dateFrom: string;
+  dateTo: string;
+  vehiclePlate: string;
+  vehicleOwnerType: PDFCarUsageType;
+  includeInSettlement: boolean;
+  reason?: string;
+  active: boolean;
+}
+
+export interface PDFRecordOverride {
+  transportOrderId: string;
+  vehiclePlate?: string;
+  includeInSettlement: boolean;
+  exclusionReason?: string;
+  manuallyOverridden: boolean;
 }
 
 export interface PDFImportDiagnosticRow {
@@ -28,6 +50,10 @@ export interface PDFImportDiagnosticRow {
   status: string;
   invitationId: string | null;
   vehicleOwner: PDFCarUsageType;
+  vehiclePlate?: string | null;
+  vehicleRuleReason?: string;
+  manuallyOverridden?: boolean;
+  isAdditional?: boolean;
   reason: string;
   rawText?: string;
 }
@@ -36,6 +62,13 @@ export interface PDFImportData {
   nazwaPliku: string;
   numerFaktury: string | null;
   filters?: PDFImportFilter;
+  invoiceImportDateFrom?: string | null;
+  invoiceImportDateTo?: string | null;
+  manualDateRangeSelected?: boolean;
+  settlementVehiclePlate?: string | null;
+  settlementVehicleMode?: "none" | "plate";
+  vehicleAssignmentRules?: PDFVehicleAssignmentRule[];
+  recordOverrides?: PDFRecordOverride[];
   ileKolek: number;
   ileZlecen?: number; // wiersze ze zleceniem (komentarz w Uwagach)
   sumaKm: number;
@@ -48,6 +81,7 @@ export interface PDFImportData {
   zakresDo: string | null;
   pozycjeUwzglednione?: PDFImportDiagnosticRow[];
   pozycjeOdrzucone?: PDFImportDiagnosticRow[];
+  sourceRows?: PDFImportDiagnosticRow[];
 }
 
 export type InvoiceStatus =

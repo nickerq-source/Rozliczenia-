@@ -65,6 +65,28 @@ export type InvoiceCarUsageType =
   | "replacement_car"
   | "unknown";
 
+export type InvoiceVehicleFilterMode = "none" | "plate";
+
+export interface InvoiceVehicleAssignmentRule {
+  id: string;
+  driverName: string;
+  dateFrom: string;
+  dateTo: string;
+  vehiclePlate: string;
+  vehicleOwnerType: InvoiceCarUsageType;
+  includeInSettlement: boolean;
+  reason?: string;
+  active: boolean;
+}
+
+export interface InvoiceRecordOverride {
+  transportOrderId: string;
+  vehiclePlate?: string;
+  includeInSettlement: boolean;
+  exclusionReason?: string;
+  manuallyOverridden: boolean;
+}
+
 export interface InvoiceRecord {
   orderNumber: string;
   route: string;
@@ -97,6 +119,8 @@ export interface InvoiceFilter {
   vehicleType: string;
   dateFrom: string | null;
   dateTo: string | null;
+  settlementVehiclePlate?: string | null;
+  settlementVehicleMode?: InvoiceVehicleFilterMode;
 }
 
 export interface InvoiceDiagnosticRow {
@@ -111,6 +135,10 @@ export interface InvoiceDiagnosticRow {
   status: string;
   invitationId: string | null;
   vehicleOwner: InvoiceCarUsageType;
+  vehiclePlate?: string | null;
+  vehicleRuleReason?: string;
+  manuallyOverridden?: boolean;
+  isAdditional?: boolean;
   reason: string;
   rawText?: string;
 }
@@ -139,6 +167,10 @@ export interface ParseInvoiceOptions {
   vehicleType?: string;
   dateFrom?: string | null;
   dateTo?: string | null;
+  settlementVehiclePlate?: string | null;
+  settlementVehicleMode?: InvoiceVehicleFilterMode;
+  vehicleAssignmentRules?: InvoiceVehicleAssignmentRule[];
+  recordOverrides?: InvoiceRecordOverride[];
 }
 
 // ─── NUMER FAKTURY ────────────────────────────────────────────────────────────
@@ -372,11 +404,146 @@ export function parseInvoiceRecords(rawText: string): InvoiceRecord[] {
     .filter((row): row is InvoiceRecord => row !== null);
 }
 
+export function getDefaultInvoiceDateRange(
+  records: InvoiceRecord[],
+  selectedDriverName: string,
+  selectedVehicleType: string
+): { dateFrom: string | null; dateTo: string | null } {
+  const dates = records
+    .filter(
+      (row) =>
+        normalizeInvoiceText(row.driverName) === normalizeInvoiceText(selectedDriverName) &&
+        normalizeInvoiceText(row.vehicleType) === normalizeInvoiceText(selectedVehicleType) &&
+        !!row.loadingDate
+    )
+    .map((row) => row.loadingDate as string)
+    .sort();
+
+  return {
+    dateFrom: dates[0] ?? null,
+    dateTo: dates[dates.length - 1] ?? null,
+  };
+}
+
 function isAdditionalOrder(row: InvoiceRecord): boolean {
   return !!row.notes.trim() || /\/I\b/i.test(row.rawText);
 }
 
-function diagnosticRow(row: InvoiceRecord, reason: string, debug = false): InvoiceDiagnosticRow {
+interface VehicleResolution {
+  vehicleOwner: InvoiceCarUsageType;
+  vehiclePlate: string | null;
+  vehicleRuleReason?: string;
+  manuallyOverridden?: boolean;
+  rejectReason?: string;
+  includeReason?: string;
+}
+
+function normalizePlate(value: string | undefined | null): string {
+  return normalizeInvoiceText(value).replace(/\s+/g, "");
+}
+
+function vehicleOwnerLabel(value: InvoiceCarUsageType): string {
+  switch (value) {
+    case "driver_car":
+      return "auto kierowcy";
+    case "company_car":
+      return "auto Artura / firmowe";
+    case "replacement_car":
+      return "auto zastępcze";
+    default:
+      return "auto nieustalone";
+  }
+}
+
+function matchRule(row: InvoiceRecord, rule: InvoiceVehicleAssignmentRule): boolean {
+  if (!rule.active) return false;
+  if (!row.loadingDate) return false;
+  if (normalizeInvoiceText(row.driverName) !== normalizeInvoiceText(rule.driverName)) return false;
+  return row.loadingDate >= rule.dateFrom && row.loadingDate <= rule.dateTo;
+}
+
+function resolveVehicleForRow(
+  row: InvoiceRecord,
+  filter: InvoiceFilter,
+  rules: InvoiceVehicleAssignmentRule[],
+  overrides: InvoiceRecordOverride[]
+): VehicleResolution {
+  const mode = filter.settlementVehicleMode ?? "none";
+  const selectedPlate = normalizePlate(filter.settlementVehiclePlate);
+  const override = overrides.find((o) => o.transportOrderId === row.orderNumber);
+
+  if (override) {
+    const plate = override.vehiclePlate?.trim() || null;
+    if (!override.includeInSettlement) {
+      return {
+        vehicleOwner: row.vehicleOwner,
+        vehiclePlate: plate,
+        manuallyOverridden: true,
+        rejectReason: override.exclusionReason || "ręcznie wykluczono z rozliczenia",
+      };
+    }
+    return {
+      vehicleOwner: row.vehicleOwner,
+      vehiclePlate: plate,
+      manuallyOverridden: true,
+      includeReason: plate
+        ? `ręcznie uwzględnione; auto ${plate}`
+        : "ręcznie uwzględnione mimo reguły auta",
+    };
+  }
+
+  const rule = rules.find((r) => matchRule(row, r));
+  if (!rule) {
+    if (mode === "plate" && selectedPlate) {
+      return {
+        vehicleOwner: "unknown",
+        vehiclePlate: null,
+        rejectReason: "brak reguły auta dla tego dnia",
+      };
+    }
+    return {
+      vehicleOwner: "unknown",
+      vehiclePlate: null,
+      includeReason: "bez filtrowania po aucie",
+    };
+  }
+
+  const plate = rule.vehiclePlate.trim();
+  const plateMatches = normalizePlate(plate) === selectedPlate;
+  const ownerLabel = vehicleOwnerLabel(rule.vehicleOwnerType);
+  const ruleReason = rule.reason?.trim() || undefined;
+
+  if (mode === "plate" && selectedPlate) {
+    if (!rule.includeInSettlement || !plateMatches) {
+      return {
+        vehicleOwner: rule.vehicleOwnerType,
+        vehiclePlate: plate,
+        vehicleRuleReason: ruleReason,
+        rejectReason: `Inny samochód: ${plate} / ${ownerLabel} — nie liczone do ${filter.settlementVehiclePlate}`,
+      };
+    }
+    return {
+      vehicleOwner: rule.vehicleOwnerType,
+      vehiclePlate: plate,
+      vehicleRuleReason: ruleReason,
+      includeReason: `auto ${plate}`,
+    };
+  }
+
+  return {
+    vehicleOwner: rule.vehicleOwnerType,
+    vehiclePlate: plate,
+    vehicleRuleReason: ruleReason,
+    includeReason: "bez filtrowania po aucie",
+  };
+}
+
+function diagnosticRow(
+  row: InvoiceRecord,
+  reason: string,
+  debug = false,
+  vehicle?: VehicleResolution
+): InvoiceDiagnosticRow {
   return {
     orderNumber: row.orderNumber,
     date: row.loadingDate,
@@ -388,13 +555,17 @@ function diagnosticRow(row: InvoiceRecord, reason: string, debug = false): Invoi
     notes: row.notes,
     status: row.status,
     invitationId: row.invitationId,
-    vehicleOwner: row.vehicleOwner,
+    vehicleOwner: vehicle?.vehicleOwner ?? row.vehicleOwner,
+    vehiclePlate: vehicle?.vehiclePlate ?? null,
+    vehicleRuleReason: vehicle?.vehicleRuleReason,
+    manuallyOverridden: vehicle?.manuallyOverridden,
+    isAdditional: isAdditionalOrder(row),
     reason,
     ...(debug ? { rawText: row.rawText.slice(0, 600) } : {}),
   };
 }
 
-function rejectReasons(row: InvoiceRecord, filter: InvoiceFilter): string[] {
+function baseRejectReasons(row: InvoiceRecord, filter: InvoiceFilter): string[] {
   const reasons: string[] = [];
   if (!row.loadingDate) reasons.push("brak daty");
   if (row.confirmedCost <= 0) reasons.push("brak kwoty");
@@ -416,6 +587,13 @@ function rejectReasons(row: InvoiceRecord, filter: InvoiceFilter): string[] {
   return Array.from(new Set(reasons));
 }
 
+function includeReason(row: InvoiceRecord, vehicle: VehicleResolution): string {
+  const base = isAdditionalOrder(row)
+    ? "zgodny kierowca, typ i zakres dat; zlecenie z uwagą"
+    : "zgodny kierowca, typ i zakres dat; kurs /D";
+  return vehicle.includeReason ? `${base}; ${vehicle.includeReason}` : base;
+}
+
 // ─── GŁÓWNA FUNKCJA ───────────────────────────────────────────────────────────
 
 /** Parsuje surowy tekst PDF i filtruje po konkretnych polach rekordu. */
@@ -426,32 +604,39 @@ export function parseInvoicePDF(
 ): ParsedInvoice {
   const invoiceNumber = extractInvoiceNumber(rawText);
   const allRows = parseInvoiceRecords(rawText);
+  const driverName = options.driverName?.trim() || KIEROWCA;
+  const vehicleType = options.vehicleType?.trim() || TYP_TRANSPORTU;
+  const defaultRange = getDefaultInvoiceDateRange(allRows, driverName, vehicleType);
+  const settlementVehiclePlate = options.settlementVehiclePlate?.trim() || null;
   const filter: InvoiceFilter = {
-    driverName: options.driverName?.trim() || KIEROWCA,
-    vehicleType: options.vehicleType?.trim() || TYP_TRANSPORTU,
-    dateFrom: validISODate(options.dateFrom),
-    dateTo: validISODate(options.dateTo),
+    driverName,
+    vehicleType,
+    dateFrom: validISODate(options.dateFrom) ?? defaultRange.dateFrom,
+    dateTo: validISODate(options.dateTo) ?? defaultRange.dateTo,
+    settlementVehiclePlate,
+    settlementVehicleMode:
+      settlementVehiclePlate && options.settlementVehicleMode === "plate"
+        ? "plate"
+        : "none",
   };
+  const vehicleAssignmentRules = options.vehicleAssignmentRules ?? [];
+  const recordOverrides = options.recordOverrides ?? [];
 
   const included: InvoiceRecord[] = [];
   const includedRows: InvoiceDiagnosticRow[] = [];
   const rejectedRows: InvoiceDiagnosticRow[] = [];
 
   for (const row of allRows) {
-    const reasons = rejectReasons(row, filter);
+    const vehicle = resolveVehicleForRow(row, filter, vehicleAssignmentRules, recordOverrides);
+    const reasons = baseRejectReasons(row, filter);
+    if (vehicle.rejectReason && reasons.length === 0) {
+      reasons.push(vehicle.rejectReason);
+    }
     if (reasons.length === 0) {
       included.push(row);
-      includedRows.push(
-        diagnosticRow(
-          row,
-          isAdditionalOrder(row)
-            ? "zgodny kierowca, typ i zakres dat; zlecenie z uwagą"
-            : "zgodny kierowca, typ i zakres dat; kurs /D",
-          debugMode
-        )
-      );
+      includedRows.push(diagnosticRow(row, includeReason(row, vehicle), debugMode, vehicle));
     } else {
-      rejectedRows.push(diagnosticRow(row, reasons.join(", "), debugMode));
+      rejectedRows.push(diagnosticRow(row, reasons.join(", "), debugMode, vehicle));
     }
   }
 
