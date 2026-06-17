@@ -3,20 +3,26 @@
 import type { VatRate } from "./types";
 
 export interface ReceiptScanResult {
+  documentType?: "receipt" | "odometer" | "unknown";
   productLine?: string | null;
   vatLine?: string | null;
   sprzedawca: string | null;
   nip: string | null;
   data: string | null;
   kwotaBrutto: number | null;
+  netAmount?: number | null;
+  vatAmount?: number | null;
   vatRate: VatRate | null;
   nazwa: string | null;
   litry: number | null;
   cenaZaLitr: number | null;
   fuelType?: string | null;
   documentNumber?: string | null;
+  odometerKm?: number | null;
   confidence?: number;
   needsReview?: boolean;
+  vatNeedsReview?: boolean;
+  reviewReasons?: string[];
   _noKey?: boolean;
   _badFormat?: boolean;
   _apiError?: boolean;

@@ -7,6 +7,7 @@ import {
   WpisTankowania,
 } from "./types";
 import { parseNum } from "./business-logic";
+import { FuelReviewStatus } from "./fuel-calculations";
 import { rozbijWpis } from "./tax";
 
 export interface FuelStatsRow {
@@ -21,6 +22,16 @@ export interface FuelStatsRow {
   vatRate: VatRate | null;
   vat: number;
   brutto: number;
+  odometerKm: number | null;
+  previousOdometerKm: number | null;
+  kmSinceLastFuel: number | null;
+  fuelBeforeRefuelLiters: number | null;
+  costPerKmGross: number | null;
+  costPerKmNet: number | null;
+  fuelConsumptionLPer100Km: number | null;
+  fuelStatus: FuelReviewStatus | null;
+  needsReview: boolean;
+  reviewReasons: string[];
   zalaczniki: KosztZalacznik[];
   pomijanyPowod?: string;
 }
@@ -32,6 +43,13 @@ export interface FuelStatsSummary {
   netto: number;
   brutto: number;
   vat: number;
+  sumaKm: number;
+  srednieSpalanieLPer100Km: number | null;
+  sredniKosztBruttoKm: number | null;
+  sredniKosztNettoKm: number | null;
+  sredniePaliwoPrzedTankowaniem: number | null;
+  ok: number;
+  doSprawdzenia: number;
   sredniaNettoZaLitr: number | null;
   sredniaBruttoZaLitr: number | null;
   pominiete: number;
@@ -83,6 +101,13 @@ export function buildFuelStats(
     const netto = r.netto;
     const vat = r.vat;
     const valid = litry > 0 && brutto > 0;
+    const kmSinceLastFuel = parseNum(t.kmSinceLastFuel);
+    const fuelBeforeRefuelLiters = parseNum(t.fuelBeforeRefuelLiters);
+    const odometerKm = parseNum(t.odometerKm);
+    const previousOdometerKm = parseNum(t.previousOdometerKm);
+    const costPerKmGross = parseNum(t.costPerKmGross);
+    const costPerKmNet = parseNum(t.costPerKmNet);
+    const fuelConsumptionLPer100Km = parseNum(t.fuelConsumptionLPer100Km);
 
     const row: FuelStatsRow = {
       id: t.id,
@@ -96,6 +121,16 @@ export function buildFuelStats(
       vatRate: t.vatRate ?? "0.23",
       vat,
       brutto,
+      odometerKm: odometerKm > 0 ? Math.round(odometerKm) : null,
+      previousOdometerKm: previousOdometerKm > 0 ? Math.round(previousOdometerKm) : null,
+      kmSinceLastFuel: kmSinceLastFuel > 0 ? round2(kmSinceLastFuel) : null,
+      fuelBeforeRefuelLiters: fuelBeforeRefuelLiters > 0 ? round2(fuelBeforeRefuelLiters) : null,
+      costPerKmGross: costPerKmGross > 0 ? round2(costPerKmGross) : null,
+      costPerKmNet: costPerKmNet > 0 ? round2(costPerKmNet) : null,
+      fuelConsumptionLPer100Km: fuelConsumptionLPer100Km > 0 ? round2(fuelConsumptionLPer100Km) : null,
+      fuelStatus: t.fuelStatus ?? null,
+      needsReview: !!t.needsReview,
+      reviewReasons: t.reviewReasons ?? [],
       zalaczniki: t.zalaczniki ?? [],
       pomijanyPowod: valid ? undefined : "brak litrów lub kwoty",
     };
@@ -121,6 +156,14 @@ export function buildFuelStats(
   const netto = counted.reduce((s, r) => s + r.netto, 0);
   const brutto = counted.reduce((s, r) => s + r.brutto, 0);
   const vat = counted.reduce((s, r) => s + r.vat, 0);
+  const countedKm = counted.filter((r) => (r.kmSinceLastFuel ?? 0) > 0);
+  const sumaKm = countedKm.reduce((s, r) => s + (r.kmSinceLastFuel ?? 0), 0);
+  const litryZeStatystyk = countedKm.reduce((s, r) => s + (r.litry ?? 0), 0);
+  const bruttoZeStatystyk = countedKm.reduce((s, r) => s + r.brutto, 0);
+  const nettoZeStatystyk = countedKm.reduce((s, r) => s + r.netto, 0);
+  const fuelBeforeRows = rows.filter((r) => (r.fuelBeforeRefuelLiters ?? 0) > 0);
+  const ok = rows.filter((r) => r.fuelStatus === "ok").length;
+  const doSprawdzenia = rows.filter((r) => r.needsReview || r.fuelStatus !== "ok").length;
 
   const summary: FuelStatsSummary = {
     liczbaTankowan: rows.length,
@@ -129,6 +172,16 @@ export function buildFuelStats(
     netto: round2(netto),
     brutto: round2(brutto),
     vat: round2(vat),
+    sumaKm: round2(sumaKm),
+    srednieSpalanieLPer100Km: sumaKm > 0 ? round2((litryZeStatystyk / sumaKm) * 100) : null,
+    sredniKosztBruttoKm: sumaKm > 0 ? round2(bruttoZeStatystyk / sumaKm) : null,
+    sredniKosztNettoKm: sumaKm > 0 ? round2(nettoZeStatystyk / sumaKm) : null,
+    sredniePaliwoPrzedTankowaniem:
+      fuelBeforeRows.length > 0
+        ? round2(fuelBeforeRows.reduce((s, r) => s + (r.fuelBeforeRefuelLiters ?? 0), 0) / fuelBeforeRows.length)
+        : null,
+    ok,
+    doSprawdzenia,
     sredniaNettoZaLitr: sumaLitrow > 0 ? round2(netto / sumaLitrow) : null,
     sredniaBruttoZaLitr: sumaLitrow > 0 ? round2(brutto / sumaLitrow) : null,
     pominiete: rows.length - counted.length,

@@ -7,94 +7,118 @@ import { getAnthropicApiKey } from "@/lib/anthropic-key";
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-/**
- * OCR paragonu/faktury ze zdjęcia (część B). Dla admina (koszty) i kierowcy
- * (tankowanie). Przyjmuje obraz (base64 dataUrl), pyta Claude o dane, zwraca
- * JSON do modala. AI nigdy nie zapisuje kosztu — to robi użytkownik po
- * sprawdzeniu (admin bezpośrednio, kierowca przez /api/driver/fuel).
- * ANTHROPIC_API_KEY wyłącznie server-side.
- */
+type DocumentType = "receipt" | "odometer" | "unknown";
+type ClaudeImageType = "image/jpeg" | "image/png" | "image/gif" | "image/webp";
 
 const DOZWOLONE_VAT: VatRate[] = ["0", "0.05", "0.08", "0.23", "zw", "np"];
+const MAX_IMAGE_BYTES = 7 * 1024 * 1024;
 
-interface OdczytParagonu {
+interface OdczytZdjeciaTankowania {
+  documentType: DocumentType;
   productLine: string | null;
   vatLine: string | null;
   sprzedawca: string | null;
   nip: string | null;
   data: string | null; // YYYY-MM-DD
   kwotaBrutto: number | null;
+  netAmount: number | null;
+  vatAmount: number | null;
   vatRate: VatRate | null;
   nazwa: string | null;
-  litry: number | null; // liczba litrów paliwa (gdy to paragon za paliwo)
-  cenaZaLitr: number | null; // cena za 1 litr
+  litry: number | null;
+  cenaZaLitr: number | null;
   fuelType: string | null;
   documentNumber: string | null;
+  odometerKm: number | null;
   confidence: number;
   needsReview: boolean;
+  vatNeedsReview?: boolean;
+  reviewReasons?: string[];
   _noKey?: boolean;
   _badFormat?: boolean;
   _apiError?: boolean;
   _empty?: boolean;
 }
 
-const PUSTY: OdczytParagonu = {
+const PUSTY: OdczytZdjeciaTankowania = {
+  documentType: "unknown",
   productLine: null,
   vatLine: null,
   sprzedawca: null,
   nip: null,
   data: null,
   kwotaBrutto: null,
+  netAmount: null,
+  vatAmount: null,
   vatRate: null,
   nazwa: null,
   litry: null,
   cenaZaLitr: null,
   fuelType: null,
   documentNumber: null,
+  odometerKm: null,
   confidence: 0,
   needsReview: true,
+  vatNeedsReview: true,
 };
 
-const PROMPT = `Read data from a Polish fuel receipt or invoice. Return ONLY raw JSON, with no markdown and no extra text:
+const PROMPT = `Przeanalizuj zdjęcie i określ, czy jest to paragon/faktura za tankowanie, zdjęcie licznika/przebiegu pojazdu, czy nieznany typ dokumentu.
+Zwróć WYŁĄCZNIE czysty JSON, bez markdown:
 {
+  "documentType": "receipt" | "odometer" | "unknown",
   "productLine": string | null,
   "vatLine": string | null,
   "liters": number | null,
   "pricePerLiter": number | null,
   "grossAmount": number | null,
+  "netAmount": number | null,
+  "vatAmount": number | null,
   "date": "YYYY-MM-DD" | null,
   "station": string | null,
   "fuelType": string | null,
   "documentNumber": string | null,
   "nip": string | null,
-  "vatRate": "0" | "0.05" | "0.08" | "0.23" | "zw" | "np" | null,
+  "vatRate": number | string | null,
+  "odometerKm": number | null,
   "confidence": number,
   "needsReview": boolean
 }
 
-How to read Polish fuel receipts:
-- If the image is sideways, read it after mentally rotating it.
-- productLine: copy exactly one fuel product line, the line with LITR/L/l and * or x, for example "OLEJ NAPEDOWY ... 20.72 LITR*6.29" or "EFECTA DIESEL ... 85,44 l*7,23".
-- Read liters and price per liter ONLY from productLine: liters = number directly BEFORE LITR/L/l, pricePerLiter = number directly AFTER * or x.
-- A line like "86.10 LITR*6.29", "20.72 LITR * 6.29", "20,06L x 6,48" or "85,44 l*7,23" means liters = 86.10 / 20.72 / 20.06 / 85.44 and pricePerLiter = 6.29 / 6.48 / 7.23.
-- Do NOT take liters or price per liter from the VAT/tax table. Columns "Wart.VAT", "Podatek", "Stawka", "Wart.Netto", "Wart.Brutto" are not liters and not price per liter.
-- A number next to "Wart.VAT" or "Podatek" (for example 40.12) is VAT amount, not liters.
-- "SUMA: PLN 130.33", "DO ZAPLATY 130.33", "RAZEM 130,33" means grossAmount = 130.33.
-- "Data sprzedazy: 06-06-2026" means fuel date -> return "2026-06-06".
-- "STACJA PALIW MOYA" -> station = "MOYA".
-- "OLEJ NAPEDOWY" / "ON" -> fuelType = "Olej napedowy"; "Pb95"/"Pb98" -> gasoline.
-- vatLine: copy the VAT rate line/table, for example "Stawka 8%" or "Kwota B: 08,00%".
-- Read VAT ONLY from the visible rate on the document: 8% or 08,00% => "0.08", 23% or 23,00% => "0.23". Do not guess VAT from fuel type.
-- NIP: return seller/station NIP, not buyer NIP. Look near "Sprzedawca", station header or station company details. Ignore "Nabywca" and "NIP Nabywcy".
-- Treat comma decimal as dot decimal (20,72 = 20.72; 130,33 = 130.33).
-Return numbers as numbers, not strings. If a field is not visible, return null. Do not guess.`;
+Rozpoznanie typu:
+- receipt: paragon, faktura, dokument tankowania, stacja, NIP, PLN, suma, VAT, netto, brutto, litry, LITR, cena za litr, ON, diesel, paliwo.
+- odometer: zdjęcie licznika/deski rozdzielczej z przebiegiem całkowitym pojazdu w km.
+- unknown: jeśli nie jesteś pewien.
 
-/** Tolerancyjna konwersja na liczbę: liczba albo tekst "20,72"/"PLN 130.33"/"6.29 zł". */
+Paragon/faktura:
+- productLine: przepisz dokładnie linię paliwa, np. "OLEJ NAPEDOWY ... 20.72 LITR*6.29" albo "ON ACR. Pompa #4 20,06L * 6,48".
+- liters = liczba bezpośrednio przed L/LITR/l.
+- pricePerLiter = liczba bezpośrednio po * / x / ×.
+- Nie bierz litrów z tabeli VAT. "Wart.VAT", "Podatek", "Stawka", "Wart.Netto", "Wart.Brutto" to nie litry.
+- "SUMA PLN 130.33", "DO ZAPLATY 130.33", "RAZEM 130,33" => grossAmount.
+- Szukaj VAT nie tylko przy słowie VAT. Stawka może być jako 8%, 23%, 5%, 0%, VAT 8%, PTU B 8%, Stawka 8%, Kwota B: 08,00%.
+- Typowa tabela: netto | VAT % | VAT kwota | brutto albo stawka | netto | podatek | brutto.
+- Jeśli widzisz "120.68 | 8% | 9.65 | 130.33", zwróć vatRate=8, netAmount=120.68, vatAmount=9.65, grossAmount=130.33.
+- Nie zakładaj VAT 23%, jeśli dokument pokazuje 8% albo inną stawkę.
+- Jeśli jest kilka stawek, wybierz tę od pozycji paliwa albo największej/właściwej pozycji tankowania.
+- NIP: zwróć NIP sprzedawcy/stacji, nie NIP nabywcy.
+- Datę sprzedaży zwróć jako YYYY-MM-DD.
+- Przecinek dziesiętny traktuj jak kropkę.
+
+Licznik:
+- odczytaj przebieg całkowity pojazdu w km.
+- Nie myl przebiegu z trip, temperaturą, godziną, prędkością, spalaniem chwilowym albo zasięgiem.
+- Jeśli nie jesteś pewien, documentType="unknown", needsReview=true.
+
+Jeśli pole nie jest widoczne, zwróć null. Nie zgaduj.`;
+
+function empty(type: DocumentType = "unknown"): OdczytZdjeciaTankowania {
+  return { ...PUSTY, documentType: type };
+}
+
 function toNum(v: unknown): number | null {
   if (typeof v === "number") return isFinite(v) ? v : null;
   if (typeof v === "string") {
     const cleaned = v.replace(/[^0-9.,-]/g, "").replace(/\s/g, "");
-    // ostatni separator decyduje o kropce dziesiętnej
     const norm = cleaned.replace(/\.(?=.*[.,])/g, "").replace(",", ".");
     const n = parseFloat(norm);
     return isFinite(n) ? n : null;
@@ -102,38 +126,8 @@ function toNum(v: unknown): number | null {
   return null;
 }
 
-type ClaudeImageType = "image/jpeg" | "image/png" | "image/gif" | "image/webp";
-const MAX_IMAGE_BYTES = 7 * 1024 * 1024;
-
-/**
- * Prawdziwy format obrazu z magic bytes (nie z prefiksu dataUrl/rozszerzenia).
- * Kluczowe: Claude odrzuca obraz, gdy media_type nie zgadza się z bajtami
- * (np. iPhone HEIC, plik PNG nazwany .jpg) → 400 i „nie udało się odczytać".
- */
-function wykryjFormat(base64: string): ClaudeImageType | null {
-  let head: Buffer;
-  try {
-    head = Buffer.from(base64.slice(0, 32), "base64");
-  } catch {
-    return null;
-  }
-  if (head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff) return "image/jpeg";
-  if (head[0] === 0x89 && head[1] === 0x50 && head[2] === 0x4e && head[3] === 0x47) return "image/png";
-  if (head[0] === 0x47 && head[1] === 0x49 && head[2] === 0x46) return "image/gif";
-  if (
-    head[0] === 0x52 && head[1] === 0x49 && head[2] === 0x46 && head[3] === 0x46 &&
-    head[8] === 0x57 && head[9] === 0x45 && head[10] === 0x42 && head[11] === 0x50
-  ) return "image/webp";
-  return null; // np. HEIC/HEIF — Claude nie obsługuje
-}
-
-/** Wyciąga czyste base64 z dataUrl (media_type i tak wykrywamy z bajtów) */
-function parseDataUrl(dataUrl: string): { data: string } | null {
-  const m = dataUrl.match(/^data:image\/[a-zA-Z0-9.+-]+;base64,(.+)$/);
-  if (!m) return null;
-  // usuń ewentualne białe znaki z base64
-  return { data: m[1].replace(/\s/g, "") };
-}
+const r2 = (n: number | null): number | null => (n != null ? Math.round(n * 100) / 100 : null);
+const dodatni = (n: number | null): number | null => (n != null && n > 0 ? n : null);
 
 function clamp01(n: number | null): number {
   if (n == null || !isFinite(n)) return 0;
@@ -148,11 +142,15 @@ function normalizeDate(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
   const value = raw.trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
-
   const pl = value.match(/^(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})$/);
   if (!pl) return null;
   const [, dd, mm, yyyy] = pl;
-  return `${yyyy}-${dd.padStart(2, "0")}-${mm.padStart(2, "0")}`;
+  return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
+}
+
+function normalizeDocumentType(raw: unknown): DocumentType {
+  if (raw === "receipt" || raw === "odometer" || raw === "unknown") return raw;
+  return "unknown";
 }
 
 function parseFuelFromLine(raw: unknown): { litry: number; cena: number } | null {
@@ -162,7 +160,7 @@ function parseFuelFromLine(raw: unknown): { litry: number; cena: number } | null
   if (!match) return null;
   const litry = toNum(match[1]);
   const cena = toNum(match[2]);
-  if (litry == null || cena == null || litry <= 0 || cena <= 0 || cena > 12) return null;
+  if (litry == null || cena == null || litry <= 0 || cena <= 0 || cena > 15) return null;
   return { litry, cena };
 }
 
@@ -174,16 +172,30 @@ function nearestVatRate(rate: number): VatRate | null {
   return null;
 }
 
+function normalizeVatRate(raw: unknown): VatRate | null {
+  if (typeof raw === "string") {
+    const value = raw.trim().toLowerCase();
+    if (DOZWOLONE_VAT.includes(value as VatRate)) return value as VatRate;
+    if (value === "8%" || value === "08%" || value === "08,00%" || value === "8,00%") return "0.08";
+    if (value === "23%" || value === "23,00%") return "0.23";
+    if (value === "5%" || value === "05%" || value === "05,00%" || value === "5,00%") return "0.05";
+    if (value === "0%" || value === "0,00%") return "0";
+    const n = toNum(value);
+    if (n != null) return normalizeVatRate(n);
+  }
+  if (typeof raw === "number" && isFinite(raw)) {
+    if (raw > 1) return nearestVatRate(raw / 100);
+    return nearestVatRate(raw);
+  }
+  return null;
+}
+
 function parseVatFromLine(raw: unknown): VatRate | null {
   if (typeof raw !== "string") return null;
   const text = raw.replace(/\s+/g, " ");
   if (/(^|[^\d])23(?:[,.]00)?\s*%/.test(text)) return "0.23";
   if (/(^|[^\d])0?8(?:[,.]00)?\s*%/.test(text)) return "0.08";
   if (/(^|[^\d])0?5(?:[,.]00)?\s*%/.test(text)) return "0.05";
-  if (/(^|[^\d])0(?:[,.]00)?\s*%/.test(text)) {
-    // Nie kończymy od razu: czasem AI myli "8%" jako "0%", ale obok są
-    // netto/VAT/brutto i z nich da się odzyskać stawkę.
-  }
 
   const nums = [...text.matchAll(/\d+(?:[,.]\d+)?/g)]
     .map((m) => toNum(m[0]))
@@ -196,7 +208,7 @@ function parseVatFromLine(raw: unknown): VatRate | null {
         const net = nums[i];
         const vat = nums[j];
         const gross = nums[k];
-        if (net < 10 || vat <= 0 || gross < 10) continue;
+        if (net < 5 || vat <= 0 || gross < 5) continue;
         if (Math.abs(net + vat - gross) > 0.08) continue;
         const rate = nearestVatRate(vat / net);
         if (rate) return rate;
@@ -218,24 +230,76 @@ function normalizeStation(value: string | null): string | null {
   return value;
 }
 
-function walidujVat(raw: unknown): VatRate | null {
-  if (typeof raw === "string" && DOZWOLONE_VAT.includes(raw as VatRate)) return raw as VatRate;
-  if (typeof raw === "number") {
-    const s = String(raw);
-    if (DOZWOLONE_VAT.includes(s as VatRate)) return s as VatRate;
-  }
-  return null;
+function vatRateNumber(rate: VatRate | null): number | null {
+  if (!rate || rate === "zw" || rate === "np") return null;
+  return parseFloat(rate);
 }
 
-const r2 = (n: number | null): number | null => (n != null ? Math.round(n * 100) / 100 : null);
-const dodatni = (n: number | null): number | null => (n != null && n > 0 ? n : null);
+function validateVatMath(input: {
+  gross: number | null;
+  net: number | null;
+  vat: number | null;
+  rate: VatRate | null;
+}): { needsReview: boolean; reasons: string[] } {
+  const reasons: string[] = [];
+  const { gross, net, vat, rate } = input;
+  const rateNum = vatRateNumber(rate);
+  const tolerance = 0.03;
 
-function waliduj(raw: unknown): OdczytParagonu {
-  if (!raw || typeof raw !== "object") return PUSTY;
+  if (rateNum == null && (gross != null || net != null || vat != null)) {
+    reasons.push("Nie udało się jednoznacznie odczytać stawki VAT.");
+  }
+  if (gross != null && net != null && vat != null && Math.abs(net + vat - gross) > tolerance) {
+    reasons.push("Kwota netto + VAT nie zgadza się z brutto.");
+  }
+  if (gross != null && net != null && rateNum != null) {
+    const expectedNet = Math.round((gross / (1 + rateNum)) * 100) / 100;
+    if (Math.abs(expectedNet - net) > tolerance) {
+      reasons.push("Netto nie zgadza się matematycznie z brutto i VAT.");
+    }
+  }
+  if (net != null && vat != null && rateNum != null) {
+    const expectedVat = Math.round(net * rateNum * 100) / 100;
+    if (Math.abs(expectedVat - vat) > tolerance) {
+      reasons.push("Kwota VAT nie zgadza się ze stawką VAT.");
+    }
+  }
+  return { needsReview: reasons.length > 0, reasons };
+}
+
+function waliduj(raw: unknown): OdczytZdjeciaTankowania {
+  if (!raw || typeof raw !== "object") return empty("unknown");
   const o = raw as Record<string, unknown>;
-  const dataStr = normalizeDate(o.data ?? o.date);
+  const documentType = normalizeDocumentType(o.documentType);
+  const confidence = clamp01(toNum(o.confidence));
+  const baseNeedsReview = typeof o.needsReview === "boolean" ? o.needsReview : true;
 
-  let kwota = dodatni(toNum(o.kwotaBrutto ?? o.grossAmount));
+  if (documentType === "odometer") {
+    const odometerKm = dodatni(toNum(o.odometerKm));
+    return {
+      ...empty("odometer"),
+      odometerKm: odometerKm != null ? Math.round(odometerKm) : null,
+      confidence,
+      needsReview: baseNeedsReview || confidence < 0.75 || odometerKm == null,
+      reviewReasons: odometerKm == null ? ["Nie udało się pewnie odczytać przebiegu."] : [],
+      _empty: odometerKm == null,
+    };
+  }
+
+  if (documentType === "unknown") {
+    return {
+      ...empty("unknown"),
+      confidence,
+      needsReview: true,
+      reviewReasons: ["AI nie jest pewne, czy to paragon czy licznik."],
+      _empty: true,
+    };
+  }
+
+  const dataStr = normalizeDate(o.data ?? o.date);
+  let gross = dodatni(toNum(o.kwotaBrutto ?? o.grossAmount));
+  let net = dodatni(toNum(o.netAmount ?? o.kwotaNetto));
+  let vatAmount = dodatni(toNum(o.vatAmount ?? o.kwotaVat ?? o.taxAmount));
   let litry = dodatni(toNum(o.litry ?? o.liters));
   let cena = dodatni(toNum(o.cenaZaLitr ?? o.pricePerLiter));
   const parsedFuel = parseFuelFromLine(o.productLine);
@@ -244,50 +308,55 @@ function waliduj(raw: unknown): OdczytParagonu {
     cena = parsedFuel.cena;
   }
 
-  // Jeżeli AI pomyli kwotę VAT/podatku z litrami, często wychodzi absurdalna
-  // cena za litr (np. 541,57 / 40,12 = 13,50). Lepiej zostawić pola puste
-  // do ręcznej weryfikacji niż zapisać błędne litry.
-  let suspiciousFuelUnit = cena != null && cena > 12;
+  let suspiciousFuelUnit = cena != null && cena > 15;
   if (suspiciousFuelUnit) {
     litry = null;
     cena = null;
   }
 
-  // Awaryjne wyliczenie brakującego pola z dwóch pozostałych
-  if (kwota == null && litry != null && cena != null) kwota = litry * cena;
-  else if (cena == null && kwota != null && litry != null) cena = kwota / litry;
-  else if (litry == null && kwota != null && cena != null) litry = kwota / cena;
+  if (gross == null && litry != null && cena != null) gross = litry * cena;
+  else if (cena == null && gross != null && litry != null) cena = gross / litry;
+  else if (litry == null && gross != null && cena != null) litry = gross / cena;
 
-  if (cena != null && cena > 12) {
+  if (cena != null && cena > 15) {
     litry = null;
     cena = null;
     suspiciousFuelUnit = true;
   }
 
+  const vatLine = textOrNull(o.vatLine, 260);
+  let vatRate = parseVatFromLine(vatLine) ?? normalizeVatRate(o.vatRate);
+  if (!vatRate && net != null && vatAmount != null) vatRate = nearestVatRate(vatAmount / net);
+  if (!gross && net != null && vatAmount != null) gross = net + vatAmount;
+  if (gross != null && vatRate && net == null) {
+    const stawka = vatRateNumber(vatRate);
+    if (stawka != null) net = gross / (1 + stawka);
+  }
+  if (gross != null && net != null && vatAmount == null) vatAmount = gross - net;
+
+  const vatValidation = validateVatMath({ gross, net, vat: vatAmount, rate: vatRate });
   const fuelType = textOrNull(o.fuelType ?? o.nazwa, 60);
-  const vatLine = textOrNull(o.vatLine, 220);
-  const parsedVat = parseVatFromLine(vatLine);
-  const rawVat = walidujVat(o.vatRate);
-  const vatRate =
-    parsedVat ??
-    (rawVat === "0.23" && !/(^|[^\d])23(?:[,.]00)?\s*%/.test(vatLine ?? "")
-      ? null
-      : rawVat);
-  const result = {
-    productLine: textOrNull(o.productLine, 220),
+  const result: OdczytZdjeciaTankowania = {
+    documentType: "receipt",
+    productLine: textOrNull(o.productLine, 260),
     vatLine,
     sprzedawca: normalizeStation(textOrNull(o.sprzedawca ?? o.station, 120)),
     nip: typeof o.nip === "string" ? o.nip.replace(/[^0-9]/g, "").slice(0, 15) || null : null,
     data: dataStr,
-    kwotaBrutto: r2(kwota),
+    kwotaBrutto: r2(gross),
+    netAmount: r2(net),
+    vatAmount: r2(vatAmount),
     vatRate,
     nazwa: fuelType,
     litry: r2(litry),
     cenaZaLitr: r2(cena),
     fuelType,
     documentNumber: textOrNull(o.documentNumber ?? o.numerDokumentu ?? o.invoiceNumber, 80),
-    confidence: clamp01(toNum(o.confidence)),
-    needsReview: typeof o.needsReview === "boolean" ? o.needsReview : true,
+    odometerKm: null,
+    confidence,
+    needsReview: false,
+    vatNeedsReview: vatValidation.needsReview,
+    reviewReasons: vatValidation.reasons,
   };
 
   const hasImportant =
@@ -301,13 +370,41 @@ function waliduj(raw: unknown): OdczytParagonu {
   return {
     ...result,
     needsReview:
-      result.needsReview ||
-      result.confidence < 0.8 ||
+      baseNeedsReview ||
+      result.confidence < 0.75 ||
       !hasImportant ||
       suspiciousFuelUnit ||
-      (rawVat === "0.23" && result.vatRate == null),
+      vatValidation.needsReview,
     _empty: !hasImportant,
+    reviewReasons: [
+      ...(result.reviewReasons ?? []),
+      ...(suspiciousFuelUnit ? ["Cena za litr wygląda podejrzanie."] : []),
+      ...(!hasImportant ? ["Nie udało się wyciągnąć kluczowych danych z dokumentu."] : []),
+    ],
   };
+}
+
+function wykryjFormat(base64: string): ClaudeImageType | null {
+  let head: Buffer;
+  try {
+    head = Buffer.from(base64.slice(0, 32), "base64");
+  } catch {
+    return null;
+  }
+  if (head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff) return "image/jpeg";
+  if (head[0] === 0x89 && head[1] === 0x50 && head[2] === 0x4e && head[3] === 0x47) return "image/png";
+  if (head[0] === 0x47 && head[1] === 0x49 && head[2] === 0x46) return "image/gif";
+  if (
+    head[0] === 0x52 && head[1] === 0x49 && head[2] === 0x46 && head[3] === 0x46 &&
+    head[8] === 0x57 && head[9] === 0x45 && head[10] === 0x42 && head[11] === 0x50
+  ) return "image/webp";
+  return null;
+}
+
+function parseDataUrl(dataUrl: string): { data: string } | null {
+  const m = dataUrl.match(/^data:image\/[a-zA-Z0-9.+-]+;base64,(.+)$/);
+  if (!m) return null;
+  return { data: m[1].replace(/\s/g, "") };
 }
 
 async function readImageFromRequest(req: NextRequest): Promise<{
@@ -378,13 +475,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: message }, { status: 400 });
   }
 
-  // Prawdziwy format z bajtów — Claude odrzuca obraz przy niezgodnym media_type
   const mediaType = wykryjFormat(image.data);
   if (!mediaType) {
-    // np. HEIC/HEIF z iPhone'a, którego przeglądarka nie przekonwertowała
     return NextResponse.json(
       {
-        ...PUSTY,
+        ...empty("unknown"),
         _badFormat: true,
         error: "Nieobsługiwany format zdjęcia. Użyj JPG, PNG albo WebP.",
       },
@@ -396,7 +491,7 @@ export async function POST(req: NextRequest) {
   if (!apiKey.key) {
     return NextResponse.json(
       {
-        ...PUSTY,
+        ...empty("unknown"),
         _noKey: true,
         error: apiKey.error,
       },
@@ -408,7 +503,7 @@ export async function POST(req: NextRequest) {
     const client = new Anthropic({ apiKey: apiKey.key });
     const response = await client.messages.create({
       model: "claude-haiku-4-5",
-      max_tokens: 400,
+      max_tokens: 600,
       messages: [
         {
           role: "user",
@@ -436,7 +531,7 @@ export async function POST(req: NextRequest) {
       if (process.env.NODE_ENV !== "production") console.log("[scan-receipt] brak JSON w odpowiedzi:", text.slice(0, 300));
       return NextResponse.json(
         {
-          ...PUSTY,
+          ...empty("unknown"),
           _empty: true,
           error: "Claude nie zwrócił poprawnego JSON ze zdjęcia. Spróbuj wyraźniejsze zdjęcie.",
         },
@@ -444,15 +539,6 @@ export async function POST(req: NextRequest) {
       );
     }
     const wynik = waliduj(JSON.parse(match[0]));
-    if (wynik._empty) {
-      return NextResponse.json(
-        {
-          ...wynik,
-          error: "Nie udało się wyciągnąć danych z tego zdjęcia. Spróbuj zrobić zdjęcie bliżej, prosto i przy lepszym świetle.",
-        },
-        { status: 422 }
-      );
-    }
     if (process.env.NODE_ENV !== "production") {
       console.log("[scan-receipt] odczyt:", JSON.stringify({
         ...wynik,
@@ -473,7 +559,7 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json(
       {
-        ...PUSTY,
+        ...empty("unknown"),
         _apiError: true,
         error: `Błąd Claude OCR: ${message}`,
       },

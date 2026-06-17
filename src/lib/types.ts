@@ -108,6 +108,9 @@ export interface KosztZalacznik {
   storagePath?: string; // ścieżka w buckecie `paragony` (nowe wpisy)
   dataUrl?: string; // legacy: base64 zapisane w JSONB (stare wpisy przed migracją na Storage)
   createdAt: string;
+  aiDocumentType?: "receipt" | "odometer" | "unknown";
+  aiConfidence?: number;
+  aiNeedsReview?: boolean;
 }
 
 /** Pola podatkowe kosztu (domyślnie: rozliczany podatkowo, brutto, VAT 23%) */
@@ -137,6 +140,31 @@ export interface WpisTankowania extends KosztVatInfo {
   koszt: number;
   litry?: number; // liczba zatankowanych litrów (opcjonalnie, np. wpis od kierowcy)
   dodaneBy?: string; // kto dodał wpis (imię kierowcy, gdy z panelu kierowcy)
+  createdAt?: string;
+  fuelType?: string;
+  pricePerLiter?: number;
+  netAmount?: number;
+  vatAmount?: number;
+  odometerKm?: number;
+  previousOdometerKm?: number;
+  kmSinceLastFuel?: number;
+  fuelBeforeRefuelLiters?: number;
+  costPerKmGross?: number;
+  costPerKmNet?: number;
+  fuelConsumptionLPer100Km?: number;
+  needsReview?: boolean;
+  fuelStatus?:
+    | "ok"
+    | "needs_review"
+    | "no_previous_refuel"
+    | "missing_odometer_photo"
+    | "missing_receipt_photo"
+    | "uncertain_ai"
+    | "invalid_odometer"
+    | "suspicious_liters"
+    | "vat_review";
+  reviewReasons?: string[];
+  vehicleId?: string;
 }
 
 export interface WpisInnegoKosztu extends KosztVatInfo {

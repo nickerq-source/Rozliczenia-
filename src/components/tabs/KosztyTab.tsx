@@ -39,6 +39,7 @@ import {
   liczDniWgTypu,
 } from "@/lib/business-logic";
 import { buildFuelStats, FuelStatsRow } from "@/lib/fuel-stats";
+import { fuelStatusLabel } from "@/lib/fuel-calculations";
 import {
   getDniMiesiaca,
   isSobota,
@@ -509,6 +510,21 @@ function formatZlNaLitr(value: number | null | undefined): string {
   return `${value.toLocaleString("pl-PL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} zł/L`;
 }
 
+function formatKm(value: number | null | undefined): string {
+  if (value == null || !isFinite(value)) return "—";
+  return `${value.toLocaleString("pl-PL", { maximumFractionDigits: 0 })} km`;
+}
+
+function formatL100(value: number | null | undefined): string {
+  if (value == null || !isFinite(value)) return "—";
+  return `${value.toLocaleString("pl-PL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} L/100`;
+}
+
+function formatZlKm(value: number | null | undefined): string {
+  if (value == null || !isFinite(value)) return "—";
+  return `${value.toLocaleString("pl-PL", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} zł/km`;
+}
+
 function FuelStatsValue({
   label,
   value,
@@ -538,20 +554,29 @@ function FuelStatsRowView({ row }: { row: FuelStatsRow }) {
     <tr className={cn("border-t border-line/60", row.pomijanyPowod && "opacity-60")}>
       <td className="px-2 py-2 tabular-nums text-ink">{row.data}</td>
       <td className="px-2 py-2 text-dim">{row.kierowca ?? "—"}</td>
+      <td className="px-2 py-2 text-dim">—</td>
       <td className="px-2 py-2 text-dim">{row.stacja ?? "—"}</td>
       <td className="px-2 py-2 text-right tabular-nums text-ink">{formatLitry(row.litry)}</td>
-      <td className="px-2 py-2 text-right tabular-nums text-ink">{formatZlNaLitr(row.cenaNettoZaLitr)}</td>
-      <td className="px-2 py-2 text-right tabular-nums text-ink">{formatZlNaLitr(row.cenaBruttoZaLitr)}</td>
-      <td className="px-2 py-2 text-right tabular-nums text-ink">{formatZl(row.netto)}</td>
-      <td className="px-2 py-2 text-right tabular-nums text-dim">{row.vatRate ? vatRateLabel(row.vatRate) : "—"}</td>
-      <td className="px-2 py-2 text-right tabular-nums text-ink">{formatZl(row.vat)}</td>
       <td className="px-2 py-2 text-right tabular-nums font-bold text-white">{formatZl(row.brutto)}</td>
+      <td className="px-2 py-2 text-right tabular-nums text-ink">{formatKm(row.odometerKm)}</td>
+      <td className="px-2 py-2 text-right tabular-nums text-ink">{formatKm(row.kmSinceLastFuel)}</td>
+      <td className="px-2 py-2 text-right tabular-nums text-ink">{formatLitry(row.fuelBeforeRefuelLiters)}</td>
+      <td className="px-2 py-2 text-right tabular-nums text-ink">{formatZlKm(row.costPerKmGross)}</td>
+      <td className="px-2 py-2 text-right tabular-nums text-ink">{formatL100(row.fuelConsumptionLPer100Km)}</td>
+      <td className="px-2 py-2 text-right tabular-nums text-dim">{row.vatRate ? vatRateLabel(row.vatRate) : "—"}</td>
       <td className="px-2 py-2">
-        {row.pomijanyPowod ? (
-          <span className="text-[11px] text-red-300">{row.pomijanyPowod}</span>
-        ) : (
-          <ZalacznikPreview zalaczniki={row.zalaczniki} compact />
-        )}
+        <ZalacznikPreview zalaczniki={row.zalaczniki.filter((z) => z.typ === "dokument")} label="Dokument" compact />
+      </td>
+      <td className="px-2 py-2">
+        <ZalacznikPreview zalaczniki={row.zalaczniki.filter((z) => z.typ === "licznik")} label="Licznik" emptyLabel="—" compact />
+      </td>
+      <td className="px-2 py-2">
+        <span className={cn(
+          "rounded-full border px-2 py-0.5 text-[10px] font-bold",
+          row.fuelStatus === "ok" ? "border-green-500/40 text-green-300" : "border-amber-brand/40 text-amber-brand"
+        )}>
+          {row.pomijanyPowod ?? fuelStatusLabel(row.fuelStatus ?? undefined)}
+        </span>
       </td>
     </tr>
   );
@@ -588,13 +613,32 @@ function FuelStatsMobileCard({ row }: { row: FuelStatsRow }) {
           <p className="text-dim">Cena brutto/l</p>
           <p className="tabular-nums font-bold text-ink">{formatZlNaLitr(row.cenaBruttoZaLitr)}</p>
         </div>
+        <div>
+          <p className="text-dim">Przebieg</p>
+          <p className="tabular-nums font-bold text-ink">{formatKm(row.odometerKm)}</p>
+        </div>
+        <div>
+          <p className="text-dim">Km od ost.</p>
+          <p className="tabular-nums font-bold text-ink">{formatKm(row.kmSinceLastFuel)}</p>
+        </div>
+        <div>
+          <p className="text-dim">Spalanie</p>
+          <p className="tabular-nums font-bold text-ink">{formatL100(row.fuelConsumptionLPer100Km)}</p>
+        </div>
+        <div>
+          <p className="text-dim">Brutto/km</p>
+          <p className="tabular-nums font-bold text-ink">{formatZlKm(row.costPerKmGross)}</p>
+        </div>
       </div>
-      <div className="mt-2">
-        {row.pomijanyPowod ? (
-          <span className="text-[11px] text-red-300">{row.pomijanyPowod}</span>
-        ) : (
-          <ZalacznikPreview zalaczniki={row.zalaczniki} compact />
-        )}
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <ZalacznikPreview zalaczniki={row.zalaczniki.filter((z) => z.typ === "dokument")} label="Dokument" compact />
+        <ZalacznikPreview zalaczniki={row.zalaczniki.filter((z) => z.typ === "licznik")} label="Licznik" emptyLabel="" compact />
+        <span className={cn(
+          "rounded-full border px-2 py-0.5 text-[10px] font-bold",
+          row.fuelStatus === "ok" ? "border-green-500/40 text-green-300" : "border-amber-brand/40 text-amber-brand"
+        )}>
+          {row.pomijanyPowod ?? fuelStatusLabel(row.fuelStatus ?? undefined)}
+        </span>
       </div>
     </div>
   );
@@ -630,7 +674,7 @@ function FuelStatsPanel({
             Statystyki tankowania
           </h3>
           <p className="text-[11px] text-dim/70">
-            {POLSKIE_MIESIACE[miesiac]} 2026 · średnie liczone jako suma kwot / suma litrów
+            {POLSKIE_MIESIACE[miesiac]} 2026 · spalanie liczone ważone: suma litrów / suma km × 100
           </p>
         </div>
       </div>
@@ -666,12 +710,19 @@ function FuelStatsPanel({
 
       <div className="grid grid-cols-2 gap-2">
         <FuelStatsValue label="Łącznie litrów" value={formatLitry(s.sumaLitrow)} tone="amber" />
+        <FuelStatsValue label="Łącznie km" value={formatKm(s.sumaKm)} tone="amber" />
         <FuelStatsValue label="Liczba tankowań" value={`${s.liczbaTankowan}`} />
+        <FuelStatsValue label="Śr. spalanie" value={formatL100(s.srednieSpalanieLPer100Km)} tone="green" />
+        <FuelStatsValue label="Śr. brutto/km" value={formatZlKm(s.sredniKosztBruttoKm)} tone="green" />
+        <FuelStatsValue label="Śr. netto/km" value={formatZlKm(s.sredniKosztNettoKm)} />
+        <FuelStatsValue label="Śr. paliwo przed tank." value={formatLitry(s.sredniePaliwoPrzedTankowaniem)} />
         <FuelStatsValue label="Śr. brutto/l" value={formatZlNaLitr(s.sredniaBruttoZaLitr)} tone="amber" />
         <FuelStatsValue label="Śr. netto/l" value={formatZlNaLitr(s.sredniaNettoZaLitr)} />
         <FuelStatsValue label="Kwota brutto" value={formatZl(s.brutto)} tone="green" />
         <FuelStatsValue label="Kwota netto" value={formatZl(s.netto)} />
         <FuelStatsValue label="VAT" value={formatZl(s.vat)} />
+        <FuelStatsValue label="OK" value={`${s.ok}`} tone="green" />
+        <FuelStatsValue label="Do sprawdzenia" value={`${s.doSprawdzenia}`} tone={s.doSprawdzenia > 0 ? "amber" : "normal"} />
         <FuelStatsValue label="Pominięto" value={`${s.pominiete}`} />
       </div>
 
@@ -686,26 +737,30 @@ function FuelStatsPanel({
       </div>
 
       <div className="mt-4 hidden overflow-x-auto rounded-xl border border-line sm:block">
-        <table className="min-w-[980px] w-full text-left text-xs">
+        <table className="min-w-[1320px] w-full text-left text-xs">
           <thead className="bg-surface2 text-[10px] uppercase tracking-wide text-dim">
             <tr>
               <th className="px-2 py-2">Data</th>
               <th className="px-2 py-2">Kierowca</th>
+              <th className="px-2 py-2">Auto</th>
               <th className="px-2 py-2">Stacja</th>
               <th className="px-2 py-2 text-right">Litry</th>
-              <th className="px-2 py-2 text-right">Netto/l</th>
-              <th className="px-2 py-2 text-right">Brutto/l</th>
-              <th className="px-2 py-2 text-right">Netto</th>
-              <th className="px-2 py-2 text-right">VAT %</th>
-              <th className="px-2 py-2 text-right">VAT</th>
               <th className="px-2 py-2 text-right">Brutto</th>
+              <th className="px-2 py-2 text-right">Przebieg</th>
+              <th className="px-2 py-2 text-right">Km od ost.</th>
+              <th className="px-2 py-2 text-right">Paliwo przed</th>
+              <th className="px-2 py-2 text-right">Zł/km</th>
+              <th className="px-2 py-2 text-right">L/100</th>
+              <th className="px-2 py-2 text-right">VAT %</th>
               <th className="px-2 py-2">Dokument</th>
+              <th className="px-2 py-2">Licznik</th>
+              <th className="px-2 py-2">Status</th>
             </tr>
           </thead>
           <tbody>
             {stats.rows.length === 0 ? (
               <tr>
-                <td colSpan={11} className="px-3 py-6 text-center text-sm text-dim">
+                <td colSpan={15} className="px-3 py-6 text-center text-sm text-dim">
                   Brak tankowań w tym miesiącu.
                 </td>
               </tr>
