@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { KosztZalacznik } from "@/lib/types";
 import { IconLoader, IconPaperclip, IconX } from "./ui/icons";
 import { cn } from "@/lib/utils";
+import { useAppBackLayer } from "@/lib/mobile-navigation";
 
 interface Props {
   zalaczniki?: KosztZalacznik[];
@@ -37,6 +38,17 @@ export function ZalacznikPreview({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
   const [open, setOpen] = useState(false);
+  const canPreview = !!url && !error;
+
+  useAppBackLayer(
+    open && canPreview,
+    "attachment-preview",
+    () => {
+      setOpen(false);
+      return true;
+    },
+    80
+  );
 
   useEffect(() => {
     let alive = true;
@@ -67,8 +79,6 @@ export function ZalacznikPreview({
   if (!attachment) {
     return <span className={cn("text-[11px] text-dim/60", className)}>{emptyLabel}</span>;
   }
-
-  const canPreview = !!url && !error;
 
   return (
     <>
@@ -107,6 +117,9 @@ export function ZalacznikPreview({
       {open && canPreview && (
         <div
           className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-3 animate-fade-in"
+          role="dialog"
+          aria-modal="true"
+          data-swipe-ignore="true"
           onClick={() => setOpen(false)}
         >
           <div
@@ -141,6 +154,7 @@ export function ZalacznikPreview({
                 src={url}
                 alt="podgląd dokumentu"
                 className="mx-auto max-h-[78vh] max-w-full rounded-xl object-contain"
+                data-swipe-ignore="true"
               />
             </div>
           </div>

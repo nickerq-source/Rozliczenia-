@@ -3,7 +3,7 @@
 // Część B — dodanie kosztu ze zdjęcia paragonu/faktury (OCR przez AI).
 // Przycisk → aparat/plik → /api/scan-receipt → modal z polami do sprawdzenia → zapis.
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 import {
   KategoriaKosztu,
@@ -23,6 +23,7 @@ import {
 import { kategoryzujLokalnie } from "@/lib/categorize";
 import { KATEGORIE, domyslnyVatKategorii } from "@/lib/tax";
 import { IconCamera, IconLoader, IconAlertTriangle, IconX } from "./ui/icons";
+import { useAppBackLayer } from "@/lib/mobile-navigation";
 
 const STAWKI: { id: VatRate; label: string }[] = [
   { id: "0.23", label: "23%" },
@@ -64,6 +65,30 @@ export function SkanParagonu({ typ, ustawienia, onZapisz, disabled }: Props) {
   const [fVat, setFVat] = useState<VatRate>("0.23");
   const [fKat, setFKat] = useState<KategoriaKosztu>("inne");
   const [fPaidBy, setFPaidBy] = useState<KosztPayer>("Firma");
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+
+  const closeModal = useCallback(() => {
+    setModal(null);
+    setConfirmDiscard(false);
+    return true;
+  }, []);
+
+  const requestCloseModal = useCallback(() => {
+    if (!modal) return true;
+    setConfirmDiscard(true);
+    return false;
+  }, [modal]);
+
+  useAppBackLayer(!!modal, "scan-receipt-modal", requestCloseModal, 80);
+  useAppBackLayer(
+    confirmDiscard,
+    "scan-receipt-unsaved-confirm",
+    () => {
+      setConfirmDiscard(false);
+      return true;
+    },
+    90
+  );
 
   const parseDecimal = (v: string) => {
     const n = parseFloat(v.replace(",", "."));
@@ -159,7 +184,7 @@ export function SkanParagonu({ typ, ustawienia, onZapisz, disabled }: Props) {
     } else {
       onZapisz({ ...wspolne, nazwa: fNazwa || "Paragon" } as WpisInnegoKosztu);
     }
-    setModal(null);
+    closeModal();
   }
 
   return (
@@ -199,14 +224,20 @@ export function SkanParagonu({ typ, ustawienia, onZapisz, disabled }: Props) {
       </div>
 
       {modal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70" onClick={() => setModal(null)}>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70"
+          role="dialog"
+          aria-modal="true"
+          data-swipe-ignore="true"
+          onClick={requestCloseModal}
+        >
           <div
             className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl bg-surface border border-line p-4 space-y-3 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between">
               <h3 className="text-base font-bold text-white">Koszt ze zdjęcia</h3>
-              <button onClick={() => setModal(null)} className="text-dim hover:text-ink"><IconX size={18} /></button>
+              <button onClick={requestCloseModal} className="text-dim hover:text-ink"><IconX size={18} /></button>
             </div>
 
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-brand/10 border border-amber-brand/40 text-amber-brand text-[11px] font-medium">
@@ -219,7 +250,7 @@ export function SkanParagonu({ typ, ustawienia, onZapisz, disabled }: Props) {
             </span>
 
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={modal.dataUrl} alt="paragon" className="w-full max-h-40 object-contain rounded-xl border border-line bg-black/30" />
+            <img src={modal.dataUrl} alt="paragon" className="w-full max-h-40 object-contain rounded-xl border border-line bg-black/30" data-swipe-ignore="true" />
 
             <div className="grid grid-cols-2 gap-2 text-xs">
               <label className="col-span-2 text-dim">
@@ -275,10 +306,45 @@ export function SkanParagonu({ typ, ustawienia, onZapisz, disabled }: Props) {
             </div>
 
             <div className="flex gap-2 pt-1">
-              <button onClick={() => setModal(null)} disabled={busy} className="flex-1 py-2 rounded-xl border border-line text-dim text-sm hover:text-ink disabled:opacity-50">Anuluj</button>
+              <button onClick={requestCloseModal} disabled={busy} className="flex-1 py-2 rounded-xl border border-line text-dim text-sm hover:text-ink disabled:opacity-50">Anuluj</button>
               <button onClick={zapisz} disabled={busy} className="flex-1 py-2 rounded-xl bg-amber-brand text-amber-ink font-bold text-sm hover:bg-[#e09420] disabled:opacity-50 flex items-center justify-center gap-1.5">
                 {busy ? <IconLoader size={14} /> : null}
                 Zapisz koszt
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {confirmDiscard && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 p-4 animate-fade-in"
+          role="dialog"
+          aria-modal="true"
+          data-swipe-ignore="true"
+        >
+          <div className="w-full max-w-sm rounded-2xl border border-line bg-surface p-4 shadow-2xl">
+            <div className="mb-3 flex items-center gap-2">
+              <IconAlertTriangle size={18} className="text-amber-brand" />
+              <h3 className="text-base font-bold text-white">Masz niezapisane zmiany</h3>
+            </div>
+            <p className="text-sm text-dim">
+              Dane z paragonu nie są jeszcze zapisane jako koszt.
+            </p>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDiscard(false)}
+                className="rounded-xl border border-line px-3 py-2 text-sm font-bold text-dim hover:text-ink"
+              >
+                Zostań
+              </button>
+              <button
+                type="button"
+                onClick={closeModal}
+                className="rounded-xl bg-red-500/90 px-3 py-2 text-sm font-bold text-white hover:bg-red-500"
+              >
+                Odrzuć zmiany
               </button>
             </div>
           </div>

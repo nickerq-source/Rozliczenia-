@@ -2,7 +2,7 @@
 
 // Główny widok workspace — łączy header, zakładki miesięcy i zawartość
 
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { AppHeader } from "./AppHeader";
 import { TabName } from "./TabSwitch";
@@ -21,6 +21,7 @@ import { getUserName, setUserName } from "@/lib/push";
 import { logChange } from "@/lib/audit";
 import { IconLock, IconLockOpen } from "./ui/icons";
 import { getWeeksOfMonth, POLSKIE_MIESIACE, MIESIACE_ZAKRESU } from "@/lib/dates";
+import { useAppBackLayer, useSwipeNavigation } from "@/lib/mobile-navigation";
 
 // Tło z obrazu + ciemna nakładka; karty leżą nad nakładką
 function Background() {
@@ -187,6 +188,8 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
   const [aktywnyMiesiac, setAktywnyMiesiac] = useState<MiesiącId>(6);
   const [aktywnaZakladka, setAktywnaZakladka] = useState<TabName>("podsumowanie");
   const [focusZgloszenie, setFocusZgloszenie] = useState<string | null>(null);
+  const tabHistory = useRef<TabName[]>([]);
+  const [tabBackDepth, setTabBackDepth] = useState(0);
 
   // Deep-link z powiadomienia: /admin?miesiac=6&zakladka=koszty&zgloszenie=ID
   useEffect(() => {
@@ -223,6 +226,49 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
     setUserName(name);
     setUserNameState(name);
   }
+
+  const changeZakladka = useCallback(
+    (tab: TabName) => {
+      if (tab === aktywnaZakladka) return;
+      tabHistory.current.push(aktywnaZakladka);
+      setTabBackDepth(tabHistory.current.length);
+      setAktywnaZakladka(tab);
+    },
+    [aktywnaZakladka]
+  );
+
+  const cofnijZakladke = useCallback(() => {
+    const prev = tabHistory.current.pop();
+    setTabBackDepth(tabHistory.current.length);
+    if (!prev) return true;
+    setAktywnaZakladka(prev);
+    return true;
+  }, []);
+
+  useAppBackLayer(tabBackDepth > 0, "admin-tab-history", cofnijZakladke, 10);
+
+  const swipeTabs = useMemo<TabName[]>(
+    () => (isAdmin
+      ? ["podsumowanie", "zarobek", "koszty", "raport", "wiadomosci"]
+      : ["podsumowanie", "zarobek", "koszty", "raport"]),
+    [isAdmin]
+  );
+
+  const przelaczSwipe = useCallback(
+    (offset: number) => {
+      const idx = swipeTabs.indexOf(aktywnaZakladka);
+      if (idx < 0) return;
+      const next = swipeTabs[idx + offset];
+      if (next) changeZakladka(next);
+    },
+    [aktywnaZakladka, changeZakladka, swipeTabs]
+  );
+
+  const swipeHandlers = useSwipeNavigation({
+    enabled: !loading,
+    onSwipeLeft: () => przelaczSwipe(1),
+    onSwipeRight: () => przelaczSwipe(-1),
+  });
 
   const daneMiesiaca = data.miesiace[aktywnyMiesiac] ?? domyslneDaneMiesiaca(aktywnyMiesiac);
   const ustawienia = getUstawienia(data);
@@ -280,7 +326,7 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
           aktywnyMiesiac={aktywnyMiesiac}
           onMiesiacChange={setAktywnyMiesiac}
           aktywnaZakladka={aktywnaZakladka}
-          onZakladkaChange={setAktywnaZakladka}
+          onZakladkaChange={changeZakladka}
           userName={userName ?? ""}
           showHistoria={isAdmin}
           lockedMonths={lockedMonths}
@@ -289,7 +335,10 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
         {/* Jednorazowy modal imienia (userName === "" po odczycie localStorage) */}
         {userName === "" && <UserNameModal onSave={handleSaveUserName} />}
 
-        <main className="max-w-[480px] mx-auto px-3 sm:px-6 py-4 space-y-4 pb-0">
+        <main
+          {...swipeHandlers}
+          className="app-swipe-surface max-w-[480px] mx-auto px-3 sm:px-6 py-4 space-y-4 pb-0"
+        >
           {loading ? (
             <LoadingSkeleton />
           ) : (

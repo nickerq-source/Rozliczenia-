@@ -49,6 +49,8 @@ html {
   scrollbar-color: var(--border) transparent;
   max-width: 100%;
   overflow-x: hidden;
+  overscroll-behavior-x: contain;
+  overscroll-behavior-y: auto;
 }
 
 body {
@@ -57,6 +59,8 @@ body {
   font-variant-numeric: tabular-nums;
   max-width: 100%;
   overflow-x: hidden;
+  overscroll-behavior-x: contain;
+  overscroll-behavior-y: auto;
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
 }
@@ -156,6 +160,15 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 }
 .animate-slide-down {
   animation: slideDown 200ms ease-out;
+}
+
+.app-swipe-surface {
+  touch-action: pan-y;
+  transition: transform 150ms ease, opacity 150ms ease;
+}
+
+[data-swipe-ignore="true"] {
+  touch-action: auto;
 }
 
 /* ── Logo „PapiTrans" — szmaragdowe litery jak na grafice tła ───────────── */

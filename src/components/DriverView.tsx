@@ -3,7 +3,7 @@
 // Widok kierowcy: „Moja wypłata" — rozbicie dzień po dniu z weryfikacją
 // (zielony ptaszek = potwierdzam, czerwony X = zgłoś błąd z propozycją kółek).
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getBrowserSupabase } from "@/lib/supabase-browser";
 import { formatZlCaly } from "@/lib/business-logic";
@@ -35,6 +35,7 @@ import {
   normalizeDriverLanguage,
   replaceVars,
 } from "@/lib/driver-translations";
+import { useAppBackLayer, useSwipeNavigation } from "@/lib/mobile-navigation";
 
 interface DzienRozbicie {
   data: string;
@@ -93,6 +94,7 @@ interface MiesiacWyplata {
 }
 
 type DriverKategoria = "wyplata" | "tankowanie" | "wiadomosci" | "legenda";
+const DRIVER_KATEGORIE: DriverKategoria[] = ["wyplata", "tankowanie", "wiadomosci", "legenda"];
 
 function formatDataPL(iso: string): string {
   const d = new Date(iso);
@@ -109,6 +111,8 @@ export function DriverView({ name }: { name: string }) {
   const [languageBusy, setLanguageBusy] = useState(false);
   const [languageError, setLanguageError] = useState(false);
   const [unreadMessages, setUnreadMessages] = useState(0);
+  const categoryHistory = useRef<DriverKategoria[]>([]);
+  const [categoryBackDepth, setCategoryBackDepth] = useState(0);
   const t = driverTexts(language);
 
   async function load() {
@@ -138,6 +142,49 @@ export function DriverView({ name }: { name: string }) {
     if (tab === "wiadomosci") setKategoria("wiadomosci");
     if (tab === "tankowanie") setKategoria("tankowanie");
   }, []);
+
+  const changeKategoria = useCallback(
+    (next: DriverKategoria) => {
+      if (next === kategoria) return;
+      categoryHistory.current.push(kategoria);
+      setCategoryBackDepth(categoryHistory.current.length);
+      setKategoria(next);
+    },
+    [kategoria]
+  );
+
+  const cofnijKategorie = useCallback(() => {
+    const prev = categoryHistory.current.pop();
+    setCategoryBackDepth(categoryHistory.current.length);
+    if (!prev) return true;
+    setKategoria(prev);
+    return true;
+  }, []);
+
+  useAppBackLayer(categoryBackDepth > 0, "driver-category-history", cofnijKategorie, 10);
+  useAppBackLayer(
+    kategoria === "wyplata" && otwarty !== null,
+    "driver-month-details",
+    () => {
+      setOtwarty(null);
+      return true;
+    },
+    30
+  );
+
+  const swipeHandlers = useSwipeNavigation({
+    enabled: true,
+    onSwipeLeft: () => {
+      const idx = DRIVER_KATEGORIE.indexOf(kategoria);
+      const next = DRIVER_KATEGORIE[idx + 1];
+      if (next) changeKategoria(next);
+    },
+    onSwipeRight: () => {
+      const idx = DRIVER_KATEGORIE.indexOf(kategoria);
+      const prev = DRIVER_KATEGORIE[idx - 1];
+      if (prev) changeKategoria(prev);
+    },
+  });
 
   useEffect(() => {
     (async () => {
@@ -246,12 +293,12 @@ export function DriverView({ name }: { name: string }) {
               active={kategoria}
               lang={language}
               unreadMessages={unreadMessages}
-              onChange={setKategoria}
+              onChange={changeKategoria}
             />
           </div>
         </header>
 
-        <main className="max-w-[480px] mx-auto px-3 sm:px-6 py-4 space-y-3">
+        <main {...swipeHandlers} className="app-swipe-surface max-w-[480px] mx-auto px-3 sm:px-6 py-4 space-y-3">
           <div className="flex items-center gap-2">
             <IkonaKategorii kategoria={kategoria} size={20} className="text-amber-brand" />
             <h1 className="text-lg font-bold text-white">

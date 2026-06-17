@@ -6,6 +6,7 @@ import { useEffect } from "react";
 import { KIEROWCA, TYP_TRANSPORTU } from "@/lib/config";
 import { formatZl } from "@/lib/business-logic";
 import { cn } from "@/lib/utils";
+import { useAppBackLayer } from "@/lib/mobile-navigation";
 
 interface FilteredResult {
   ileKolek: number;
@@ -70,6 +71,8 @@ export function ImportModal({
   onReupload,
 }: ImportModalProps) {
   const isPreview = mode === "preview";
+  useAppBackLayer(true, "invoice-import-modal", onCancel, 80);
+
   // Zamknij modal klawiszem Escape
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -85,6 +88,9 @@ export function ImportModal({
     // Tło nakładki
     <div
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-fade-in"
+      role="dialog"
+      aria-modal="true"
+      data-swipe-ignore="true"
       onClick={(e) => { if (e.target === e.currentTarget) onCancel(); }}
     >
       <div className="w-full max-w-sm bg-surface rounded-2xl border border-line shadow-2xl overflow-hidden">

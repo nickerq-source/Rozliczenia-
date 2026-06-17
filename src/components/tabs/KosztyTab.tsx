@@ -68,6 +68,7 @@ import { logChange } from "@/lib/audit";
 import { SkanParagonu } from "../SkanParagonu";
 import { ZalacznikPreview } from "../ZalacznikPreview";
 import { cn } from "@/lib/utils";
+import { useAppBackLayer, useSwipeNavigation } from "@/lib/mobile-navigation";
 
 interface Props {
   miesiac: MiesiącId;
@@ -176,6 +177,7 @@ const WIDOKI_KOSZTOW: { id: WidokKosztow; label: string; short: string }[] = [
   { id: "rozliczenie", label: "Rozliczenie 50/50", short: "50/50" },
   { id: "statystyki", label: "Statystyki tankowania", short: "Stat." },
 ];
+const WIDOK_KOSZTOW_ORDER = WIDOKI_KOSZTOW.map((widok) => widok.id);
 
 function statusDokumentu(wpis: KosztVatInfo): DocumentStatus {
   if (wpis.documentStatus) return wpis.documentStatus;
@@ -1085,6 +1087,62 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
   const payerBackfillDone = useRef<Set<MiesiącId>>(new Set());
   const notifiedCostValues = useRef<Record<string, string>>({});
   const dayEditStart = useRef<Record<string, number>>({});
+  const widokHistory = useRef<WidokKosztow[]>([]);
+  const [widokBackDepth, setWidokBackDepth] = useState(0);
+  const expandedIds = useMemo(() => Object.keys(rozwiniete).filter((id) => rozwiniete[id]), [rozwiniete]);
+
+  const changeWidokKosztow = useCallback(
+    (next: WidokKosztow) => {
+      if (next === widokKosztow) return;
+      widokHistory.current.push(widokKosztow);
+      setWidokBackDepth(widokHistory.current.length);
+      setWidokKosztow(next);
+    },
+    [widokKosztow]
+  );
+
+  const cofnijWidokKosztow = useCallback(() => {
+    const prev = widokHistory.current.pop();
+    setWidokBackDepth(widokHistory.current.length);
+    if (!prev) return true;
+    setWidokKosztow(prev);
+    return true;
+  }, []);
+
+  useAppBackLayer(widokBackDepth > 0, "cost-subtab-history", cofnijWidokKosztow, 20);
+  useAppBackLayer(
+    expandedIds.length > 0,
+    "cost-details-panel",
+    () => {
+      const last = expandedIds[expandedIds.length - 1];
+      setRozwiniete((prev) => ({ ...prev, [last]: false }));
+      return true;
+    },
+    40
+  );
+  useAppBackLayer(
+    quickActionsOpen,
+    "cost-quick-actions",
+    () => {
+      setQuickActionsOpen(false);
+      return true;
+    },
+    70
+  );
+
+  const swipeHandlers = useSwipeNavigation({
+    enabled: true,
+    onSwipeLeft: () => {
+      const idx = WIDOK_KOSZTOW_ORDER.indexOf(widokKosztow);
+      const next = WIDOK_KOSZTOW_ORDER[idx + 1];
+      if (next) changeWidokKosztow(next);
+    },
+    onSwipeRight: () => {
+      const idx = WIDOK_KOSZTOW_ORDER.indexOf(widokKosztow);
+      const prev = WIDOK_KOSZTOW_ORDER[idx - 1];
+      if (prev) changeWidokKosztow(prev);
+    },
+  });
 
   function showToast(msg: string) {
     setToast(msg);
@@ -1834,8 +1892,8 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
   let weekNum = 1;
 
   return (
-    <div className="space-y-4">
-      <KosztySectionSwitch active={widokKosztow} onChange={setWidokKosztow} />
+    <div {...swipeHandlers} className="app-swipe-surface space-y-4">
+      <KosztySectionSwitch active={widokKosztow} onChange={changeWidokKosztow} />
 
       {showPodsumowanie && <Card className="!border-amber-brand/35">
         <div className="mb-4 flex items-start gap-3">
@@ -1941,28 +1999,28 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
         <div className="mt-4 grid grid-cols-2 gap-2">
           <button
             type="button"
-            onClick={() => setWidokKosztow("wyplata")}
+            onClick={() => changeWidokKosztow("wyplata")}
             className="rounded-xl border border-line bg-surface2 px-3 py-2 text-xs font-bold text-dim hover:text-ink"
           >
             Wypłata
           </button>
           <button
             type="button"
-            onClick={() => setWidokKosztow("tankowanie")}
+            onClick={() => changeWidokKosztow("tankowanie")}
             className="rounded-xl border border-line bg-surface2 px-3 py-2 text-xs font-bold text-dim hover:text-ink"
           >
             Tankowanie
           </button>
           <button
             type="button"
-            onClick={() => setWidokKosztow("rozliczenie")}
+            onClick={() => changeWidokKosztow("rozliczenie")}
             className="rounded-xl border border-line bg-surface2 px-3 py-2 text-xs font-bold text-dim hover:text-ink"
           >
             50/50
           </button>
           <button
             type="button"
-            onClick={() => setWidokKosztow("samochod")}
+            onClick={() => changeWidokKosztow("samochod")}
             className="rounded-xl border border-line bg-surface2 px-3 py-2 text-xs font-bold text-dim hover:text-ink"
           >
             Auto
@@ -2665,7 +2723,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
       </button>
 
       {quickActionsOpen && (
-        <div className="fixed inset-0 z-50 sm:hidden">
+        <div className="fixed inset-0 z-50 sm:hidden" role="dialog" aria-modal="true" data-swipe-ignore="true">
           <button
             type="button"
             aria-label="Zamknij szybkie akcje"
@@ -2683,7 +2741,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
               <button
                 type="button"
                 onClick={() => {
-                  setWidokKosztow("tankowanie");
+                  changeWidokKosztow("tankowanie");
                   addTankowanie();
                   setQuickActionsOpen(false);
                 }}
@@ -2695,7 +2753,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
               <button
                 type="button"
                 onClick={() => {
-                  setWidokKosztow("samochod");
+                  changeWidokKosztow("samochod");
                   addInny();
                   setQuickActionsOpen(false);
                 }}

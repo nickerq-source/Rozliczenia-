@@ -25,8 +25,10 @@ import {
   IconRoad,
 } from "./ui/icons";
 import { DriverLanguage, driverMonthName, driverTexts } from "@/lib/driver-translations";
+import { useAppBackLayer } from "@/lib/mobile-navigation";
 
 type PhotoType = "receipt" | "odometer" | "unknown";
+type FuelFormStep = "photos" | "review";
 
 interface PhotoItem {
   id: string;
@@ -108,6 +110,8 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
   const [scanInfo, setScanInfo] = useState<null | "ok" | "manual">(null);
   const [blad, setBlad] = useState<string | null>(null);
   const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
+  const [step, setStep] = useState<FuelFormStep>("photos");
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
 
   const [lista, setLista] = useState<WpisListy[]>([]);
   const [confirmId, setConfirmId] = useState<string | null>(null);
@@ -130,6 +134,23 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
   const receiptPhoto = useMemo(() => bestPhoto(photos, "receipt"), [photos]);
   const odometerPhoto = useMemo(() => bestPhoto(photos, "odometer"), [photos]);
   const anyAiReview = photos.some((p) => p.needsReview || p.type === "unknown");
+  const hasUnsavedChanges = useMemo(() => {
+    if (!open) return false;
+    return (
+      photos.length > 0 ||
+      fData !== todayISO() ||
+      !!fLitry.trim() ||
+      !!fCena.trim() ||
+      !!fKwotaNetto.trim() ||
+      !!fVatKwota.trim() ||
+      !!fKwota.trim() ||
+      fVat !== "0.23" ||
+      !!fSprzedawca.trim() ||
+      !!fNip.trim() ||
+      !!fDokument.trim() ||
+      !!fPrzebieg.trim()
+    );
+  }, [fCena, fData, fDokument, fKwota, fKwotaNetto, fLitry, fNip, fPrzebieg, fSprzedawca, fVat, fVatKwota, open, photos.length]);
 
   const wczytaj = useCallback(async () => {
     try {
@@ -146,7 +167,7 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
     wczytaj();
   }, [wczytaj]);
 
-  function reset() {
+  const reset = useCallback(() => {
     setFData(todayISO());
     setFLitry("");
     setFCena("");
@@ -162,7 +183,54 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
     setScanInfo(null);
     setBlad(null);
     setDuplicateWarning(null);
-  }
+    setStep("photos");
+    setConfirmDiscard(false);
+  }, []);
+
+  const forceClose = useCallback(() => {
+    reset();
+    setOpen(false);
+  }, [reset]);
+
+  const requestClose = useCallback(() => {
+    if (busy) return false;
+    if (hasUnsavedChanges) {
+      setConfirmDiscard(true);
+      return false;
+    }
+    reset();
+    setOpen(false);
+    return true;
+  }, [busy, hasUnsavedChanges, reset]);
+
+  useAppBackLayer(
+    open && step === "review" && photos.length > 0,
+    "driver-fuel-review-step",
+    () => {
+      setStep("photos");
+      return true;
+    },
+    55
+  );
+  useAppBackLayer(open, "driver-fuel-form", requestClose, 50);
+  useAppBackLayer(
+    !!duplicateWarning,
+    "driver-fuel-duplicate-warning",
+    () => {
+      setDuplicateWarning(null);
+      return true;
+    },
+    75
+  );
+  useAppBackLayer(
+    confirmDiscard,
+    "driver-fuel-unsaved-confirm",
+    () => {
+      setConfirmDiscard(false);
+      return true;
+    },
+    90
+  );
 
   function przeliczKwote(litryStr: string, cenaStr: string) {
     const l = num(litryStr);
@@ -246,6 +314,7 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
       }
       setPhotos((prev) => [...prev, ...nextItems]);
       setScanInfo(nextItems.some((p) => p.type !== "unknown") ? "ok" : "manual");
+      setStep("review");
       setOpen(true);
     } finally {
       setBusy(false);
@@ -399,7 +468,11 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
         <div className="mt-3 space-y-2">
           <button
             type="button"
-            onClick={() => { reset(); setOpen(true); }}
+            onClick={() => {
+              reset();
+              setStep("review");
+              setOpen(true);
+            }}
             className="flex w-full items-center justify-center gap-1.5 py-2.5 min-h-[44px] rounded-xl border border-dashed border-amber-brand/50 text-sm text-amber-brand hover:bg-amber-brand/10 transition-all"
           >
             <IconPlus size={15} /> {t.fuel.manual}
@@ -408,166 +481,238 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
         </div>
       ) : (
         <div className="mt-3 space-y-4">
-          <div className="rounded-2xl border border-line bg-surface2/70 p-3">
-            <p className="mb-1 text-xs font-bold text-white">1. Dodaj zdjęcia tankowania</p>
-            <p className="mb-3 text-[11px] text-dim">
-              Możesz dodać paragon i licznik w dowolnej kolejności. Jeśli AI nie jest pewne, wybierz typ ręcznie.
-            </p>
-            {photoInput}
-            {photos.length > 0 && (
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                {photos.map((p) => (
-                  <div key={p.id} className="rounded-xl border border-line bg-input p-2">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={p.dataUrl} alt={p.fileName} className="h-24 w-full rounded-lg object-cover bg-black/30" />
-                    <div className="mt-2 flex items-center justify-between gap-2">
-                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                        p.type === "receipt"
-                          ? "bg-green-soft text-green-300"
-                          : p.type === "odometer"
-                          ? "bg-amber-brand/10 text-amber-brand"
-                          : "bg-red-soft text-red-300"
-                      }`}>
-                        {photoLabel(p.type)}
-                      </span>
-                      <span className="text-[10px] text-dim">{Math.round((p.confidence ?? 0) * 100)}%</span>
-                    </div>
-                    {(p.type === "unknown" || p.needsReview) && (
-                      <div className="mt-2 grid grid-cols-2 gap-1">
-                        <button
-                          type="button"
-                          onClick={() => ustawTypZdjecia(p.id, "receipt")}
-                          className="rounded-lg border border-line px-2 py-1 text-[10px] text-amber-brand"
-                        >
-                          Paragon
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => ustawTypZdjecia(p.id, "odometer")}
-                          className="rounded-lg border border-line px-2 py-1 text-[10px] text-amber-brand"
-                        >
-                          Licznik
-                        </button>
+          {step === "photos" ? (
+            <div className="rounded-2xl border border-line bg-surface2/70 p-3">
+              <p className="mb-1 text-xs font-bold text-white">1. Dodaj zdjęcia tankowania</p>
+              <p className="mb-3 text-[11px] text-dim">
+                Możesz dodać paragon i licznik w dowolnej kolejności. Jeśli AI nie jest pewne, wybierz typ ręcznie.
+              </p>
+              {photoInput}
+              {photos.length > 0 && (
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  {photos.map((p) => (
+                    <div key={p.id} className="rounded-xl border border-line bg-input p-2">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={p.dataUrl} alt={p.fileName} className="h-24 w-full rounded-lg object-cover bg-black/30" data-swipe-ignore="true" />
+                      <div className="mt-2 flex items-center justify-between gap-2">
+                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                          p.type === "receipt"
+                            ? "bg-green-soft text-green-300"
+                            : p.type === "odometer"
+                            ? "bg-amber-brand/10 text-amber-brand"
+                            : "bg-red-soft text-red-300"
+                        }`}>
+                          {photoLabel(p.type)}
+                        </span>
+                        <span className="text-[10px] text-dim">{Math.round((p.confidence ?? 0) * 100)}%</span>
                       </div>
-                    )}
-                    {p.error && <p className="mt-1 text-[10px] text-red-300">{p.error}</p>}
-                  </div>
-                ))}
+                      {(p.type === "unknown" || p.needsReview) && (
+                        <div className="mt-2 grid grid-cols-2 gap-1">
+                          <button
+                            type="button"
+                            onClick={() => ustawTypZdjecia(p.id, "receipt")}
+                            className="rounded-lg border border-line px-2 py-1 text-[10px] text-amber-brand"
+                          >
+                            Paragon
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => ustawTypZdjecia(p.id, "odometer")}
+                            className="rounded-lg border border-line px-2 py-1 text-[10px] text-amber-brand"
+                          >
+                            Licznik
+                          </button>
+                        </div>
+                      )}
+                      {p.error && <p className="mt-1 text-[10px] text-red-300">{p.error}</p>}
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="mt-3 flex gap-2">
+                <button
+                  type="button"
+                  onClick={requestClose}
+                  disabled={busy}
+                  className="flex-1 py-2 rounded-xl border border-line text-dim text-sm hover:text-ink disabled:opacity-50"
+                >
+                  {t.fuel.cancel}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStep("review")}
+                  disabled={busy || photos.length === 0}
+                  className="flex-1 py-2 rounded-xl bg-amber-brand text-amber-ink font-bold text-sm hover:bg-[#e09420] disabled:opacity-50"
+                >
+                  Sprawdź dane
+                </button>
               </div>
-            )}
-          </div>
+            </div>
+          ) : (
+            photos.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setStep("photos")}
+                className="w-full rounded-2xl border border-line bg-surface2/70 p-3 text-left transition-colors hover:border-amber-brand/50"
+              >
+                <p className="text-xs font-bold text-white">1. Zdjęcia tankowania</p>
+                <p className="mt-1 text-[11px] text-dim">
+                  {photos.length} zdjęć · dotknij, żeby wrócić do edycji zdjęć
+                </p>
+              </button>
+            )
+          )}
 
-          {scanInfo && (
+          {step === "review" && scanInfo && (
             <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-brand/10 border border-amber-brand/40 text-amber-brand text-[11px] font-medium">
               <IconCheck size={12} />
               {scanInfo === "manual" ? t.fuel.aiManual : "AI odczytało zdjęcia — sprawdź dane"}
             </span>
           )}
 
-          <div className="rounded-2xl border border-line bg-surface2/70 p-3">
-            <p className="mb-3 text-xs font-bold text-white">2. Sprawdź dane tankowania</p>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <label className="text-dim">
-                {t.fuel.date}
-                <input type="date" value={fData} onChange={(e) => setFData(e.target.value)} className={inputCls} />
-              </label>
-              <label className="text-dim">
-                {t.fuel.station}
-                <input value={fSprzedawca} onChange={(e) => setFSprzedawca(e.target.value)} placeholder={t.fuel.stationPlaceholder} className={inputCls} />
-              </label>
-              <label className="text-dim">
-                {t.fuel.liters}
-                <input inputMode="decimal" value={fLitry} onChange={(e) => { setFLitry(e.target.value); przeliczKwote(e.target.value, fCena); }} placeholder="0" className={`${inputCls} tabular-nums`} />
-              </label>
-              <label className="text-dim">
-                {t.fuel.pricePerLiter}
-                <input inputMode="decimal" value={fCena} onChange={(e) => { setFCena(e.target.value); przeliczKwote(fLitry, e.target.value); }} placeholder="0,00" className={`${inputCls} tabular-nums`} />
-              </label>
-              <label className="text-dim">
-                Kwota netto
-                <input inputMode="decimal" value={fKwotaNetto} onChange={(e) => setFKwotaNetto(e.target.value)} placeholder="0,00" className={`${inputCls} tabular-nums`} />
-              </label>
-              <label className="text-dim">
-                VAT %
-                <select
-                  value={fVat}
-                  onChange={(e) => {
-                    const next = e.target.value as VatRate | "";
-                    setFVat(next);
-                    przeliczVatZBrutto(fKwota, next);
-                  }}
-                  className={inputCls}
-                >
-                  <option value="">do sprawdzenia</option>
-                  {VAT_OPTIONS.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}
-                </select>
-              </label>
-              <label className="text-dim">
-                Kwota VAT
-                <input inputMode="decimal" value={fVatKwota} onChange={(e) => setFVatKwota(e.target.value)} placeholder="0,00" className={`${inputCls} tabular-nums`} />
-              </label>
-              <label className="text-dim">
-                {t.fuel.grossAmount}
-                <input
-                  inputMode="decimal"
-                  value={fKwota}
-                  onChange={(e) => {
-                    setFKwota(e.target.value);
-                    przeliczVatZBrutto(e.target.value, fVat);
-                  }}
-                  placeholder="0,00"
-                  className={`${inputCls} tabular-nums font-bold text-white`}
-                />
-              </label>
-              <label className="text-dim col-span-2">
-                Przebieg pojazdu (km)
-                <input inputMode="numeric" value={fPrzebieg} onChange={(e) => setFPrzebieg(e.target.value)} placeholder="np. 245320" className={`${inputCls} tabular-nums`} />
-              </label>
-              <label className="text-dim col-span-2">
-                Nr dokumentu
-                <input value={fDokument} onChange={(e) => setFDokument(e.target.value)} placeholder="opcjonalnie" className={inputCls} />
-              </label>
-            </div>
-          </div>
+          {step === "review" && (
+            <>
+              <div className="rounded-2xl border border-line bg-surface2/70 p-3">
+                <p className="mb-3 text-xs font-bold text-white">2. Sprawdź dane tankowania</p>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <label className="text-dim">
+                    {t.fuel.date}
+                    <input type="date" value={fData} onChange={(e) => setFData(e.target.value)} className={inputCls} />
+                  </label>
+                  <label className="text-dim">
+                    {t.fuel.station}
+                    <input value={fSprzedawca} onChange={(e) => setFSprzedawca(e.target.value)} placeholder={t.fuel.stationPlaceholder} className={inputCls} />
+                  </label>
+                  <label className="text-dim">
+                    {t.fuel.liters}
+                    <input inputMode="decimal" value={fLitry} onChange={(e) => { setFLitry(e.target.value); przeliczKwote(e.target.value, fCena); }} placeholder="0" className={`${inputCls} tabular-nums`} />
+                  </label>
+                  <label className="text-dim">
+                    {t.fuel.pricePerLiter}
+                    <input inputMode="decimal" value={fCena} onChange={(e) => { setFCena(e.target.value); przeliczKwote(fLitry, e.target.value); }} placeholder="0,00" className={`${inputCls} tabular-nums`} />
+                  </label>
+                  <label className="text-dim">
+                    Kwota netto
+                    <input inputMode="decimal" value={fKwotaNetto} onChange={(e) => setFKwotaNetto(e.target.value)} placeholder="0,00" className={`${inputCls} tabular-nums`} />
+                  </label>
+                  <label className="text-dim">
+                    VAT %
+                    <select
+                      value={fVat}
+                      onChange={(e) => {
+                        const next = e.target.value as VatRate | "";
+                        setFVat(next);
+                        przeliczVatZBrutto(fKwota, next);
+                      }}
+                      className={inputCls}
+                    >
+                      <option value="">do sprawdzenia</option>
+                      {VAT_OPTIONS.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}
+                    </select>
+                  </label>
+                  <label className="text-dim">
+                    Kwota VAT
+                    <input inputMode="decimal" value={fVatKwota} onChange={(e) => setFVatKwota(e.target.value)} placeholder="0,00" className={`${inputCls} tabular-nums`} />
+                  </label>
+                  <label className="text-dim">
+                    {t.fuel.grossAmount}
+                    <input
+                      inputMode="decimal"
+                      value={fKwota}
+                      onChange={(e) => {
+                        setFKwota(e.target.value);
+                        przeliczVatZBrutto(e.target.value, fVat);
+                      }}
+                      placeholder="0,00"
+                      className={`${inputCls} tabular-nums font-bold text-white`}
+                    />
+                  </label>
+                  <label className="text-dim col-span-2">
+                    Przebieg pojazdu (km)
+                    <input inputMode="numeric" value={fPrzebieg} onChange={(e) => setFPrzebieg(e.target.value)} placeholder="np. 245320" className={`${inputCls} tabular-nums`} />
+                  </label>
+                  <label className="text-dim col-span-2">
+                    Nr dokumentu
+                    <input value={fDokument} onChange={(e) => setFDokument(e.target.value)} placeholder="opcjonalnie" className={inputCls} />
+                  </label>
+                </div>
+              </div>
 
-          {duplicateWarning && (
-            <div className="rounded-xl border border-amber-brand/50 bg-amber-brand/10 p-3 text-xs text-amber-brand">
-              <p className="font-bold">{duplicateWarning}</p>
+              {duplicateWarning && (
+                <div className="rounded-xl border border-amber-brand/50 bg-amber-brand/10 p-3 text-xs text-amber-brand">
+                  <p className="font-bold">{duplicateWarning}</p>
+                  <button
+                    type="button"
+                    onClick={() => zapisz(true)}
+                    disabled={busy}
+                    className="mt-2 rounded-lg bg-amber-brand px-3 py-1.5 font-bold text-amber-ink disabled:opacity-50"
+                  >
+                    Zapisz mimo ostrzeżenia
+                  </button>
+                </div>
+              )}
+
+              {blad && (
+                <p className="flex items-center gap-1.5 text-xs text-red-300">
+                  <IconX size={13} /> {blad}
+                </p>
+              )}
+
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={requestClose}
+                  disabled={busy}
+                  className="flex-1 py-2 rounded-xl border border-line text-dim text-sm hover:text-ink disabled:opacity-50"
+                >
+                  {t.fuel.cancel}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => zapisz(false)}
+                  disabled={busy}
+                  className="flex-1 py-2 rounded-xl bg-amber-brand text-amber-ink font-bold text-sm hover:bg-[#e09420] disabled:opacity-50 flex items-center justify-center gap-1.5"
+                >
+                  {busy ? <IconLoader size={14} /> : <IconCheck size={14} />}
+                  {t.fuel.save}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {confirmDiscard && (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4 animate-fade-in"
+          role="dialog"
+          aria-modal="true"
+          data-swipe-ignore="true"
+        >
+          <div className="w-full max-w-sm rounded-2xl border border-line bg-surface p-4 shadow-2xl">
+            <div className="mb-3 flex items-center gap-2">
+              <IconAlertTriangle size={18} className="text-amber-brand" />
+              <h3 className="text-base font-bold text-white">Masz niezapisane zmiany</h3>
+            </div>
+            <p className="text-sm text-dim">
+              Co zrobić z danymi tankowania, których jeszcze nie zapisałeś?
+            </p>
+            <div className="mt-4 grid grid-cols-2 gap-2">
               <button
                 type="button"
-                onClick={() => zapisz(true)}
-                disabled={busy}
-                className="mt-2 rounded-lg bg-amber-brand px-3 py-1.5 font-bold text-amber-ink disabled:opacity-50"
+                onClick={() => setConfirmDiscard(false)}
+                className="rounded-xl border border-line px-3 py-2 text-sm font-bold text-dim hover:text-ink"
               >
-                Zapisz mimo ostrzeżenia
+                Zostań
+              </button>
+              <button
+                type="button"
+                onClick={forceClose}
+                className="rounded-xl bg-red-500/90 px-3 py-2 text-sm font-bold text-white hover:bg-red-500"
+              >
+                Odrzuć zmiany
               </button>
             </div>
-          )}
-
-          {blad && (
-            <p className="flex items-center gap-1.5 text-xs text-red-300">
-              <IconX size={13} /> {blad}
-            </p>
-          )}
-
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => { reset(); setOpen(false); }}
-              disabled={busy}
-              className="flex-1 py-2 rounded-xl border border-line text-dim text-sm hover:text-ink disabled:opacity-50"
-            >
-              {t.fuel.cancel}
-            </button>
-            <button
-              type="button"
-              onClick={() => zapisz(false)}
-              disabled={busy}
-              className="flex-1 py-2 rounded-xl bg-amber-brand text-amber-ink font-bold text-sm hover:bg-[#e09420] disabled:opacity-50 flex items-center justify-center gap-1.5"
-            >
-              {busy ? <IconLoader size={14} /> : <IconCheck size={14} />}
-              {t.fuel.save}
-            </button>
           </div>
         </div>
       )}
