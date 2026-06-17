@@ -14,6 +14,7 @@ import {
   toISODate,
   POLSKIE_MIESIACE,
 } from "@/lib/dates";
+import { KIEROWCA, TYP_TRANSPORTU } from "@/lib/config";
 import { NumInput } from "../ui/NumInput";
 import { CardTitle } from "../ui/Card";
 import { IconPaperclip, IconCheck, IconX, IconLoader } from "../ui/icons";
@@ -80,6 +81,10 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
 
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalState | null>(null);
+  const [importDriverName, setImportDriverName] = useState(KIEROWCA);
+  const [importVehicleType, setImportVehicleType] = useState(TYP_TRANSPORTU);
+  const [importDateFrom, setImportDateFrom] = useState("");
+  const [importDateTo, setImportDateTo] = useState("");
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const notifiedInvoiceValues = useRef<Record<string, number>>({});
 
@@ -133,6 +138,10 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
     try {
       const formData = new FormData();
       formData.append("file", file);
+      formData.append("driverName", importDriverName.trim() || KIEROWCA);
+      formData.append("vehicleType", importVehicleType.trim() || TYP_TRANSPORTU);
+      if (importDateFrom) formData.append("dateFrom", importDateFrom);
+      if (importDateTo) formData.append("dateTo", importDateTo);
 
       const res = await fetch("/api/import-invoice", {
         method: "POST",
@@ -181,6 +190,7 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
     const pdfImport: PDFImportData = {
       nazwaPliku: fileName,
       numerFaktury: invoiceNumber,
+      filters: filtered.filters,
       ileKolek: filtered.ileKolek,
       ileZlecen: filtered.ileZlecen,
       sumaKm: filtered.sumaKm,
@@ -191,6 +201,8 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
       sredniaBrutto: filtered.sredniaBrutto,
       zakresOd: filtered.zakresOd,
       zakresDo: filtered.zakresDo,
+      pozycjeUwzglednione: filtered.includedRows,
+      pozycjeOdrzucone: filtered.rejectedRows,
     };
 
     // Zapis do auto-wybranego tygodnia (na podstawie dat z PDF), nie do klikniętego
@@ -267,6 +279,9 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
         sredniaBrutto: imp.sredniaBrutto,
         zakresOd: imp.zakresOd,
         zakresDo: imp.zakresDo,
+        filters: imp.filters,
+        includedRows: imp.pozycjeUwzglednione,
+        rejectedRows: imp.pozycjeOdrzucone,
       },
       isOverwrite: false,
       targetIdx: idx,
@@ -355,6 +370,51 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
     <>
       <div className="space-y-4">
         <CardTitle className="mb-0">Faktury tygodniowe</CardTitle>
+
+        <div className="rounded-2xl border border-line bg-surface p-4 space-y-3">
+          <div>
+            <p className="text-sm font-bold text-white">Filtry importu PDF</p>
+            <p className="text-xs text-dim">
+              Parser liczy tylko rekordy z kolumn: kierowca, typ transportu i data załadunku.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <label className="text-xs text-dim space-y-1">
+              Kierowca
+              <input
+                value={importDriverName}
+                onChange={(e) => setImportDriverName(e.target.value)}
+                className="w-full bg-input border border-line rounded-[10px] px-3 py-2.5 text-[15px] text-ink focus:border-amber-brand focus:outline-none focus:ring-2 focus:ring-amber-brand/20"
+              />
+            </label>
+            <label className="text-xs text-dim space-y-1">
+              Typ transportu
+              <input
+                value={importVehicleType}
+                onChange={(e) => setImportVehicleType(e.target.value)}
+                className="w-full bg-input border border-line rounded-[10px] px-3 py-2.5 text-[15px] text-ink focus:border-amber-brand focus:outline-none focus:ring-2 focus:ring-amber-brand/20"
+              />
+            </label>
+            <label className="text-xs text-dim space-y-1">
+              Data od
+              <input
+                type="date"
+                value={importDateFrom}
+                onChange={(e) => setImportDateFrom(e.target.value)}
+                className="w-full bg-input border border-line rounded-[10px] px-3 py-2.5 text-[15px] text-ink focus:border-amber-brand focus:outline-none focus:ring-2 focus:ring-amber-brand/20"
+              />
+            </label>
+            <label className="text-xs text-dim space-y-1">
+              Data do
+              <input
+                type="date"
+                value={importDateTo}
+                onChange={(e) => setImportDateTo(e.target.value)}
+                className="w-full bg-input border border-line rounded-[10px] px-3 py-2.5 text-[15px] text-ink focus:border-amber-brand focus:outline-none focus:ring-2 focus:ring-amber-brand/20"
+              />
+            </label>
+          </div>
+        </div>
 
         <div className="space-y-3">
           {faktury.map((faktura, idx) => (

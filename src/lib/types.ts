@@ -3,9 +3,39 @@
 export type MiesiącId = 6 | 7 | 8 | 9 | 10 | 11 | 12; // Czerwiec–Grudzień 2026
 
 /** Dane zapisane po zaimportowaniu PDF faktury */
+export type PDFCarUsageType =
+  | "driver_car"
+  | "company_car"
+  | "replacement_car"
+  | "unknown";
+
+export interface PDFImportFilter {
+  driverName: string;
+  vehicleType: string;
+  dateFrom: string | null;
+  dateTo: string | null;
+}
+
+export interface PDFImportDiagnosticRow {
+  orderNumber: string;
+  date: string | null;
+  driverName: string;
+  vehicleType: string;
+  route: string;
+  km: number;
+  cost: number;
+  notes: string;
+  status: string;
+  invitationId: string | null;
+  vehicleOwner: PDFCarUsageType;
+  reason: string;
+  rawText?: string;
+}
+
 export interface PDFImportData {
   nazwaPliku: string;
   numerFaktury: string | null;
+  filters?: PDFImportFilter;
   ileKolek: number;
   ileZlecen?: number; // wiersze ze zleceniem (komentarz w Uwagach)
   sumaKm: number;
@@ -16,6 +46,8 @@ export interface PDFImportData {
   sredniaBrutto: number;
   zakresOd: string | null; // ISO "YYYY-MM-DD"
   zakresDo: string | null;
+  pozycjeUwzglednione?: PDFImportDiagnosticRow[];
+  pozycjeOdrzucone?: PDFImportDiagnosticRow[];
 }
 
 export type InvoiceStatus =

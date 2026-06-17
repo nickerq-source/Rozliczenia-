@@ -1,4 +1,4 @@
-// Parsing PDF faktur — pdfjs-dist (Y-grouped lines)
+// Parsing PDF faktur transportowych Żabki — najpierw rekordy, potem filtrowanie.
 
 import { KIEROWCA, TYP_TRANSPORTU, VAT } from "./config";
 
@@ -12,6 +12,18 @@ export function parsePolishNumber(s: string | undefined | null): number {
   return isNaN(n) ? 0 : n;
 }
 
+export function normalizeInvoiceText(value: string | undefined | null): string {
+  return (value ?? "")
+    .replace(/[\r\n\t]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toUpperCase();
+}
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
 function toISODate(d: Date): string {
   return (
     d.getFullYear() +
@@ -22,28 +34,111 @@ function toISODate(d: Date): string {
   );
 }
 
+function validISODate(value: string | undefined | null): string | null {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const d = new Date(value + "T12:00:00");
+  return isNaN(d.getTime()) ? null : value;
+}
+
+function isNumberToken(token: string | undefined): boolean {
+  return !!token && /^\d{1,6}(?:[,\.]\d{1,4})?$/.test(token);
+}
+
+function isStatusToken(token: string | undefined): boolean {
+  return !!token && /^(Rozliczony|Zrealizowan|Zrealizowany)$/i.test(token);
+}
+
+function normalizeStatus(tokens: string[]): string {
+  const idx = tokens.findIndex(isStatusToken);
+  if (idx < 0) return "";
+  if (/^Zrealizowan$/i.test(tokens[idx]) && /^y$/i.test(tokens[idx + 1] ?? "")) {
+    return "Zrealizowany";
+  }
+  return tokens[idx];
+}
+
 // ─── TYPY ─────────────────────────────────────────────────────────────────────
 
-export interface ParsedRow {
-  dataZaladunku: string; // ISO "YYYY-MM-DD"
-  odlegloscKm: number;
-  kosztPotwierdzony: number; // netto (kolumna Koszt potwierdzony)
-  isZlecenie: boolean; // true gdy w kolumnie „Uwagi" jest komentarz (zlecenie, nie trasa)
+export type InvoiceCarUsageType =
+  | "driver_car"
+  | "company_car"
+  | "replacement_car"
+  | "unknown";
+
+export interface InvoiceRecord {
+  orderNumber: string;
+  route: string;
+  driverName: string;
+  vehicleType: string;
+  loadingDate: string | null;
+  distanceKm: number;
+  palletPlaces: number;
+  weight: number;
+  notes: string;
+  confirmedCost: number;
+  lineCost: number;
+  distributionCost: number;
+  viatolCost: number;
+  otherCost: number;
+  galaxyCost: number;
+  status: string;
+  invitationId: string | null;
+  carrierCode: string | null;
+  currency: string | null;
+  saleDate: string | null;
+  vehicleOwner: InvoiceCarUsageType;
+  needsReview: boolean;
+  parseWarnings: string[];
+  rawText: string;
+}
+
+export interface InvoiceFilter {
+  driverName: string;
+  vehicleType: string;
+  dateFrom: string | null;
+  dateTo: string | null;
+}
+
+export interface InvoiceDiagnosticRow {
+  orderNumber: string;
+  date: string | null;
+  driverName: string;
+  vehicleType: string;
+  route: string;
+  km: number;
+  cost: number;
+  notes: string;
+  status: string;
+  invitationId: string | null;
+  vehicleOwner: InvoiceCarUsageType;
+  reason: string;
+  rawText?: string;
 }
 
 export interface ParsedInvoice {
   invoiceNumber: string | null;
+  filters: InvoiceFilter;
   ileKolek: number; // trasy bez komentarza w Uwagach
-  ileZlecen: number; // wiersze z komentarzem w Uwagach
+  ileZlecen: number; // wiersze dodatkowe / z komentarzem w Uwagach
   sumaKm: number;
   netto: number;
   brutto: number;
   sredniaKm: number;
   sredniaNetto: number;
   sredniaBrutto: number;
-  zakresOd: string | null; // YYYY-MM-DD
+  zakresOd: string | null;
   zakresDo: string | null;
+  includedRows: InvoiceDiagnosticRow[];
+  rejectedRows: InvoiceDiagnosticRow[];
+  allRows: InvoiceRecord[];
   _debugText?: string;
+}
+
+export interface ParseInvoiceOptions {
+  driverName?: string;
+  vehicleType?: string;
+  dateFrom?: string | null;
+  dateTo?: string | null;
 }
 
 // ─── NUMER FAKTURY ────────────────────────────────────────────────────────────
@@ -62,163 +157,331 @@ export function extractInvoiceNumber(text: string): string | null {
   return null;
 }
 
-// ─── PARSOWANIE WIERSZA DANYCH ────────────────────────────────────────────────
+// ─── PARSOWANIE REKORDÓW ──────────────────────────────────────────────────────
 
-/**
- * Próg, powyżej którego liczba to na pewno Waga (setki/tysiące kg),
- * a nie Koszt potwierdzony (kwota za kółko, zwykle setki zł).
- */
-const WAGA_THRESHOLD = 2000;
+const ORDER_RE = /^\s*(\d{2,6}\/\d{2}\/\d{2}CLKR2)\b/i;
+const VEHICLE_RE = /\b\d+\/\d+\b/;
+const ISO_RE = /\b\d{4}-\d{2}-\d{2}\b/g;
 
-/**
- * Struktura rzeczywistego wiersza (z pdfjs-dist, Y-grouped):
- *   10182/06/26CLKR2 KRAKÓW, YEVHENII 4/10 2026-06-06 44 6,0 3723,95 351,37 0,00 350,08 ...
- *
- * Liczby po dacie YYYY-MM-DD, w kolejności:
- *   [0] Odległość km        np. 44
- *   [1] Ilość msc paletowych np. 6,0
- *   [2] Waga                np. 3723,95   ← NIE jest kwotą
- *   [3] Koszt potwierdzony  np. 351,37    ← TEGO chcemy (netto)
- *   [4] Koszt linia         np. 0,00
- *   [5] Koszt dystrybucja   np. 350,08    ← sanity check (≈ Koszt potwierdzony)
- *   [6] Koszt viatol …      drobnica
- *
- * Koszt potwierdzony = pierwsza niezerowa liczba PO Wadze (indeks ≥ 3).
- */
-function parseDataLine(
-  line: string,
-  firstNamePart: string
-): ParsedRow | null {
-  const lineLower = line.toLowerCase();
-  if (!lineLower.includes(firstNamePart.toLowerCase())) return null;
-  if (!lineLower.includes(TYP_TRANSPORTU.toLowerCase())) return null;
+function extractContinuationSurname(lines: string[]): string | null {
+  for (const line of lines.slice(0, 3)) {
+    const afterComma = line.match(/,\s*([A-Za-zĄĆĘŁŃÓŚŹŻąćęłńóśźż-]{2,})\b/);
+    if (afterComma) return afterComma[1].toUpperCase();
+  }
+  return null;
+}
 
-  const dateMatch = line.match(/\b(\d{4}-\d{2}-\d{2})\b/);
-  if (!dateMatch) return null;
+function splitRouteDriver(beforeType: string, continuationLines: string[]): { route: string; driverName: string } {
+  const cleaned = beforeType.replace(/[,]+/g, " ").replace(/\s+/g, " ").trim();
+  const tokens = cleaned.split(" ").filter(Boolean);
+  if (tokens.length === 0) return { route: "", driverName: "" };
 
-  const afterDate = line.slice(dateMatch.index! + dateMatch[1].length);
-
-  // Wyciągnij liczby po dacie (liczby całkowite lub dziesiętne z przecinkiem/kropką)
-  const numRegex = /\b(\d{1,6}(?:[,\.]\d{1,4})?)\b/g;
-  const nums: number[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = numRegex.exec(afterDate)) !== null) {
-    nums.push(parsePolishNumber(m[1]));
+  const continuationSurname = extractContinuationSurname(continuationLines);
+  if (continuationSurname && tokens.length >= 1) {
+    const firstName = tokens[tokens.length - 1];
+    return {
+      route: tokens.slice(0, -1).join(" "),
+      driverName: `${firstName} ${continuationSurname}`.replace(/\s+/g, " ").trim(),
+    };
   }
 
-  // Potrzebujemy: km(0), palety(1), waga(2), koszt_potwierdzony(≥3)
-  if (nums.length < 4) return null;
-
-  const km = nums[0];
-  const waga = nums[2];
-
-  // Koszt potwierdzony = pierwsza niezerowa liczba od indeksu 3
-  let kosztIdx = 3;
-  while (kosztIdx < nums.length && nums[kosztIdx] === 0) kosztIdx++;
-  if (kosztIdx >= nums.length) return null;
-  const kosztPotwierdzony = nums[kosztIdx];
-
-  // Zlecenie = komentarz w kolumnie „Uwagi" (między Wagą a Kosztem). W tekście
-  // objawia się słowem między datą a statusem („Rozliczony"). Zwykła trasa ma
-  // tam same liczby. Tniemy przed statusem/numerem FV/PLN, by nie złapać ich liter.
-  const cut = afterDate.search(/Rozliczony|\bPLN\b|\b58\d{8,12}\b/i);
-  const segUwag = cut >= 0 ? afterDate.slice(0, cut) : afterDate;
-  const isZlecenie = /\p{L}{2,}/u.test(segUwag);
-
-  // Sanity 1: koszt w tysiącach == prawdopodobnie wzięliśmy Wagę → odrzuć
-  if (kosztPotwierdzony >= WAGA_THRESHOLD || kosztPotwierdzony === waga) {
-    return null;
+  if (tokens.length >= 2) {
+    return {
+      route: tokens.slice(0, -2).join(" "),
+      driverName: tokens.slice(-2).join(" "),
+    };
   }
 
-  // Sanity 2: Koszt dystrybucja (kolejna niezerowa) ≈ Koszt potwierdzony.
-  // Pomijamy dla zleceń — tam dystrybucja = 0, a kolejna niezerowa to już
-  // kurs faktury (1,0000), co fałszywie odrzucałoby prawidłowe zlecenia.
-  if (!isZlecenie) {
-    let dystIdx = kosztIdx + 1;
-    while (dystIdx < nums.length && nums[dystIdx] === 0) dystIdx++;
-    if (dystIdx < nums.length) {
-      const kosztDystrybucja = nums[dystIdx];
-      if (Math.abs(kosztDystrybucja - kosztPotwierdzony) > 50) {
-        // Kolumny się nie zgadzają — nie ufamy temu wierszowi
-        return null;
-      }
-    }
+  return { route: "", driverName: tokens[0] };
+}
+
+function parseAfterDate(afterDate: string): {
+  distanceKm: number;
+  palletPlaces: number;
+  weight: number;
+  notes: string;
+  confirmedCost: number;
+  lineCost: number;
+  distributionCost: number;
+  viatolCost: number;
+  otherCost: number;
+  galaxyCost: number;
+  status: string;
+  invitationId: string | null;
+  carrierCode: string | null;
+  currency: string | null;
+  saleDate: string | null;
+  warnings: string[];
+} {
+  const warnings: string[] = [];
+  const tokens = afterDate.trim().split(/\s+/).filter(Boolean);
+
+  const distanceKm = parsePolishNumber(tokens[0]);
+  const palletPlaces = parsePolishNumber(tokens[1]);
+  const weight = parsePolishNumber(tokens[2]);
+  let cursor = 3;
+  const notesTokens: string[] = [];
+
+  while (cursor < tokens.length && !isNumberToken(tokens[cursor]) && !isStatusToken(tokens[cursor])) {
+    notesTokens.push(tokens[cursor]);
+    cursor++;
   }
 
-  if (km === 0 || kosztPotwierdzony === 0) return null;
+  const numericCosts: number[] = [];
+  while (cursor < tokens.length && numericCosts.length < 6) {
+    if (isStatusToken(tokens[cursor])) break;
+    if (isNumberToken(tokens[cursor])) numericCosts.push(parsePolishNumber(tokens[cursor]));
+    else if (tokens[cursor]) notesTokens.push(tokens[cursor]);
+    cursor++;
+  }
+
+  const status = normalizeStatus(tokens);
+  const invitationId = tokens.find((t) => /^58\d{8,12}$/.test(t)) ?? null;
+  const invitationIdx = invitationId ? tokens.indexOf(invitationId) : -1;
+  const carrierCode =
+    invitationIdx >= 0 && /^\d{6,15}$/.test(tokens[invitationIdx + 1] ?? "")
+      ? tokens[invitationIdx + 1]
+      : null;
+  const currency = tokens.find((t) => t === "PLN") ?? null;
+  const dates = Array.from(afterDate.matchAll(ISO_RE)).map((m) => m[0]);
+  const saleDate = dates[dates.length - 1] ?? null;
+
+  if (tokens.length < 4) warnings.push("za mało kolumn liczbowych");
+  if (distanceKm === 0) warnings.push("brak km");
+  if (numericCosts[0] == null || numericCosts[0] === 0) warnings.push("brak kwoty");
 
   return {
-    dataZaladunku: dateMatch[1],
-    odlegloscKm: km,
-    kosztPotwierdzony,
-    isZlecenie,
+    distanceKm,
+    palletPlaces,
+    weight,
+    notes: notesTokens.join(" ").trim(),
+    confirmedCost: numericCosts[0] ?? 0,
+    lineCost: numericCosts[1] ?? 0,
+    distributionCost: numericCosts[2] ?? 0,
+    viatolCost: numericCosts[3] ?? 0,
+    otherCost: numericCosts[4] ?? 0,
+    galaxyCost: numericCosts[5] ?? 0,
+    status,
+    invitationId,
+    carrierCode,
+    currency,
+    saleDate,
+    warnings,
   };
 }
 
-// ─── GŁÓWNA FUNKCJA ───────────────────────────────────────────────────────────
+function parseRecordBlock(block: string[]): InvoiceRecord | null {
+  const main = block[0] ?? "";
+  const orderMatch = main.match(ORDER_RE);
+  if (!orderMatch) return null;
 
-/** Parsuje surowy tekst (z pdfjs-dist) i zwraca obliczone wyniki. */
-export function parseInvoicePDF(
-  rawText: string,
-  debugMode = false
-): ParsedInvoice {
-  const invoiceNumber = extractInvoiceNumber(rawText);
+  const orderNumber = orderMatch[1];
+  const afterOrderOffset = orderMatch[0].length;
+  const afterOrder = main.slice(afterOrderOffset);
+  const vehicleMatch = afterOrder.match(VEHICLE_RE);
+  const dateMatch = main.match(/\b\d{4}-\d{2}-\d{2}\b/);
+  const vehicleIndex = vehicleMatch?.index == null ? null : afterOrderOffset + vehicleMatch.index;
+  if (!vehicleMatch || !dateMatch || vehicleIndex == null || dateMatch.index == null) {
+    return {
+      orderNumber,
+      route: "",
+      driverName: "",
+      vehicleType: vehicleMatch?.[0] ?? "",
+      loadingDate: dateMatch?.[0] ?? null,
+      distanceKm: 0,
+      palletPlaces: 0,
+      weight: 0,
+      notes: "",
+      confirmedCost: 0,
+      lineCost: 0,
+      distributionCost: 0,
+      viatolCost: 0,
+      otherCost: 0,
+      galaxyCost: 0,
+      status: "",
+      invitationId: null,
+      carrierCode: null,
+      currency: null,
+      saleDate: null,
+      vehicleOwner: "unknown",
+      needsReview: true,
+      parseWarnings: ["brak typu transportu albo daty"],
+      rawText: block.join(" "),
+    };
+  }
 
-  const parts = KIEROWCA.trim().split(/\s+/);
-  const firstName = parts[0] ?? KIEROWCA;
-  const lastName = parts[1] ?? "";
+  const beforeType = main
+    .slice(afterOrderOffset, vehicleIndex)
+    .replace(/\s+/g, " ")
+    .trim();
+  const continuationLines = block.slice(1);
+  const { route, driverName } = splitRouteDriver(beforeType, continuationLines);
+  const afterDate = main.slice(dateMatch.index + dateMatch[0].length);
+  const parsed = parseAfterDate(afterDate);
+  const needsReview = parsed.warnings.length > 0 || !driverName || !parsed.status;
 
+  return {
+    orderNumber,
+    route,
+    driverName,
+    vehicleType: vehicleMatch[0],
+    loadingDate: dateMatch[0],
+    distanceKm: parsed.distanceKm,
+    palletPlaces: parsed.palletPlaces,
+    weight: parsed.weight,
+    notes: parsed.notes,
+    confirmedCost: parsed.confirmedCost,
+    lineCost: parsed.lineCost,
+    distributionCost: parsed.distributionCost,
+    viatolCost: parsed.viatolCost,
+    otherCost: parsed.otherCost,
+    galaxyCost: parsed.galaxyCost,
+    status: parsed.status,
+    invitationId: parsed.invitationId,
+    carrierCode: parsed.carrierCode,
+    currency: parsed.currency,
+    saleDate: parsed.saleDate,
+    vehicleOwner: "unknown",
+    needsReview,
+    parseWarnings: parsed.warnings,
+    rawText: block.join(" "),
+  };
+}
+
+export function parseInvoiceRecords(rawText: string): InvoiceRecord[] {
   const lines = rawText
     .split("\n")
     .map((l) => l.replace(/\t/g, " ").replace(/\s{2,}/g, " ").trim())
     .filter((l) => l.length > 0);
 
-  const rows: ParsedRow[] = [];
+  const blocks: string[][] = [];
+  let current: string[] | null = null;
 
-  for (let i = 0; i < lines.length; i++) {
-    const row = parseDataLine(lines[i], firstName);
-    if (!row) continue;
-
-    // Weryfikacja: następna linia powinna zawierać nazwisko kierowcy
-    if (lastName) {
-      const next = lines[i + 1] ?? "";
-      if (!next.toLowerCase().includes(lastName.toLowerCase())) continue;
+  for (const line of lines) {
+    if (ORDER_RE.test(line)) {
+      if (current) blocks.push(current);
+      current = [line];
+      continue;
     }
+    if (current) current.push(line);
+  }
+  if (current) blocks.push(current);
 
-    rows.push(row);
+  return blocks
+    .map(parseRecordBlock)
+    .filter((row): row is InvoiceRecord => row !== null);
+}
+
+function isAdditionalOrder(row: InvoiceRecord): boolean {
+  return !!row.notes.trim() || /\/I\b/i.test(row.rawText);
+}
+
+function diagnosticRow(row: InvoiceRecord, reason: string, debug = false): InvoiceDiagnosticRow {
+  return {
+    orderNumber: row.orderNumber,
+    date: row.loadingDate,
+    driverName: row.driverName,
+    vehicleType: row.vehicleType,
+    route: row.route,
+    km: row.distanceKm,
+    cost: row.confirmedCost,
+    notes: row.notes,
+    status: row.status,
+    invitationId: row.invitationId,
+    vehicleOwner: row.vehicleOwner,
+    reason,
+    ...(debug ? { rawText: row.rawText.slice(0, 600) } : {}),
+  };
+}
+
+function rejectReasons(row: InvoiceRecord, filter: InvoiceFilter): string[] {
+  const reasons: string[] = [];
+  if (!row.loadingDate) reasons.push("brak daty");
+  if (row.confirmedCost <= 0) reasons.push("brak kwoty");
+  if (row.needsReview) reasons.push("rekord niepewny");
+
+  if (normalizeInvoiceText(row.driverName) !== normalizeInvoiceText(filter.driverName)) {
+    reasons.push("inny kierowca");
+  }
+  if (normalizeInvoiceText(row.vehicleType) !== normalizeInvoiceText(filter.vehicleType)) {
+    reasons.push("inny typ środka transportu");
+  }
+  if (filter.dateFrom && row.loadingDate && row.loadingDate < filter.dateFrom) {
+    reasons.push("poza zakresem dat");
+  }
+  if (filter.dateTo && row.loadingDate && row.loadingDate > filter.dateTo) {
+    reasons.push("poza zakresem dat");
   }
 
-  return buildResult(invoiceNumber, rows, debugMode ? rawText : undefined);
+  return Array.from(new Set(reasons));
+}
+
+// ─── GŁÓWNA FUNKCJA ───────────────────────────────────────────────────────────
+
+/** Parsuje surowy tekst PDF i filtruje po konkretnych polach rekordu. */
+export function parseInvoicePDF(
+  rawText: string,
+  debugMode = false,
+  options: ParseInvoiceOptions = {}
+): ParsedInvoice {
+  const invoiceNumber = extractInvoiceNumber(rawText);
+  const allRows = parseInvoiceRecords(rawText);
+  const filter: InvoiceFilter = {
+    driverName: options.driverName?.trim() || KIEROWCA,
+    vehicleType: options.vehicleType?.trim() || TYP_TRANSPORTU,
+    dateFrom: validISODate(options.dateFrom),
+    dateTo: validISODate(options.dateTo),
+  };
+
+  const included: InvoiceRecord[] = [];
+  const includedRows: InvoiceDiagnosticRow[] = [];
+  const rejectedRows: InvoiceDiagnosticRow[] = [];
+
+  for (const row of allRows) {
+    const reasons = rejectReasons(row, filter);
+    if (reasons.length === 0) {
+      included.push(row);
+      includedRows.push(
+        diagnosticRow(
+          row,
+          isAdditionalOrder(row)
+            ? "zgodny kierowca, typ i zakres dat; zlecenie z uwagą"
+            : "zgodny kierowca, typ i zakres dat; kurs /D",
+          debugMode
+        )
+      );
+    } else {
+      rejectedRows.push(diagnosticRow(row, reasons.join(", "), debugMode));
+    }
+  }
+
+  return buildResult(invoiceNumber, included, filter, includedRows, rejectedRows, allRows, debugMode ? rawText : undefined);
 }
 
 // ─── OBLICZENIA SUMARYCZNE ────────────────────────────────────────────────────
 
 export function buildResult(
   invoiceNumber: string | null,
-  rows: ParsedRow[],
+  rows: InvoiceRecord[],
+  filters: InvoiceFilter,
+  includedRows: InvoiceDiagnosticRow[] = [],
+  rejectedRows: InvoiceDiagnosticRow[] = [],
+  allRows: InvoiceRecord[] = rows,
   debugText?: string
 ): ParsedInvoice {
-  const ileZlecen = rows.filter((r) => r.isZlecenie).length;
-  const ileKolek = rows.length - ileZlecen; // trasy bez komentarza w Uwagach
-  const total = rows.length; // wszystkie pozycje (trasy + zlecenia)
-  const sumaKm = rows.reduce((s, r) => s + r.odlegloscKm, 0);
-
-  // Netto/brutto = pełna wartość faktury (trasy + zlecenia) → przychód bez zmian
-  const nettoRaw = rows.reduce((s, r) => s + r.kosztPotwierdzony, 0);
-  const netto = Math.round(nettoRaw * 100) / 100;
-  const brutto = Math.round(netto * (1 + VAT) * 100) / 100;
-
-  // Średnie liczone na pozycję (trasy + zlecenia)
-  const sredniaKm =
-    total > 0 ? Math.round((sumaKm / total) * 100) / 100 : 0;
-  const sredniaNetto =
-    total > 0 ? Math.round((netto / total) * 100) / 100 : 0;
-  const sredniaBrutto =
-    total > 0 ? Math.round((brutto / total) * 100) / 100 : 0;
+  const ileZlecen = rows.filter(isAdditionalOrder).length;
+  const ileKolek = rows.length - ileZlecen;
+  const total = rows.length;
+  const sumaKm = rows.reduce((s, r) => s + r.distanceKm, 0);
+  const netto = round2(rows.reduce((s, r) => s + r.confirmedCost, 0));
+  const brutto = round2(netto * (1 + VAT));
+  const sredniaKm = total > 0 ? round2(sumaKm / total) : 0;
+  const sredniaNetto = total > 0 ? round2(netto / total) : 0;
+  const sredniaBrutto = total > 0 ? round2(brutto / total) : 0;
 
   const dates = rows
     .map((r) => {
-      const d = new Date(r.dataZaladunku + "T12:00:00");
+      const d = new Date((r.loadingDate ?? "") + "T12:00:00");
       return isNaN(d.getTime()) ? null : d;
     })
     .filter((d): d is Date => d !== null)
@@ -226,6 +489,7 @@ export function buildResult(
 
   return {
     invoiceNumber,
+    filters,
     ileKolek,
     ileZlecen,
     sumaKm,
@@ -234,8 +498,11 @@ export function buildResult(
     sredniaKm,
     sredniaNetto,
     sredniaBrutto,
-    zakresOd: dates.length > 0 ? toISODate(dates[0]) : null,
-    zakresDo: dates.length > 0 ? toISODate(dates[dates.length - 1]) : null,
+    zakresOd: dates.length > 0 ? toISODate(dates[0]) : filters.dateFrom,
+    zakresDo: dates.length > 0 ? toISODate(dates[dates.length - 1]) : filters.dateTo,
+    includedRows,
+    rejectedRows,
+    allRows,
     ...(debugText !== undefined ? { _debugText: debugText.slice(0, 3000) } : {}),
   };
 }

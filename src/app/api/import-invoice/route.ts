@@ -129,31 +129,50 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const result = parseInvoicePDF(pdfText, isDev);
+  const driverName = String(formData.get("driverName") ?? KIEROWCA).trim() || KIEROWCA;
+  const vehicleType = String(formData.get("vehicleType") ?? TYP_TRANSPORTU).trim() || TYP_TRANSPORTU;
+  const dateFromRaw = String(formData.get("dateFrom") ?? "").trim();
+  const dateToRaw = String(formData.get("dateTo") ?? "").trim();
 
-  if (result.ileKolek === 0 && result.ileZlecen === 0) {
+  const result = parseInvoicePDF(pdfText, isDev, {
+    driverName,
+    vehicleType,
+    dateFrom: dateFromRaw || null,
+    dateTo: dateToRaw || null,
+  });
+
+  const filtered = {
+    filters: result.filters,
+    ileKolek: result.ileKolek,
+    ileZlecen: result.ileZlecen,
+    sumaKm: result.sumaKm,
+    netto: result.netto,
+    brutto: result.brutto,
+    sredniaKm: result.sredniaKm,
+    sredniaNetto: result.sredniaNetto,
+    sredniaBrutto: result.sredniaBrutto,
+    zakresOd: result.zakresOd,
+    zakresDo: result.zakresDo,
+    includedRows: result.includedRows,
+    rejectedRows: result.rejectedRows,
+  };
+
+  if (result.allRows.length === 0) {
     return NextResponse.json({
       invoiceNumber: result.invoiceNumber,
       filtered: null,
-      message: `W tym PDF nie znaleziono tras dla ${KIEROWCA} (${TYP_TRANSPORTU}).`,
+      message: "Nie udało się odczytać żadnych pozycji z tabeli faktury.",
       ...(result._debugText ? { _debug: result._debugText } : {}),
     });
   }
 
   return NextResponse.json({
     invoiceNumber: result.invoiceNumber,
-    filtered: {
-      ileKolek: result.ileKolek,
-      ileZlecen: result.ileZlecen,
-      sumaKm: result.sumaKm,
-      netto: result.netto,
-      brutto: result.brutto,
-      sredniaKm: result.sredniaKm,
-      sredniaNetto: result.sredniaNetto,
-      sredniaBrutto: result.sredniaBrutto,
-      zakresOd: result.zakresOd,
-      zakresDo: result.zakresDo,
-    },
+    filtered,
+    message:
+      result.ileKolek === 0 && result.ileZlecen === 0
+        ? `W tym PDF nie znaleziono tras dla ${driverName} (${vehicleType}) w wybranym zakresie.`
+        : undefined,
     ...(result._debugText ? { _debug: result._debugText } : {}),
   });
 }
