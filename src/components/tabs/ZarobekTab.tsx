@@ -156,15 +156,23 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
         return;
       }
 
+      const filteredFromApi = json.filtered
+        ? {
+            ...json.filtered,
+            invoiceImportDateFrom: importDateFrom || json.filtered.invoiceImportDateFrom || json.filtered.filters?.dateFrom,
+            invoiceImportDateTo: importDateTo || json.filtered.invoiceImportDateTo || json.filtered.filters?.dateTo,
+            manualDateRangeSelected: Boolean(importDateFrom || importDateTo),
+          }
+        : null;
       const clickedIdx = faktury.findIndex((f) => f.id === fakturaId);
-      const target = resolveTargetWeek(json.filtered, clickedIdx);
+      const target = resolveTargetWeek(filteredFromApi, clickedIdx);
 
       setModal({
         mode: "confirm",
         fakturaId,
         fileName: file.name,
         invoiceNumber: json.invoiceNumber ?? null,
-        filtered: json.filtered ?? null,
+        filtered: filteredFromApi,
         message: json.message,
         isOverwrite: !!faktury[target.idx]?.pdfImport,
         targetIdx: target.idx,
@@ -198,10 +206,17 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
       invoiceImportDateFrom: filtered.invoiceImportDateFrom ?? filtered.filters?.dateFrom ?? filtered.zakresOd,
       invoiceImportDateTo: filtered.invoiceImportDateTo ?? filtered.filters?.dateTo ?? filtered.zakresDo,
       manualDateRangeSelected: filtered.manualDateRangeSelected ?? false,
-      settlementVehiclePlate: filtered.settlementVehiclePlate ?? filtered.filters?.settlementVehiclePlate ?? null,
-      settlementVehicleMode: filtered.settlementVehicleMode ?? filtered.filters?.settlementVehicleMode ?? "none",
-      vehicleAssignmentRules: filtered.vehicleAssignmentRules,
+      settlementVehiclePlate: null,
+      settlementVehicleMode: "none",
       recordOverrides: filtered.recordOverrides,
+      komentarz: filtered.komentarz?.trim() || undefined,
+      dodatkiReczne: filtered.dodatkiReczne ?? [],
+      courseNetto: filtered.courseNetto ?? filtered.netto,
+      courseBrutto: filtered.courseBrutto ?? filtered.brutto,
+      manualAdditionsNetto: filtered.manualAdditionsNetto ?? 0,
+      manualAdditionsBrutto: filtered.manualAdditionsBrutto ?? 0,
+      totalNetto: filtered.totalNetto ?? filtered.netto,
+      totalBrutto: filtered.totalBrutto ?? filtered.brutto,
       ileKolek: filtered.ileKolek,
       ileZlecen: filtered.ileZlecen,
       sumaKm: filtered.sumaKm,
@@ -245,21 +260,27 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
         week: target.idx + 1,
         includedRows: filtered.includedRows?.length ?? 0,
         rejectedRows: filtered.rejectedRows?.length ?? 0,
-        vehicle: pdfImport.settlementVehicleMode === "plate" ? pdfImport.settlementVehiclePlate : null,
+        comment: pdfImport.komentarz,
+        manualAdditionsBrutto: pdfImport.manualAdditionsBrutto ?? 0,
       },
       description: `${userName} dodał fakturę z PDF: ${formatZlCaly(filtered.brutto)} (tydzień ${target.idx + 1}, ${filtered.includedRows?.length ?? 0} poz.)`,
       url: `/admin?miesiac=${miesiac}&zakladka=zarobek`,
     });
 
-    if ((filtered.rejectedRows?.length ?? 0) > 0) {
-      window.setTimeout(() => {
-        const zakres =
-          filtered.zakresOd && filtered.zakresDo
-            ? formatRangeShort(filtered.zakresOd, filtered.zakresDo)
-            : "wybrany zakres";
-        alert(`Zapisano ${filtered.includedRows?.length ?? 0} pozycji z zakresu ${zakres}.\nOdrzucono ${filtered.rejectedRows?.length ?? 0} pozycji — zobacz powody w podglądzie importu.`);
-      }, 50);
-    }
+    window.setTimeout(() => {
+      const zakres =
+        filtered.zakresOd && filtered.zakresDo
+          ? `${formatRangeShort(filtered.zakresOd, filtered.zakresDo).replace("–", " – ")}`
+          : "wybrany zakres";
+      const lines = [`Zapisano ${filtered.ileKolek} kółek z zakresu ${zakres}.`];
+      if ((filtered.manualAdditionsBrutto ?? 0) > 0) {
+        lines.push(`Dodano dodatki ręczne: ${formatZl(filtered.manualAdditionsBrutto ?? 0)} brutto.`);
+      }
+      if ((filtered.rejectedRows?.length ?? 0) > 0) {
+        lines.push(`Odrzucono ${filtered.rejectedRows?.length ?? 0} pozycji — zobacz powody.`);
+      }
+      alert(lines.join("\n"));
+    }, 50);
 
     setModal(null);
   }
@@ -315,6 +336,14 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
         invoiceImportDateFrom: imp.invoiceImportDateFrom,
         invoiceImportDateTo: imp.invoiceImportDateTo,
         manualDateRangeSelected: imp.manualDateRangeSelected,
+        komentarz: imp.komentarz,
+        dodatkiReczne: imp.dodatkiReczne,
+        courseNetto: imp.courseNetto,
+        courseBrutto: imp.courseBrutto,
+        manualAdditionsNetto: imp.manualAdditionsNetto,
+        manualAdditionsBrutto: imp.manualAdditionsBrutto,
+        totalNetto: imp.totalNetto,
+        totalBrutto: imp.totalBrutto,
       },
       isOverwrite: false,
       targetIdx: idx,
@@ -580,6 +609,17 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
                     <IconX size={16} />
                   </button>
                 </div>
+              )}
+
+              {faktura.pdfImport?.komentarz && (
+                <button
+                  type="button"
+                  onClick={() => openPreview(idx)}
+                  className="w-full text-left rounded-xl border border-line bg-surface2 px-3 py-2 text-xs text-dim hover:border-amber-brand/50 hover:text-ink transition-colors"
+                >
+                  <span className="text-amber-brand font-semibold">Komentarz:</span>{" "}
+                  {faktura.pdfImport.komentarz}
+                </button>
               )}
             </div>
           ))}

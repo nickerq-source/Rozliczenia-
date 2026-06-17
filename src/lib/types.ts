@@ -38,6 +38,28 @@ export interface PDFRecordOverride {
   manuallyOverridden: boolean;
 }
 
+export type PDFManualAdditionType =
+  | "niedziela"
+  | "swieto"
+  | "dodatkowy_kurs"
+  | "doplata"
+  | "korekta"
+  | "inny";
+
+export interface PDFManualAddition {
+  id: string;
+  type: PDFManualAdditionType;
+  date: string;
+  driverName: string;
+  netto: number;
+  vatRate: number;
+  vatAmount: number;
+  brutto: number;
+  description?: string;
+  addToInvoice: boolean;
+  addToDriverSettlement: boolean;
+}
+
 export interface PDFImportDiagnosticRow {
   orderNumber: string;
   date: string | null;
@@ -69,6 +91,14 @@ export interface PDFImportData {
   settlementVehicleMode?: "none" | "plate";
   vehicleAssignmentRules?: PDFVehicleAssignmentRule[];
   recordOverrides?: PDFRecordOverride[];
+  komentarz?: string;
+  dodatkiReczne?: PDFManualAddition[];
+  courseNetto?: number;
+  courseBrutto?: number;
+  manualAdditionsNetto?: number;
+  manualAdditionsBrutto?: number;
+  totalNetto?: number;
+  totalBrutto?: number;
   ileKolek: number;
   ileZlecen?: number; // wiersze ze zleceniem (komentarz w Uwagach)
   sumaKm: number;

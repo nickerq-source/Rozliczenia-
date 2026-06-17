@@ -167,8 +167,11 @@ export interface ParseInvoiceOptions {
   vehicleType?: string;
   dateFrom?: string | null;
   dateTo?: string | null;
+  /** @deprecated PDF Żabki nie zawiera numerów rejestracyjnych; nie używać do nowych importów. */
   settlementVehiclePlate?: string | null;
+  /** @deprecated PDF Żabki nie zawiera numerów rejestracyjnych; nie używać do nowych importów. */
   settlementVehicleMode?: InvoiceVehicleFilterMode;
+  /** @deprecated PDF Żabki nie zawiera numerów rejestracyjnych; nie używać do nowych importów. */
   vehicleAssignmentRules?: InvoiceVehicleAssignmentRule[];
   recordOverrides?: InvoiceRecordOverride[];
 }
@@ -504,7 +507,6 @@ function resolveVehicleForRow(
     return {
       vehicleOwner: "unknown",
       vehiclePlate: null,
-      includeReason: "bez filtrowania po aucie",
     };
   }
 
@@ -534,7 +536,6 @@ function resolveVehicleForRow(
     vehicleOwner: rule.vehicleOwnerType,
     vehiclePlate: plate,
     vehicleRuleReason: ruleReason,
-    includeReason: "bez filtrowania po aucie",
   };
 }
 
@@ -578,10 +579,10 @@ function baseRejectReasons(row: InvoiceRecord, filter: InvoiceFilter): string[] 
     reasons.push("inny typ środka transportu");
   }
   if (filter.dateFrom && row.loadingDate && row.loadingDate < filter.dateFrom) {
-    reasons.push("poza zakresem dat");
+    reasons.push("poza wybranym zakresem dat");
   }
   if (filter.dateTo && row.loadingDate && row.loadingDate > filter.dateTo) {
-    reasons.push("poza zakresem dat");
+    reasons.push("poza wybranym zakresem dat");
   }
 
   return Array.from(new Set(reasons));
@@ -591,7 +592,8 @@ function includeReason(row: InvoiceRecord, vehicle: VehicleResolution): string {
   const base = isAdditionalOrder(row)
     ? "zgodny kierowca, typ i zakres dat; zlecenie z uwagą"
     : "zgodny kierowca, typ i zakres dat; kurs /D";
-  return vehicle.includeReason ? `${base}; ${vehicle.includeReason}` : base;
+  if (vehicle.includeReason?.startsWith("ręcznie")) return `${base}; ${vehicle.includeReason}`;
+  return base;
 }
 
 // ─── GŁÓWNA FUNKCJA ───────────────────────────────────────────────────────────
@@ -607,19 +609,15 @@ export function parseInvoicePDF(
   const driverName = options.driverName?.trim() || KIEROWCA;
   const vehicleType = options.vehicleType?.trim() || TYP_TRANSPORTU;
   const defaultRange = getDefaultInvoiceDateRange(allRows, driverName, vehicleType);
-  const settlementVehiclePlate = options.settlementVehiclePlate?.trim() || null;
   const filter: InvoiceFilter = {
     driverName,
     vehicleType,
     dateFrom: validISODate(options.dateFrom) ?? defaultRange.dateFrom,
     dateTo: validISODate(options.dateTo) ?? defaultRange.dateTo,
-    settlementVehiclePlate,
-    settlementVehicleMode:
-      settlementVehiclePlate && options.settlementVehicleMode === "plate"
-        ? "plate"
-        : "none",
+    settlementVehiclePlate: null,
+    settlementVehicleMode: "none",
   };
-  const vehicleAssignmentRules = options.vehicleAssignmentRules ?? [];
+  const vehicleAssignmentRules: InvoiceVehicleAssignmentRule[] = [];
   const recordOverrides = options.recordOverrides ?? [];
 
   const included: InvoiceRecord[] = [];

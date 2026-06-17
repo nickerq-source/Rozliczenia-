@@ -486,9 +486,17 @@ export function RaportTab({ data }: Props) {
                       {row.pdf && (
                         <span className="text-dim/60">
                           {" "}· {row.pdf.ileKolek} kółek · {row.pdf.sumaKm} km
+                          {(row.pdf.manualAdditionsBrutto ?? 0) > 0 && (
+                            <> · dodatki {formatZl(row.pdf.manualAdditionsBrutto ?? 0)}</>
+                          )}
                         </span>
                       )}
                     </p>
+                    {row.pdf?.komentarz && (
+                      <p className="mt-0.5 text-[10px] text-amber-brand/80 line-clamp-2">
+                        Komentarz: {row.pdf.komentarz}
+                      </p>
+                    )}
                   </div>
                   <span className="shrink-0 tabular-nums text-sm font-bold text-amber-brand">
                     {formatZl(row.kwota)}

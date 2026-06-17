@@ -5,7 +5,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import { parseInvoicePDF, type InvoiceRecordOverride, type InvoiceVehicleAssignmentRule } from "@/lib/invoice";
+import { parseInvoicePDF } from "@/lib/invoice";
 import { KIEROWCA, TYP_TRANSPORTU } from "@/lib/config";
 
 export const runtime = "nodejs";
@@ -30,17 +30,6 @@ function sourceRowsFromResult(result: ReturnType<typeof parseInvoicePDF>) {
     isAdditional: !!row.notes.trim() || /\/I\b/i.test(row.rawText),
     reason: "rekord źródłowy",
   }));
-}
-
-function parseJsonArrayField<T>(formData: FormData, name: string): T[] {
-  const raw = formData.get(name);
-  if (typeof raw !== "string" || !raw.trim()) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as T[]) : [];
-  } catch {
-    return [];
-  }
 }
 
 // Katalogi danych pdfjs (czcionki standardowe + cmapy CID). Bez nich parser
@@ -165,20 +154,12 @@ export async function POST(req: NextRequest) {
   const vehicleType = String(formData.get("vehicleType") ?? TYP_TRANSPORTU).trim() || TYP_TRANSPORTU;
   const dateFromRaw = String(formData.get("dateFrom") ?? "").trim();
   const dateToRaw = String(formData.get("dateTo") ?? "").trim();
-  const settlementVehiclePlate = String(formData.get("settlementVehiclePlate") ?? "").trim();
-  const settlementVehicleModeRaw = String(formData.get("settlementVehicleMode") ?? "none").trim();
-  const vehicleAssignmentRules = parseJsonArrayField<InvoiceVehicleAssignmentRule>(formData, "vehicleAssignmentRules");
-  const recordOverrides = parseJsonArrayField<InvoiceRecordOverride>(formData, "recordOverrides");
 
   const result = parseInvoicePDF(pdfText, isDev, {
     driverName,
     vehicleType,
     dateFrom: dateFromRaw || null,
     dateTo: dateToRaw || null,
-    settlementVehiclePlate: settlementVehiclePlate || null,
-    settlementVehicleMode: settlementVehicleModeRaw === "plate" ? "plate" : "none",
-    vehicleAssignmentRules,
-    recordOverrides,
   });
 
   const filtered = {
