@@ -154,7 +154,7 @@ const PAYER_OPTIONS: { id: KosztPayer; label: string }[] = [
 type PayerFilter = "all" | KosztPayer;
 type PodkategoriaKosztow = "all" | "tankowanie" | "samochod_dzialalnosc";
 type WidokKosztow =
-  | "all"
+  | "podsumowanie"
   | "wyplata"
   | "tankowanie"
   | "samochod"
@@ -168,7 +168,7 @@ const PODKATEGORIE_KOSZTOW: { id: PodkategoriaKosztow; label: string }[] = [
 ];
 
 const WIDOKI_KOSZTOW: { id: WidokKosztow; label: string; short: string }[] = [
-  { id: "all", label: "Wszystkie", short: "Wszyst." },
+  { id: "podsumowanie", label: "Podsumowanie", short: "Podsum." },
   { id: "wyplata", label: "Wypłata kierowcy", short: "Wypł." },
   { id: "tankowanie", label: "Tankowanie", short: "Paliwo" },
   { id: "samochod", label: "Samochód i działalność", short: "Auto" },
@@ -1018,7 +1018,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
   const [rozwiniete, setRozwiniete] = useState<Record<string, boolean>>({});
   const [autoBusyId, setAutoBusyId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
-  const [widokKosztow, setWidokKosztow] = useState<WidokKosztow>("all");
+  const [widokKosztow, setWidokKosztow] = useState<WidokKosztow>("podsumowanie");
   const [quickActionsOpen, setQuickActionsOpen] = useState(false);
   // Paginacja list kosztów (1-indeksowana)
   const [stronaTank, setStronaTank] = useState(1);
@@ -1685,6 +1685,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
 
   const sumaFuel = obliczKosztPaliwa(dane.tankowanie);
   const sumaInne = obliczInneKoszty(dane.inneKoszty);
+  const leasing = parseNum(dane.leasing);
   const kosztyPodatkowe = useMemo(() => {
     const entries: Array<KosztVatInfo & { koszt: number; domyslna: KategoriaKosztu }> = [
       ...(dane.tankowanie ?? []).map((t) => ({
@@ -1715,11 +1716,55 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
     () => buildFuelStats(dane, ustawienia).summary,
     [dane, ustawienia]
   );
-  const showWyplata = widokKosztow === "all" || widokKosztow === "wyplata";
-  const showTankowanie = widokKosztow === "all" || widokKosztow === "tankowanie";
-  const showSamochod = widokKosztow === "all" || widokKosztow === "samochod";
-  const showRozliczenie = widokKosztow === "all" || widokKosztow === "rozliczenie";
-  const showStatystyki = widokKosztow === "all" || widokKosztow === "statystyki";
+  const platnicyKosztow = useMemo(() => {
+    const sums: Record<KosztPayer, number> = { Artur: 0, Damian: 0, Firma: 0 };
+    const count: Record<KosztPayer, number> = { Artur: 0, Damian: 0, Firma: 0 };
+    const rows = [
+      ...(dane.tankowanie ?? []),
+      ...(dane.inneKoszty ?? []),
+    ].filter((x) => parseNum(x.koszt) > 0);
+
+    for (const row of rows) {
+      const payer = normalizePayer(row.paidBy);
+      sums[payer] += parseNum(row.koszt);
+      count[payer] += 1;
+    }
+
+    const prywatne = sums.Artur + sums.Damian;
+    const polowa = prywatne / 2;
+    const diff = Math.round((sums.Artur - polowa) * 100) / 100;
+    const rozliczenie =
+      Math.abs(diff) < 0.01
+        ? "Artur i Damian są rozliczeni po równo."
+        : diff > 0
+        ? `Damian oddaje Arturowi ${formatZl(diff)}.`
+        : `Artur oddaje Damianowi ${formatZl(Math.abs(diff))}.`;
+
+    return { sums, count, prywatne, polowa, diff, rozliczenie, liczba: rows.length };
+  }, [dane.tankowanie, dane.inneKoszty]);
+  const sumaKosztow = wynagrodzenie + sumaFuel + sumaInne + leasing;
+  const glowneKoszty = [
+    { label: "Wypłata kierowcy", value: wynagrodzenie, icon: <IconUsers size={16} /> },
+    { label: "Paliwo", value: sumaFuel, icon: <IconGasStation size={16} /> },
+    { label: "Auto i działalność", value: sumaInne, icon: <IconPackage size={16} /> },
+    { label: "Leasing", value: leasing, icon: <IconCar size={16} /> },
+  ];
+  const najwiekszyKoszt = [...glowneKoszty].sort((a, b) => b.value - a.value)[0];
+  const rozkminyKosztow = [
+    kosztyPodatkowe.bezDokumentu > 0
+      ? `${kosztyPodatkowe.bezDokumentu} koszt${kosztyPodatkowe.bezDokumentu === 1 ? "" : "ów"} nie ma dokumentu — zostaje w wyniku, ale nie pomoże w VAT.`
+      : "Dokumenty kosztów wyglądają czysto — brak pozycji bez dokumentu.",
+    platnicyKosztow.prywatne > 0 ? platnicyKosztow.rozliczenie : "Brak kosztów prywatnych Artur/Damian do rozliczenia 50/50.",
+    fuelSummary.liczbaTankowan > 0
+      ? `Paliwo: ${fuelSummary.liczbaTankowan} tankowań, ${formatLitry(fuelSummary.sumaLitrow)}, średnio ${formatZlNaLitr(fuelSummary.sredniaBruttoZaLitr)} brutto.`
+      : "Brak tankowań w tym miesiącu.",
+  ];
+  const showPodsumowanie = widokKosztow === "podsumowanie";
+  const showWyplata = widokKosztow === "wyplata";
+  const showTankowanie = widokKosztow === "tankowanie";
+  const showSamochod = widokKosztow === "samochod";
+  const showRozliczenie = widokKosztow === "rozliczenie";
+  const showStatystyki = widokKosztow === "statystyki";
 
   // Paginacja: tyle stron ile trzeba, po KOSZTY_NA_STRONE pozycji.
   // Stronę klampujemy, żeby po usunięciu wpisów nie wisieć na nieistniejącej.
@@ -1737,58 +1782,141 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
     <div className="space-y-4">
       <KosztySectionSwitch active={widokKosztow} onChange={setWidokKosztow} />
 
-      <div className="grid grid-cols-2 gap-2">
-        <KosztyMetricCard
-          icon={<IconMoneybag size={17} />}
-          label="Koszty brutto"
-          value={formatZl(kosztyPodatkowe.brutto + wynagrodzenie + parseNum(dane.leasing))}
-          hint="wpisy kosztów + wypłata + leasing"
-          tone="amber"
-        />
-        <KosztyMetricCard
-          icon={<IconChartBar size={17} />}
-          label="Netto z dokumentów"
-          value={formatZl(kosztyPodatkowe.netto)}
-          hint="bez wypłaty i leasingu"
-        />
-        <KosztyMetricCard
-          icon={<IconCheck size={17} />}
-          label="VAT do odliczenia"
-          value={formatZl(kosztyPodatkowe.vatDoOdliczenia)}
-          tone="green"
-        />
-        <KosztyMetricCard
-          icon={<IconAlertTriangle size={17} />}
-          label="Bez dokumentu"
-          value={`${kosztyPodatkowe.bezDokumentu}`}
-          hint="nie wchodzi do VAT"
-          tone={kosztyPodatkowe.bezDokumentu > 0 ? "red" : "green"}
-        />
-      </div>
-
-      <div className="rounded-2xl border border-line bg-surface/90 p-3">
-        <div className="flex items-center gap-2">
-          <IconGasStation size={18} className="text-amber-brand" />
-          <div className="min-w-0 flex-1">
-            <p className="text-xs font-extrabold uppercase tracking-wider text-dim">
-              Skrót tankowania
-            </p>
-            <p className="text-[11px] text-dim/75">
-              {fuelSummary.liczbaTankowan} tankowań · {formatLitry(fuelSummary.sumaLitrow)} · śr. {formatZlNaLitr(fuelSummary.sredniaBruttoZaLitr)}
+      {showPodsumowanie && <Card className="!border-amber-brand/35">
+        <div className="mb-4 flex items-start gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-amber-brand/35 bg-amber-brand/10 text-amber-brand">
+            <IconMoneybag size={21} />
+          </span>
+          <div className="min-w-0">
+            <CardTitle className="mb-1">Podsumowanie kosztów</CardTitle>
+            <p className="text-xs text-dim">
+              Cały miesiąc w jednym miejscu: koszty, dokumenty, VAT i rozliczenie Artur/Damian.
             </p>
           </div>
+        </div>
+
+        <div className="rounded-2xl border border-line bg-surface2 p-4">
+          <p className="text-[10px] font-extrabold uppercase tracking-wider text-dim">
+            Razem koszty miesiąca
+          </p>
+          <p className="mt-1 tabular-nums text-3xl font-extrabold text-white">
+            {formatZl(sumaKosztow)}
+          </p>
+          <p className="mt-1 text-[11px] text-dim">
+            wypłata + paliwo + auto/działalność + leasing
+          </p>
+        </div>
+
+        <div className="mt-3 grid grid-cols-2 gap-2">
+          <KosztyMetricCard
+            icon={<IconChartBar size={17} />}
+            label="Netto z dokumentów"
+            value={formatZl(kosztyPodatkowe.netto)}
+            hint="koszty z faktur/paragonów"
+          />
+          <KosztyMetricCard
+            icon={<IconCheck size={17} />}
+            label="VAT do odliczenia"
+            value={formatZl(kosztyPodatkowe.vatDoOdliczenia)}
+            tone="green"
+          />
+          <KosztyMetricCard
+            icon={<IconAlertTriangle size={17} />}
+            label="Bez dokumentu"
+            value={`${kosztyPodatkowe.bezDokumentu}`}
+            hint="nie pomaga w VAT"
+            tone={kosztyPodatkowe.bezDokumentu > 0 ? "red" : "green"}
+          />
+          <KosztyMetricCard
+            icon={najwiekszyKoszt.icon}
+            label="Największy koszt"
+            value={formatZl(najwiekszyKoszt.value)}
+            hint={najwiekszyKoszt.label}
+            tone="amber"
+          />
+        </div>
+
+        <div className="mt-4 space-y-2">
+          <p className="text-[11px] font-extrabold uppercase tracking-wider text-dim">
+            Rozbicie kosztów
+          </p>
+          {glowneKoszty.map((row) => (
+            <div key={row.label} className="flex items-center gap-2 rounded-xl border border-line/70 bg-surface2/70 px-3 py-2">
+              <span className="text-amber-brand">{row.icon}</span>
+              <span className="min-w-0 flex-1 text-sm text-dim">{row.label}</span>
+              <span className="tabular-nums text-sm font-bold text-white">{formatZl(row.value)}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-4 rounded-2xl border border-line bg-surface2/70 p-3">
+          <p className="mb-2 text-[11px] font-extrabold uppercase tracking-wider text-dim">
+            Kto zapłacił
+          </p>
+          <div className="grid grid-cols-3 gap-2 text-center">
+            {PAYER_OPTIONS.map((payer) => (
+              <div key={payer.id} className="rounded-xl border border-line bg-input px-2 py-2">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-dim">{payer.label}</p>
+                <p className="mt-1 tabular-nums text-sm font-extrabold text-white">
+                  {formatZl(platnicyKosztow.sums[payer.id])}
+                </p>
+                <p className="text-[10px] text-dim/70">{platnicyKosztow.count[payer.id]} poz.</p>
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 rounded-xl border border-amber-brand/30 bg-amber-brand/10 px-3 py-2 text-xs font-bold text-amber-brand">
+            {platnicyKosztow.rozliczenie}
+          </p>
+        </div>
+
+        <div className="mt-4 rounded-2xl border border-green-500/25 bg-green-soft/60 p-3">
+          <p className="mb-2 text-[11px] font-extrabold uppercase tracking-wider text-green-300">
+            Moja rozkmina
+          </p>
+          <ul className="space-y-1.5 text-xs leading-relaxed text-dim">
+            {rozkminyKosztow.map((txt) => (
+              <li key={txt} className="flex gap-2">
+                <span className="mt-0.5 text-green-300">✓</span>
+                <span>{txt}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-2">
           <button
             type="button"
-            onClick={() => setWidokKosztow("statystyki")}
-            className="rounded-full border border-amber-brand/40 px-3 py-1.5 text-xs font-bold text-amber-brand hover:bg-amber-brand/10"
+            onClick={() => setWidokKosztow("wyplata")}
+            className="rounded-xl border border-line bg-surface2 px-3 py-2 text-xs font-bold text-dim hover:text-ink"
           >
-            Statystyki
+            Wypłata
+          </button>
+          <button
+            type="button"
+            onClick={() => setWidokKosztow("tankowanie")}
+            className="rounded-xl border border-line bg-surface2 px-3 py-2 text-xs font-bold text-dim hover:text-ink"
+          >
+            Tankowanie
+          </button>
+          <button
+            type="button"
+            onClick={() => setWidokKosztow("rozliczenie")}
+            className="rounded-xl border border-line bg-surface2 px-3 py-2 text-xs font-bold text-dim hover:text-ink"
+          >
+            50/50
+          </button>
+          <button
+            type="button"
+            onClick={() => setWidokKosztow("samochod")}
+            className="rounded-xl border border-line bg-surface2 px-3 py-2 text-xs font-bold text-dim hover:text-ink"
+          >
+            Auto
           </button>
         </div>
-      </div>
+      </Card>}
 
       {/* ── SEKCJA: ZGŁOSZENIA KIEROWCY ──────────────────────────────────── */}
-      {oczekujace.length > 0 && showWyplata && (
+      {oczekujace.length > 0 && (showPodsumowanie || showWyplata) && (
         <Card className="!border-amber-brand/50">
           <div className="flex items-center gap-2 mb-3">
             <IconAlertTriangle size={18} className="text-amber-brand" />
@@ -2520,17 +2648,6 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
               >
                 <IconPackage size={20} className="text-amber-brand" />
                 Dodaj koszt
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setWidokKosztow("wyplata");
-                  setQuickActionsOpen(false);
-                }}
-                className="flex items-center gap-3 rounded-2xl border border-line bg-surface2 px-4 py-3 text-left font-bold text-ink"
-              >
-                <IconUsers size={20} className="text-amber-brand" />
-                Przejdź do wypłaty kierowcy
               </button>
             </div>
           </div>
