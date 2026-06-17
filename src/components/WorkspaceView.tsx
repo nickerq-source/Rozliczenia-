@@ -289,7 +289,7 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
         {/* Jednorazowy modal imienia (userName === "" po odczycie localStorage) */}
         {userName === "" && <UserNameModal onSave={handleSaveUserName} />}
 
-        <main className="max-w-[480px] mx-auto px-3 sm:px-6 py-4 space-y-4 pb-28 sm:pb-0">
+        <main className="max-w-[480px] mx-auto px-3 sm:px-6 py-4 space-y-4 pb-0">
           {loading ? (
             <LoadingSkeleton />
           ) : (

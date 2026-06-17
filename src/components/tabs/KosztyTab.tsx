@@ -168,12 +168,12 @@ const PODKATEGORIE_KOSZTOW: { id: PodkategoriaKosztow; label: string }[] = [
 ];
 
 const WIDOKI_KOSZTOW: { id: WidokKosztow; label: string; short: string }[] = [
-  { id: "all", label: "Wszystkie", short: "Wszystkie" },
-  { id: "wyplata", label: "Wypłata kierowcy", short: "Wypłata" },
+  { id: "all", label: "Wszystkie", short: "Wszyst." },
+  { id: "wyplata", label: "Wypłata kierowcy", short: "Wypł." },
   { id: "tankowanie", label: "Tankowanie", short: "Paliwo" },
   { id: "samochod", label: "Samochód i działalność", short: "Auto" },
   { id: "rozliczenie", label: "Rozliczenie 50/50", short: "50/50" },
-  { id: "statystyki", label: "Statystyki tankowania", short: "Statystyki" },
+  { id: "statystyki", label: "Statystyki tankowania", short: "Stat." },
 ];
 
 function statusDokumentu(wpis: KosztVatInfo): DocumentStatus {
@@ -199,14 +199,14 @@ function KosztySectionSwitch({
 }) {
   return (
     <div className="sticky top-[128px] z-[2] -mx-3 overflow-x-auto bg-bg/75 px-3 py-2 backdrop-blur-xl sm:static sm:mx-0 sm:bg-transparent sm:px-0 sm:py-0">
-      <div className="flex gap-1.5">
+      <div className="flex gap-1 sm:gap-1.5">
         {WIDOKI_KOSZTOW.map((widok) => (
           <button
             key={widok.id}
             type="button"
             onClick={() => onChange(widok.id)}
             className={cn(
-              "shrink-0 rounded-full border px-3 py-2 text-xs font-extrabold transition-all",
+              "shrink-0 rounded-full border px-2.5 py-1.5 text-[11px] font-extrabold transition-all sm:px-3 sm:py-2 sm:text-xs",
               active === widok.id
                 ? "border-amber-brand bg-amber-brand text-amber-ink"
                 : "border-line bg-surface/80 text-dim hover:border-amber-brand/50 hover:text-ink"

@@ -36,13 +36,13 @@ interface TabSwitchProps {
 export function TabSwitch({ active, onChange, showHistoria = false, className }: TabSwitchProps) {
   const tabs = TABS.filter((t) => !TYLKO_ADMIN.includes(t.id) || showHistoria);
   return (
-    <div className={cn("flex w-full", className)}>
+    <div className={cn("flex w-full overflow-x-auto scrollbar-none", className)}>
       {tabs.map((tab) => (
         <button
           key={tab.id}
           onClick={() => onChange(tab.id)}
           className={cn(
-            "flex-1 py-2 min-h-[40px] text-sm font-medium transition-all duration-150 border-b-2 -mb-px",
+            "shrink-0 px-2 py-1.5 min-h-[34px] text-[12px] font-medium transition-all duration-150 border-b-2 -mb-px sm:flex-1 sm:px-0 sm:py-2 sm:min-h-[40px] sm:text-sm",
             active === tab.id
               ? "border-amber-brand text-white font-bold"
               : "border-transparent text-dim hover:text-ink"
