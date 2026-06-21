@@ -4,6 +4,7 @@ import { getSessionProfile } from "@/lib/supabase-server";
 import { VatRate } from "@/lib/types";
 import { getAnthropicApiKey } from "@/lib/anthropic-key";
 import { normalizeMileageAi, parseMileageFromText } from "@/lib/mileage-ocr";
+import { ROK } from "@/lib/dates";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -154,11 +155,21 @@ function textOrNull(v: unknown, max = 120): string | null {
 function normalizeDate(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
   const value = raw.trim();
-  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
-  const pl = value.match(/^(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})$/);
-  if (!pl) return null;
-  const [, dd, mm, yyyy] = pl;
-  return `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
+  let iso: string | null = null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    iso = value;
+  } else {
+    const pl = value.match(/^(\d{1,2})[.\-/](\d{1,2})[.\-/](\d{4})$/);
+    if (pl) {
+      const [, dd, mm, yyyy] = pl;
+      iso = `${yyyy}-${mm.padStart(2, "0")}-${dd.padStart(2, "0")}`;
+    }
+  }
+  if (!iso) return null;
+  // Aplikacja rozlicza wyłącznie rok ROK (2026). Błędnie odczytany rok przez
+  // OCR (np. 2025) korygujemy na ROK — nie podpinamy paragonów z innych lat.
+  if (iso.slice(0, 4) !== String(ROK)) iso = `${ROK}${iso.slice(4)}`;
+  return iso;
 }
 
 function normalizeDocumentType(raw: unknown): DocumentType {

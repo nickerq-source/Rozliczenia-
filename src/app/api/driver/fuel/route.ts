@@ -53,6 +53,11 @@ function inMainAccountingRange(iso: string): boolean {
   return iso >= `${ROK}-06-01` && iso <= `${ROK}-12-31`;
 }
 
+/** Korekta roku na ROK (2026) — nie przyjmujemy tankowań z innych lat. */
+function korygujRok(iso: string): string {
+  return iso.slice(0, 4) === String(ROK) ? iso : `${ROK}${iso.slice(4)}`;
+}
+
 function monthFromIso(iso: string): MiesiącId {
   const raw = Number(iso.slice(5, 7)) as MiesiącId;
   return MIESIACE_ZAKRESU.includes(raw as (typeof MIESIACE_ZAKRESU)[number]) ? raw : 6;
@@ -291,11 +296,12 @@ export async function POST(req: NextRequest) {
   }
 
   // Data z paragonu/faktury. Stare daty nie blokują zapisu — trafiają jako
-  // historyczne pending do decyzji admina.
-  const iso =
+  // historyczne pending do decyzji admina. Rok zawsze korygujemy na ROK.
+  const iso = korygujRok(
     typeof body.data === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.data)
       ? body.data
-      : new Date().toISOString().slice(0, 10);
+      : new Date().toISOString().slice(0, 10)
+  );
   const isHistorical = !inMainAccountingRange(iso);
   const accountingMonth = isHistorical ? normalizeAccountingMonth(body.accountingMonth, iso) : monthFromIso(iso);
   const accountingYear = ROK;
@@ -519,10 +525,11 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: "Możesz edytować tylko tankowania do sprawdzenia." }, { status: 403 });
   }
 
-  const iso =
+  const iso = korygujRok(
     typeof body.data === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.data)
       ? body.data
-      : wpis.expenseDate ?? wpis.data;
+      : wpis.expenseDate ?? wpis.data
+  );
   const isHistorical = !inMainAccountingRange(iso);
   const accountingMonth = isHistorical ? normalizeAccountingMonth(wpis.accountingMonth, iso) : monthFromIso(iso);
   const accountingYear = ROK;
