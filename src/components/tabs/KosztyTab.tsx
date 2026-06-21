@@ -35,6 +35,7 @@ import {
   obliczInneKoszty,
   obliczKosztLeasingu,
   czyKosztLeasingu,
+  czyTankowanieWliczane,
   formatZl,
   formatZlCaly,
   parseNum,
@@ -49,6 +50,7 @@ import {
   nrDnia,
   nazwaSkrotDnia,
   getDayOfWeek,
+  MIESIACE_ZAKRESU,
   POLSKIE_MIESIACE,
 } from "@/lib/dates";
 import { NumInput } from "../ui/NumInput";
@@ -81,6 +83,7 @@ interface Props {
   ustawienia: UstawieniaPodatkowe;
   // Id zgłoszenia z deep-linku powiadomienia — podświetlamy dzień
   focusZgloszenieId?: string | null;
+  onMoveTankowanie?: (id: string, targetMonth: MiesiącId, patch: Partial<WpisTankowania>) => boolean;
 }
 
 // Separator tygodniowy — linia z wycentrowaną etykietą
@@ -189,6 +192,11 @@ function statusDokumentu(wpis: KosztVatInfo): DocumentStatus {
 
 function normalizePayer(value: KosztVatInfo["paidBy"] | string | undefined): KosztPayer {
   return PAYER_OPTIONS.some((p) => p.id === value) ? (value as KosztPayer) : "Firma";
+}
+
+function formatDataISO(iso?: string): string {
+  if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return "brak daty";
+  return `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}`;
 }
 
 function kosztWchodziDo5050(wpis: KosztVatInfo): boolean {
@@ -895,6 +903,7 @@ function RozliczenieKosztowPanel({
     const rows: RozliczenieKosztu[] = [];
 
     for (const t of dane.tankowanie ?? []) {
+      if (!czyTankowanieWliczane(t)) continue;
       if (parseNum(t.koszt) <= 0) continue;
       const wpis = { ...t, kategoria: t.kategoria ?? ("paliwo_adblue" as KategoriaKosztu) };
       const r = rozbijWpis(wpis, ustawienia, "paliwo_adblue");
@@ -1116,7 +1125,7 @@ function RozliczenieKosztowPanel({
   );
 }
 
-export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia, focusZgloszenieId }: Props) {
+export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia, focusZgloszenieId, onMoveTankowanie }: Props) {
   // Rozwinięte panele szczegółów VAT (klucz: id wpisu)
   const [rozwiniete, setRozwiniete] = useState<Record<string, boolean>>({});
   const [autoBusyId, setAutoBusyId] = useState<string | null>(null);
@@ -1743,7 +1752,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
       ...prev,
       tankowanie: [
         ...prev.tankowanie,
-        { id: uuidv4(), data: "", koszt: 0, paidBy: "Firma" },
+        { id: uuidv4(), data: "", koszt: 0, paidBy: "Firma", status: "approved", includeInReports: true, isHistorical: false },
       ],
     }));
     setStronaTank(Math.ceil((dane.tankowanie.length + 1) / KOSZTY_NA_STRONE));
@@ -1751,7 +1760,11 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
 
   // Dodanie gotowego kosztu ze skanu paragonu (część B) + audit/push
   function dodajZeSkanu(wpis: WpisInnegoKosztu | WpisTankowania, typ: "inne" | "tankowanie") {
-    const wpisZPlatnikiem = { ...wpis, paidBy: normalizePayer(wpis.paidBy) };
+    const wpisZPlatnikiem = {
+      ...wpis,
+      paidBy: normalizePayer(wpis.paidBy),
+      ...(typ === "tankowanie" ? { status: "approved" as const, includeInReports: true, isHistorical: false } : {}),
+    };
     onUpdate((prev) =>
       typ === "tankowanie"
         ? { ...prev, tankowanie: [...prev.tankowanie, wpisZPlatnikiem as WpisTankowania] }
@@ -1777,6 +1790,82 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
       ...prev,
       tankowanie: prev.tankowanie.map((t) => (t.id === id ? { ...t, ...patch } : t)),
     }));
+  }
+
+  function zatwierdzTankowanieKierowcy(
+    wpis: WpisTankowania,
+    mode: "reports" | "archive" | "assign"
+  ) {
+    const isAssign = mode === "assign";
+    const isArchive = mode === "archive";
+    let accountingMonth = wpis.accountingMonth ?? miesiac;
+    let includeInReports = mode === "reports";
+    if (isAssign) {
+      const raw = window.prompt("Podaj miesiąc rozliczeniowy (6-12):", String(accountingMonth));
+      if (raw === null) return;
+      const parsed = Number(raw);
+      if (!Number.isInteger(parsed) || !MIESIACE_ZAKRESU.includes(parsed as (typeof MIESIACE_ZAKRESU)[number])) {
+        window.alert("Podaj miesiąc od 6 do 12.");
+        return;
+      }
+      accountingMonth = parsed;
+      includeInReports = true;
+    }
+
+    const patch: Partial<WpisTankowania> = {
+      status: "approved",
+      includeInReports,
+      accountingMonth,
+      accountingYear: 2026,
+      updatedAt: new Date().toISOString(),
+      rejectionReason: undefined,
+    };
+    const targetMonth = accountingMonth as MiesiącId;
+    const moved =
+      isAssign &&
+      targetMonth !== miesiac &&
+      onMoveTankowanie?.(wpis.id, targetMonth, patch);
+    if (moved === false) return;
+    if (!moved) updateTankowanie(wpis.id, patch);
+    logChange({
+      workspaceId: token,
+      userName,
+      action: isArchive ? "tankowanie_archiwum" : "tankowanie_zatwierdzone",
+      entity: "cost",
+      entityId: wpis.id,
+      oldValue: { status: wpis.status, includeInReports: wpis.includeInReports },
+      newValue: patch,
+      description:
+        isArchive
+          ? `${userName} zatwierdził tankowanie ${formatZlCaly(wpis.koszt)} jako archiwum`
+          : `${userName} zatwierdził tankowanie ${formatZlCaly(wpis.koszt)} do miesiąca ${POLSKIE_MIESIACE[accountingMonth as MiesiącId]}`,
+      url: `/admin?miesiac=${miesiac}&zakladka=koszty`,
+    });
+    showToast(isArchive ? "Tankowanie zapisane w archiwum" : "Tankowanie zatwierdzone");
+  }
+
+  function odrzucTankowanieKierowcy(wpis: WpisTankowania) {
+    const reason = window.prompt("Powód odrzucenia tankowania:", "");
+    if (reason === null) return;
+    const patch: Partial<WpisTankowania> = {
+      status: "rejected",
+      includeInReports: false,
+      rejectionReason: reason.trim() || "Odrzucone przez admina",
+      updatedAt: new Date().toISOString(),
+    };
+    updateTankowanie(wpis.id, patch);
+    logChange({
+      workspaceId: token,
+      userName,
+      action: "tankowanie_odrzucone",
+      entity: "cost",
+      entityId: wpis.id,
+      oldValue: { status: wpis.status, includeInReports: wpis.includeInReports },
+      newValue: patch,
+      description: `${userName} odrzucił tankowanie ${formatZlCaly(wpis.koszt)}: ${patch.rejectionReason}`,
+      url: `/admin?miesiac=${miesiac}&zakladka=koszty`,
+    });
+    showToast("Tankowanie odrzucone");
   }
 
   // Usuwanie z potwierdzeniem (sekcja 15): confirm → usuń → audit + powiadomienie + toast
@@ -1883,7 +1972,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
   const leasing = obliczKosztLeasingu(dane);
   const kosztyPodatkowe = useMemo(() => {
     const entries: Array<KosztVatInfo & { koszt: number; domyslna: KategoriaKosztu }> = [
-      ...(dane.tankowanie ?? []).map((t) => ({
+      ...(dane.tankowanie ?? []).filter(czyTankowanieWliczane).map((t) => ({
         ...t,
         kategoria: t.kategoria ?? ("paliwo_adblue" as KategoriaKosztu),
         domyslna: "paliwo_adblue" as KategoriaKosztu,
@@ -1916,7 +2005,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
     const count: Record<KosztPayer, number> = { Artur: 0, Damian: 0, Firma: 0 };
     let firmaDoRozliczenia = 0;
     const rows = [
-      ...(dane.tankowanie ?? []),
+      ...(dane.tankowanie ?? []).filter(czyTankowanieWliczane),
       ...(dane.inneKoszty ?? []),
     ].filter((x) => parseNum(x.koszt) > 0 && kosztWchodziDo5050(x));
 
@@ -1978,6 +2067,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
   const tankTotalStron = Math.max(1, Math.ceil(dane.tankowanie.length / KOSZTY_NA_STRONE));
   const tankStrona = Math.min(stronaTank, tankTotalStron);
   const tankowanieWidoczne = dane.tankowanie.slice((tankStrona - 1) * KOSZTY_NA_STRONE, tankStrona * KOSZTY_NA_STRONE);
+  const tankowaniaDoZatwierdzenia = (dane.tankowanie ?? []).filter((t) => t.status === "pending");
   const leasingEntries = dane.inneKoszty.filter((k) => czyKosztLeasingu(k));
   const inneBezLeasingu = dane.inneKoszty.filter((k) => !czyKosztLeasingu(k));
   const inneTotalStron = Math.max(1, Math.ceil(inneBezLeasingu.length / KOSZTY_NA_STRONE));
@@ -2128,6 +2218,110 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
           </button>
         </div>
       </Card>}
+
+      {tankowaniaDoZatwierdzenia.length > 0 && (showPodsumowanie || showTankowanie) && (
+        <Card className="!border-amber-brand/50">
+          <div className="mb-3 flex items-start gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-amber-brand/40 bg-amber-brand/10 text-amber-brand">
+              <IconAlertTriangle size={20} />
+            </span>
+            <div className="min-w-0">
+              <CardTitle className="mb-1">Tankowania do zatwierdzenia</CardTitle>
+              <p className="text-xs text-dim">
+                Masz {tankowaniaDoZatwierdzenia.length} tankowań od kierowcy. Dopiero zatwierdzone wpisy wchodzą do paliwa, VAT i raportów.
+              </p>
+            </div>
+          </div>
+          <div className="space-y-3">
+            {tankowaniaDoZatwierdzenia.map((t) => (
+              <div key={t.id} className="rounded-2xl border border-line bg-surface2 p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-extrabold text-white">
+                      {t.dodaneBy || "Kierowca"} · {formatZlCaly(t.koszt)}
+                    </p>
+                    <p className="mt-1 text-[11px] text-dim">
+                      Data paragonu: {formatDataISO(t.expenseDate ?? t.data)}
+                      {t.supplierName || t.stationName ? ` · ${t.supplierName ?? t.stationName}` : ""}
+                    </p>
+                  </div>
+                  <span className="shrink-0 rounded-full border border-amber-brand/40 bg-amber-brand/10 px-2 py-1 text-[10px] font-bold text-amber-brand">
+                    pending
+                  </span>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
+                  <div className="rounded-xl border border-line bg-input px-2 py-1.5">
+                    <p className="text-dim">Litry</p>
+                    <p className="tabular-nums font-bold text-ink">{t.litry ? `${t.litry} l` : "brak"}</p>
+                  </div>
+                  <div className="rounded-xl border border-line bg-input px-2 py-1.5">
+                    <p className="text-dim">Przebieg</p>
+                    <p className="tabular-nums font-bold text-ink">{t.odometerKm ? `${t.odometerKm} km` : "brak"}</p>
+                  </div>
+                  <div className="rounded-xl border border-line bg-input px-2 py-1.5">
+                    <p className="text-dim">Tacho</p>
+                    <p className="font-bold text-ink">{t.tachoStatus || "brak"}</p>
+                  </div>
+                  <div className="rounded-xl border border-line bg-input px-2 py-1.5">
+                    <p className="text-dim">Raporty</p>
+                    <p className="font-bold text-ink">{t.includeInReports ? "wliczane" : "archiwum"}</p>
+                  </div>
+                </div>
+                {t.isHistorical && (
+                  <p className="mt-2 rounded-xl border border-amber-brand/35 bg-amber-brand/10 px-3 py-2 text-[11px] font-bold text-amber-brand">
+                    Data historyczna — wybierz archiwum albo przypisz do miesiąca rozliczeniowego.
+                  </p>
+                )}
+                {t.note && <p className="mt-2 text-xs text-dim italic">„{t.note}”</p>}
+                {t.zalaczniki?.length ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <ZalacznikPreview
+                      zalaczniki={t.zalaczniki.filter((z) => z.attachmentKind === "receipt" || z.typ === "dokument")}
+                      label="Paragon"
+                      compact
+                    />
+                    <ZalacznikPreview
+                      zalaczniki={t.zalaczniki.filter((z) => z.attachmentKind === "odometer" || z.attachmentKind === "tachograph" || z.typ === "licznik")}
+                      label="Licznik / tacho"
+                      compact
+                    />
+                  </div>
+                ) : null}
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => zatwierdzTankowanieKierowcy(t, "reports")}
+                    className="rounded-xl bg-green-500/90 px-3 py-2 text-xs font-extrabold text-white hover:bg-green-500"
+                  >
+                    Zatwierdź
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => zatwierdzTankowanieKierowcy(t, "archive")}
+                    className="rounded-xl border border-line px-3 py-2 text-xs font-extrabold text-dim hover:text-ink"
+                  >
+                    Jako archiwum
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => zatwierdzTankowanieKierowcy(t, "assign")}
+                    className="rounded-xl border border-amber-brand/50 px-3 py-2 text-xs font-extrabold text-amber-brand hover:bg-amber-brand/10"
+                  >
+                    Przypisz do miesiąca
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => odrzucTankowanieKierowcy(t)}
+                    className="rounded-xl border border-red-500/45 px-3 py-2 text-xs font-extrabold text-red-300 hover:bg-red-soft"
+                  >
+                    Odrzuć
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {/* ── SEKCJA: ZGŁOSZENIA KIEROWCY ──────────────────────────────────── */}
       {oczekujace.length > 0 && (showPodsumowanie || showWyplata) && (
@@ -2595,6 +2789,21 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
                       od kierowcy: {t.dodaneBy}
                     </span>
                   ) : null}
+                  {t.status === "pending" && (
+                    <span className="px-1.5 py-0.5 rounded-full bg-amber-brand/10 border border-amber-brand/30 text-amber-brand">
+                      do zatwierdzenia
+                    </span>
+                  )}
+                  {t.status === "rejected" && (
+                    <span className="px-1.5 py-0.5 rounded-full bg-red-soft border border-red-500/35 text-red-300">
+                      odrzucone
+                    </span>
+                  )}
+                  {t.isHistorical && (
+                    <span className="px-1.5 py-0.5 rounded-full border border-line text-dim">
+                      historyczne
+                    </span>
+                  )}
                 </p>
               )}
               <VatMiniInfo

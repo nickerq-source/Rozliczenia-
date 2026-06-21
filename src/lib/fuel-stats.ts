@@ -6,7 +6,7 @@ import {
   VatRate,
   WpisTankowania,
 } from "./types";
-import { parseNum } from "./business-logic";
+import { czyTankowanieWliczane, parseNum } from "./business-logic";
 import { FuelReviewStatus } from "./fuel-calculations";
 import { rozbijWpis } from "./tax";
 
@@ -69,7 +69,7 @@ function round2(n: number): number {
 }
 
 function isFuelEntry(t: WpisTankowania): boolean {
-  return (t.kategoria ?? "paliwo_adblue") === "paliwo_adblue";
+  return (t.kategoria ?? "paliwo_adblue") === "paliwo_adblue" && czyTankowanieWliczane(t);
 }
 
 export function buildFuelStats(

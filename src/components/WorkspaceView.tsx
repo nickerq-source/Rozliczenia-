@@ -15,7 +15,7 @@ import { LegendaWyplaty } from "./LegendaWyplaty";
 import { UstawieniaTab } from "./tabs/UstawieniaTab";
 import { getUstawienia, podatkiMiesiaca } from "@/lib/tax";
 import { UserNameModal } from "./UserNameModal";
-import { MiesiącId } from "@/lib/types";
+import { MiesiącId, WpisTankowania } from "@/lib/types";
 import { domyslneDaneMiesiaca } from "@/lib/business-logic";
 import { getUserName, setUserName } from "@/lib/push";
 import { logChange } from "@/lib/audit";
@@ -184,7 +184,7 @@ interface Props {
 }
 
 export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props) {
-  const { data, loading, saveStatus, updateMiesiac, updateNotatki, updateUstawienia } = useWorkspace(token);
+  const { data, loading, saveStatus, updateMiesiac, updateWorkspace, updateNotatki, updateUstawienia } = useWorkspace(token);
   const [aktywnyMiesiac, setAktywnyMiesiac] = useState<MiesiącId>(6);
   const [aktywnaZakladka, setAktywnaZakladka] = useState<TabName>("podsumowanie");
   const [focusZgloszenie, setFocusZgloszenie] = useState<string | null>(null);
@@ -283,6 +283,52 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
     // Zamknięty miesiąc = readonly (dodatkowo inputy blokuje <fieldset disabled>)
     if (monthLocked) return;
     updateMiesiac(aktywnyMiesiac, updater);
+  }
+
+  function moveTankowanieDoMiesiaca(
+    id: string,
+    targetMonth: MiesiącId,
+    patch: Partial<WpisTankowania>
+  ): boolean {
+    if (monthLocked) return false;
+    if (data.miesiace[targetMonth]?.zamkniety?.locked) {
+      window.alert(`Miesiąc ${POLSKIE_MIESIACE[targetMonth]} jest zamknięty.`);
+      return false;
+    }
+
+    updateWorkspace((prev) => {
+      const source = prev.miesiace[aktywnyMiesiac] ?? domyslneDaneMiesiaca(aktywnyMiesiac);
+      const target = prev.miesiace[targetMonth] ?? domyslneDaneMiesiaca(targetMonth);
+      const entry = source.tankowanie.find((t) => t.id === id);
+      if (!entry) return prev;
+      if (targetMonth === aktywnyMiesiac) {
+        return {
+          ...prev,
+          miesiace: {
+            ...prev.miesiace,
+            [aktywnyMiesiac]: {
+              ...source,
+              tankowanie: source.tankowanie.map((t) => (t.id === id ? { ...t, ...patch } : t)),
+            },
+          },
+        };
+      }
+      return {
+        ...prev,
+        miesiace: {
+          ...prev.miesiace,
+          [aktywnyMiesiac]: {
+            ...source,
+            tankowanie: source.tankowanie.filter((t) => t.id !== id),
+          },
+          [targetMonth]: {
+            ...target,
+            tankowanie: [...(target.tankowanie ?? []), { ...entry, ...patch }],
+          },
+        },
+      };
+    });
+    return true;
   }
 
   function toggleMonthLock() {
@@ -385,6 +431,7 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
                       userName={userName ?? ""}
                       ustawienia={ustawienia}
                       focusZgloszenieId={focusZgloszenie}
+                      onMoveTankowanie={moveTankowanieDoMiesiaca}
                     />
                   )}
                 </div>

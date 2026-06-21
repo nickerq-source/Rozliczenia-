@@ -25,17 +25,21 @@ export async function imageToCompressedDataUrl(file: File, maxSide = 2000, quali
 
   const img = new Image();
   img.src = raw;
-  await new Promise<void>((resolve, reject) => {
-    img.onload = () => resolve();
-    img.onerror = () =>
+  const decoded = await new Promise<boolean>((resolve, reject) => {
+    img.onload = () => resolve(true);
+    img.onerror = () => {
+      if (looksLikeHeic(file)) {
+        resolve(false);
+        return;
+      }
       reject(
         new Error(
-          looksLikeHeic(file)
-            ? "Nie udało się odczytać HEIC/HEIF w tej przeglądarce. Zrób zdjęcie jako JPG/PNG albo wybierz zdjęcie po konwersji."
-            : "Nie udało się przetworzyć zdjęcia"
+          "Nie udało się przetworzyć zdjęcia"
         )
       );
+    };
   });
+  if (!decoded || !img.width || !img.height) return raw;
 
   // Paragony/faktury paliwowe są prawie zawsze pionowe. Gdy zdjęcie jest bokiem
   // (częste przy telefonie), obracamy je przed OCR, bo Vision myli wtedy wiersze.

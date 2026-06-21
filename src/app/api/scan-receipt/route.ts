@@ -3,11 +3,12 @@ import Anthropic from "@anthropic-ai/sdk";
 import { getSessionProfile } from "@/lib/supabase-server";
 import { VatRate } from "@/lib/types";
 import { getAnthropicApiKey } from "@/lib/anthropic-key";
+import { normalizeMileageAi, parseMileageFromText } from "@/lib/mileage-ocr";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-type DocumentType = "receipt" | "odometer" | "unknown";
+type DocumentType = "receipt" | "odometer" | "tachograph" | "unknown";
 type ClaudeImageType = "image/jpeg" | "image/png" | "image/gif" | "image/webp";
 
 const DOZWOLONE_VAT: VatRate[] = ["0", "0.05", "0.08", "0.23", "zw", "np"];
@@ -30,6 +31,10 @@ interface OdczytZdjeciaTankowania {
   fuelType: string | null;
   documentNumber: string | null;
   odometerKm: number | null;
+  mileageText?: string | null;
+  tachoStatus?: string | null;
+  speed?: number | null;
+  mileageSource?: "manual" | "ocr" | "ai" | "confirmed_ai" | "tachograph";
   confidence: number;
   needsReview: boolean;
   vatNeedsReview?: boolean;
@@ -65,7 +70,7 @@ const PUSTY: OdczytZdjeciaTankowania = {
 const PROMPT = `Przeanalizuj zdjęcie i określ, czy jest to paragon/faktura za tankowanie, zdjęcie licznika/przebiegu pojazdu, czy nieznany typ dokumentu.
 Zwróć WYŁĄCZNIE czysty JSON, bez markdown:
 {
-  "documentType": "receipt" | "odometer" | "unknown",
+  "documentType": "receipt" | "odometer" | "tachograph" | "unknown",
   "productLine": string | null,
   "vatLine": string | null,
   "liters": number | null,
@@ -80,6 +85,10 @@ Zwróć WYŁĄCZNIE czysty JSON, bez markdown:
   "nip": string | null,
   "vatRate": number | string | null,
   "odometerKm": number | null,
+  "mileage": number | null,
+  "mileage_text": string | null,
+  "tacho_status": string | null,
+  "speed": number | null,
   "confidence": number,
   "needsReview": boolean
 }
@@ -87,6 +96,7 @@ Zwróć WYŁĄCZNIE czysty JSON, bez markdown:
 Rozpoznanie typu:
 - receipt: paragon, faktura, dokument tankowania, stacja, NIP, PLN, suma, VAT, netto, brutto, litry, LITR, cena za litr, ON, diesel, paliwo.
 - odometer: zdjęcie licznika/deski rozdzielczej z przebiegiem całkowitym pojazdu w km.
+- tachograph: zdjęcie tachografu/wyświetlacza Iveco, np. z tekstem "05:34 0 km/h OUT 252020.8 km".
 - unknown: jeśli nie jesteś pewien.
 
 Paragon/faktura:
@@ -106,7 +116,10 @@ Paragon/faktura:
 
 Licznik:
 - odczytaj przebieg całkowity pojazdu w km.
-- Nie myl przebiegu z trip, temperaturą, godziną, prędkością, spalaniem chwilowym albo zasięgiem.
+- Nie myl przebiegu z trip, temperaturą, godziną, prędkością km/h, spalaniem chwilowym albo zasięgiem.
+- Jeśli widzisz np. "05:34 0 km/h OUT 252020.8km", zwróć odometerKm/mileage=252020.8, speed=0, tacho_status="OUT".
+- Liczba przed "km/h" to prędkość, nigdy przebieg.
+- Godzina typu 05:34 nigdy nie jest przebiegiem.
 - Jeśli nie jesteś pewien, documentType="unknown", needsReview=true.
 
 Jeśli pole nie jest widoczne, zwróć null. Nie zgaduj.`;
@@ -149,7 +162,7 @@ function normalizeDate(raw: unknown): string | null {
 }
 
 function normalizeDocumentType(raw: unknown): DocumentType {
-  if (raw === "receipt" || raw === "odometer" || raw === "unknown") return raw;
+  if (raw === "receipt" || raw === "odometer" || raw === "tachograph" || raw === "unknown") return raw;
   return "unknown";
 }
 
@@ -274,13 +287,29 @@ function waliduj(raw: unknown): OdczytZdjeciaTankowania {
   const confidence = clamp01(toNum(o.confidence));
   const baseNeedsReview = typeof o.needsReview === "boolean" ? o.needsReview : true;
 
-  if (documentType === "odometer") {
-    const odometerKm = dodatni(toNum(o.odometerKm));
+  if (documentType === "odometer" || documentType === "tachograph") {
+    const aiMileage = normalizeMileageAi(o);
+    const textMileage = parseMileageFromText(
+      [
+        typeof o.mileage_text === "string" ? o.mileage_text : "",
+        typeof o.mileageText === "string" ? o.mileageText : "",
+        typeof o.rawText === "string" ? o.rawText : "",
+        typeof o.text === "string" ? o.text : "",
+      ].join(" ")
+    );
+    const odometerKm = aiMileage.mileage ?? textMileage.mileage;
+    const source = documentType === "tachograph" || aiMileage.tachoStatus || textMileage.tachoStatus
+      ? "tachograph"
+      : "ai";
     return {
-      ...empty("odometer"),
-      odometerKm: odometerKm != null ? Math.round(odometerKm) : null,
-      confidence,
-      needsReview: baseNeedsReview || confidence < 0.75 || odometerKm == null,
+      ...empty(documentType),
+      odometerKm,
+      mileageText: aiMileage.mileageText ?? textMileage.mileageText,
+      tachoStatus: aiMileage.tachoStatus ?? textMileage.tachoStatus,
+      speed: aiMileage.speed ?? textMileage.speed,
+      mileageSource: source,
+      confidence: Math.max(confidence, aiMileage.confidence, textMileage.confidence),
+      needsReview: baseNeedsReview || Math.max(confidence, aiMileage.confidence, textMileage.confidence) < 0.75 || odometerKm == null,
       reviewReasons: odometerKm == null ? ["Nie udało się pewnie odczytać przebiegu."] : [],
       _empty: odometerKm == null,
     };
@@ -481,9 +510,8 @@ export async function POST(req: NextRequest) {
       {
         ...empty("unknown"),
         _badFormat: true,
-        error: "Nieobsługiwany format zdjęcia. Użyj JPG, PNG albo WebP.",
-      },
-      { status: 415 }
+        error: "Nie udało się automatycznie rozpoznać danych. Wpisz je ręcznie.",
+      }
     );
   }
 
@@ -493,9 +521,9 @@ export async function POST(req: NextRequest) {
       {
         ...empty("unknown"),
         _noKey: true,
-        error: apiKey.error,
-      },
-      { status: 503 }
+        error: "Nie udało się automatycznie rozpoznać danych. Wpisz je ręcznie.",
+        reviewReasons: apiKey.error ? [apiKey.error] : undefined,
+      }
     );
   }
 
@@ -533,9 +561,8 @@ export async function POST(req: NextRequest) {
         {
           ...empty("unknown"),
           _empty: true,
-          error: "Claude nie zwrócił poprawnego JSON ze zdjęcia. Spróbuj wyraźniejsze zdjęcie.",
-        },
-        { status: 422 }
+          error: "Nie udało się automatycznie rozpoznać danych. Wpisz je ręcznie.",
+        }
       );
     }
     const wynik = waliduj(JSON.parse(match[0]));
@@ -561,9 +588,9 @@ export async function POST(req: NextRequest) {
       {
         ...empty("unknown"),
         _apiError: true,
-        error: `Błąd Claude OCR: ${message}`,
-      },
-      { status: 502 }
+        error: "Nie udało się automatycznie rozpoznać danych. Wpisz je ręcznie.",
+        reviewReasons: [message],
+      }
     );
   }
 }

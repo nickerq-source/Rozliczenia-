@@ -14,7 +14,7 @@ import {
   WpisInnegoKosztu,
   WpisTankowania,
 } from "./types";
-import { obliczWynagrodzenie, parseNum } from "./business-logic";
+import { czyTankowanieWliczane, obliczWynagrodzenie, parseNum } from "./business-logic";
 import { MIESIACE_ZAKRESU } from "./dates";
 
 // ─── USTAWIENIA DOMYŚLNE ─────────────────────────────────────────────────────
@@ -294,7 +294,9 @@ function podstawyMiesiaca(m: MiesiącId, dane: DaneMiesiaca, u: UstawieniaPodatk
   // Koszty z VAT (tankowanie = kategoria paliwo_adblue)
   let kosztyNetto = 0, vatNaliczony = 0, kosztyPitFaktury = 0, kosztyBrutto = 0;
   const wpisy: (KosztVatInfo & { koszt: number })[] = [
-    ...((dane.tankowanie ?? []) as WpisTankowania[]).map((t) => ({ ...t, kategoria: t.kategoria ?? ("paliwo_adblue" as KategoriaKosztu) })),
+    ...((dane.tankowanie ?? []) as WpisTankowania[])
+      .filter(czyTankowanieWliczane)
+      .map((t) => ({ ...t, kategoria: t.kategoria ?? ("paliwo_adblue" as KategoriaKosztu) })),
     ...((dane.inneKoszty ?? []) as WpisInnegoKosztu[]),
   ];
   const wpisyLeasingu = ((dane.inneKoszty ?? []) as WpisInnegoKosztu[]).filter((k) => k.kategoria === "leasing");
@@ -425,7 +427,9 @@ export function kosztyWgKategorii(data: WorkspaceData): {
     const dane = data.miesiace?.[m as MiesiącId];
     if (!dane) continue;
     const wpisy: (KosztVatInfo & { koszt: number })[] = [
-      ...((dane.tankowanie ?? []) as WpisTankowania[]).map((t) => ({ ...t, kategoria: t.kategoria ?? ("paliwo_adblue" as KategoriaKosztu) })),
+      ...((dane.tankowanie ?? []) as WpisTankowania[])
+        .filter(czyTankowanieWliczane)
+        .map((t) => ({ ...t, kategoria: t.kategoria ?? ("paliwo_adblue" as KategoriaKosztu) })),
       ...((dane.inneKoszty ?? []) as WpisInnegoKosztu[]),
     ];
     for (const w of wpisy) {

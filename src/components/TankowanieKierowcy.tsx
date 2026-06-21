@@ -27,7 +27,7 @@ import {
 import { DriverLanguage, driverMonthName, driverTexts } from "@/lib/driver-translations";
 import { useAppBackLayer } from "@/lib/mobile-navigation";
 
-type PhotoType = "receipt" | "odometer" | "unknown";
+type PhotoType = "receipt" | "odometer" | "tachograph" | "unknown";
 type FuelFormStep = "photos" | "review";
 
 interface PhotoItem {
@@ -57,7 +57,16 @@ interface WpisListy {
   needsReview?: boolean;
   reviewReasons?: string[];
   supplierName?: string;
+  stationName?: string;
   zalaczniki?: KosztZalacznik[];
+  expenseDate?: string;
+  isHistorical?: boolean;
+  includeInReports?: boolean;
+  status?: WpisTankowania["status"];
+  tachoStatus?: string;
+  speed?: number;
+  note?: string;
+  rejectionReason?: string;
   miesiac: number;
   nazwaMiesiaca: string;
   zamkniety: boolean;
@@ -94,6 +103,7 @@ function vatToNumber(rate: VatRate | ""): number | null {
 function photoLabel(type: PhotoType): string {
   if (type === "receipt") return "Paragon / faktura";
   if (type === "odometer") return "Licznik";
+  if (type === "tachograph") return "Tachograf";
   return "Niepewne";
 }
 
@@ -130,10 +140,16 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
   const [fNip, setFNip] = useState("");
   const [fDokument, setFDokument] = useState("");
   const [fPrzebieg, setFPrzebieg] = useState("");
+  const [fTachoStatus, setFTachoStatus] = useState("");
+  const [fSpeed, setFSpeed] = useState("");
+  const [fNotatka, setFNotatka] = useState("");
+  const [mileageSuggestion, setMileageSuggestion] = useState<string | null>(null);
 
   const receiptPhoto = useMemo(() => bestPhoto(photos, "receipt"), [photos]);
   const odometerPhoto = useMemo(() => bestPhoto(photos, "odometer"), [photos]);
+  const tachographPhoto = useMemo(() => bestPhoto(photos, "tachograph"), [photos]);
   const anyAiReview = photos.some((p) => p.needsReview || p.type === "unknown");
+  const outsideMainRange = fData < "2026-06-01" || fData > "2026-12-31";
   const hasUnsavedChanges = useMemo(() => {
     if (!open) return false;
     return (
@@ -148,9 +164,12 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
       !!fSprzedawca.trim() ||
       !!fNip.trim() ||
       !!fDokument.trim() ||
-      !!fPrzebieg.trim()
+      !!fPrzebieg.trim() ||
+      !!fTachoStatus.trim() ||
+      !!fSpeed.trim() ||
+      !!fNotatka.trim()
     );
-  }, [fCena, fData, fDokument, fKwota, fKwotaNetto, fLitry, fNip, fPrzebieg, fSprzedawca, fVat, fVatKwota, open, photos.length]);
+  }, [fCena, fData, fDokument, fKwota, fKwotaNetto, fLitry, fNip, fNotatka, fPrzebieg, fSpeed, fSprzedawca, fTachoStatus, fVat, fVatKwota, open, photos.length]);
 
   const wczytaj = useCallback(async () => {
     try {
@@ -179,6 +198,10 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
     setFNip("");
     setFDokument("");
     setFPrzebieg("");
+    setFTachoStatus("");
+    setFSpeed("");
+    setFNotatka("");
+    setMileageSuggestion(null);
     setPhotos([]);
     setScanInfo(null);
     setBlad(null);
@@ -250,8 +273,20 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
   }
 
   function applyScan(scan: ReceiptScanResult) {
-    if (scan.documentType === "odometer") {
-      if (scan.odometerKm != null) setFPrzebieg(String(scan.odometerKm));
+    if (scan.documentType === "odometer" || scan.documentType === "tachograph") {
+      if (scan.tachoStatus) setFTachoStatus(scan.tachoStatus);
+      if (scan.speed != null) setFSpeed(String(scan.speed));
+      if (scan.odometerKm != null) {
+        const text = `${scan.odometerKm} km`;
+        if ((scan.confidence ?? 0) >= 0.75) {
+          setFPrzebieg(String(scan.odometerKm));
+          setMileageSuggestion(`Rozpoznano przebieg: ${text}.`);
+        } else {
+          setMileageSuggestion(`Możliwy przebieg: ${text} — potwierdź albo wpisz ręcznie.`);
+        }
+      } else {
+        setMileageSuggestion("Nie udało się rozpoznać przebiegu. Wpisz ręcznie.");
+      }
       return;
     }
     if (scan.documentType !== "receipt") return;
@@ -275,7 +310,7 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
     else if (scan.vatNeedsReview) setFVat("");
   }
 
-  async function onZdjecia(e: React.ChangeEvent<HTMLInputElement>) {
+  async function onZdjecia(e: React.ChangeEvent<HTMLInputElement>, preferredType?: Exclude<PhotoType, "unknown">) {
     const files = Array.from(e.target.files ?? []);
     e.currentTarget.value = "";
     if (!files.length) return;
@@ -289,26 +324,27 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
         const dataUrl = await imageToCompressedDataUrl(file, 2000, 0.84);
         try {
           const scan = await scanReceiptDataUrl(dataUrl, file.name);
-          const type = (scan.documentType ?? "unknown") as PhotoType;
+          const type = ((scan.documentType && scan.documentType !== "unknown" ? scan.documentType : preferredType) ?? "unknown") as PhotoType;
           nextItems.push({
             id: crypto.randomUUID(),
             fileName: file.name,
             dataUrl,
             type,
             confidence: scan.confidence ?? 0,
-            needsReview: !!scan.needsReview || type === "unknown",
+            needsReview: !!scan.needsReview || type === "unknown" || !!scan.error,
             scan,
+            error: scan.error,
           });
           applyScan(scan);
-        } catch (error) {
+        } catch {
           nextItems.push({
             id: crypto.randomUUID(),
             fileName: file.name,
             dataUrl,
-            type: "unknown",
+            type: preferredType ?? "unknown",
             confidence: 0,
             needsReview: true,
-            error: error instanceof Error ? error.message : "Nie udało się odczytać zdjęcia.",
+            error: "Nie udało się automatycznie rozpoznać danych. Wpisz je ręcznie.",
           });
         }
       }
@@ -346,6 +382,7 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
     const netto = num(fKwotaNetto);
     const vatAmount = num(fVatKwota);
     const przebieg = num(fPrzebieg);
+    const speed = num(fSpeed);
     setBusy(true);
     setBlad(null);
     setDuplicateWarning(null);
@@ -367,10 +404,17 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
           nip: fNip || undefined,
           documentNumber: fDokument || undefined,
           odometerKm: isFinite(przebieg) && przebieg > 0 ? Math.round(przebieg) : undefined,
+          mileageSource: tachographPhoto ? "tachograph" : odometerPhoto ? "ai" : isFinite(przebieg) && przebieg > 0 ? "manual" : undefined,
+          mileageConfidence: Math.max(odometerPhoto?.confidence ?? 0, tachographPhoto?.confidence ?? 0),
+          tachoStatus: fTachoStatus || undefined,
+          speed: isFinite(speed) ? speed : undefined,
+          note: fNotatka || undefined,
           receiptImage: receiptPhoto?.dataUrl,
           odometerImage: odometerPhoto?.dataUrl,
+          tachographImage: tachographPhoto?.dataUrl,
           receiptConfidence: receiptPhoto?.confidence,
           odometerConfidence: odometerPhoto?.confidence,
+          tachographConfidence: tachographPhoto?.confidence,
           confirmDuplicate,
         }),
       });
@@ -417,14 +461,14 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
     "mt-0.5 w-full bg-input border border-line rounded-lg px-2.5 py-2 text-sm text-ink placeholder:text-dim/40";
 
   const photoInput = (
-    <div className="grid grid-cols-2 gap-2">
+    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
       <label
-        className={`flex items-center justify-center gap-1.5 py-2.5 min-h-[44px] rounded-xl border border-dashed border-amber-brand/50 text-sm text-amber-brand transition-all ${
+        className={`flex items-center justify-center gap-1.5 py-2.5 min-h-[44px] rounded-xl border border-dashed border-amber-brand/50 px-2 text-sm text-amber-brand transition-all ${
           busy ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-amber-brand/10"
         }`}
       >
         {busy ? <IconLoader size={15} /> : <IconCamera size={15} />}
-        {busy ? t.fuel.reading : "Zrób zdjęcia"}
+        {busy ? t.fuel.reading : "Dodaj zdjęcie faktury/paragonu"}
         <input
           type="file"
           accept="image/*,.heic,.heif"
@@ -432,23 +476,23 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
           multiple
           className="hidden"
           disabled={busy}
-          onChange={onZdjecia}
+          onChange={(e) => onZdjecia(e, "receipt")}
         />
       </label>
       <label
-        className={`flex items-center justify-center gap-1.5 py-2.5 min-h-[44px] rounded-xl border border-dashed border-amber-brand/50 text-sm text-amber-brand transition-all ${
+        className={`flex items-center justify-center gap-1.5 py-2.5 min-h-[44px] rounded-xl border border-dashed border-amber-brand/50 px-2 text-sm text-amber-brand transition-all ${
           busy ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-amber-brand/10"
         }`}
       >
         {busy ? <IconLoader size={15} /> : <IconCamera size={15} />}
-        {busy ? t.fuel.reading : t.fuel.chooseGallery}
+        {busy ? t.fuel.reading : "Dodaj zdjęcie licznika/tacho"}
         <input
           type="file"
           accept="image/*,.heic,.heif"
           multiple
           className="hidden"
           disabled={busy}
-          onChange={onZdjecia}
+          onChange={(e) => onZdjecia(e, "tachograph")}
         />
       </label>
     </div>
@@ -498,7 +542,7 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
                         <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
                           p.type === "receipt"
                             ? "bg-green-soft text-green-300"
-                            : p.type === "odometer"
+                            : p.type === "odometer" || p.type === "tachograph"
                             ? "bg-amber-brand/10 text-amber-brand"
                             : "bg-red-soft text-red-300"
                         }`}>
@@ -507,7 +551,7 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
                         <span className="text-[10px] text-dim">{Math.round((p.confidence ?? 0) * 100)}%</span>
                       </div>
                       {(p.type === "unknown" || p.needsReview) && (
-                        <div className="mt-2 grid grid-cols-2 gap-1">
+                        <div className="mt-2 grid grid-cols-3 gap-1">
                           <button
                             type="button"
                             onClick={() => ustawTypZdjecia(p.id, "receipt")}
@@ -521,6 +565,13 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
                             className="rounded-lg border border-line px-2 py-1 text-[10px] text-amber-brand"
                           >
                             Licznik
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => ustawTypZdjecia(p.id, "tachograph")}
+                            className="rounded-lg border border-line px-2 py-1 text-[10px] text-amber-brand"
+                          >
+                            Tacho
                           </button>
                         </div>
                       )}
@@ -629,14 +680,38 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
                   </label>
                   <label className="text-dim col-span-2">
                     Przebieg pojazdu (km)
-                    <input inputMode="numeric" value={fPrzebieg} onChange={(e) => setFPrzebieg(e.target.value)} placeholder="np. 245320" className={`${inputCls} tabular-nums`} />
+                    <input inputMode="decimal" value={fPrzebieg} onChange={(e) => setFPrzebieg(e.target.value)} placeholder="np. 245320,8" className={`${inputCls} tabular-nums`} />
+                  </label>
+                  {mileageSuggestion && (
+                    <p className="col-span-2 rounded-xl border border-amber-brand/35 bg-amber-brand/10 px-3 py-2 text-[11px] text-amber-brand">
+                      {mileageSuggestion}
+                    </p>
+                  )}
+                  <label className="text-dim">
+                    Status tacho
+                    <input value={fTachoStatus} onChange={(e) => setFTachoStatus(e.target.value.toUpperCase())} placeholder="np. OUT" className={inputCls} />
+                  </label>
+                  <label className="text-dim">
+                    Prędkość
+                    <input inputMode="decimal" value={fSpeed} onChange={(e) => setFSpeed(e.target.value)} placeholder="0" className={`${inputCls} tabular-nums`} />
                   </label>
                   <label className="text-dim col-span-2">
                     Nr dokumentu
                     <input value={fDokument} onChange={(e) => setFDokument(e.target.value)} placeholder="opcjonalnie" className={inputCls} />
                   </label>
+                  <label className="text-dim col-span-2">
+                    Notatka
+                    <textarea value={fNotatka} onChange={(e) => setFNotatka(e.target.value)} placeholder="opcjonalnie" className={`${inputCls} min-h-[72px] resize-none`} />
+                  </label>
                 </div>
               </div>
+
+              {outsideMainRange && (
+                <div className="rounded-xl border border-amber-brand/45 bg-amber-brand/10 p-3 text-xs text-amber-brand">
+                  <IconAlertTriangle size={13} className="mr-1 inline" />
+                  Data z paragonu jest spoza głównego zakresu rozliczeń 2026. Tankowanie zostanie wysłane do admina jako historyczne i domyślnie nie wejdzie do raportów.
+                </div>
+              )}
 
               {duplicateWarning && (
                 <div className="rounded-xl border border-amber-brand/50 bg-amber-brand/10 p-3 text-xs text-amber-brand">
@@ -721,7 +796,7 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
         <div className="mt-4 rounded-2xl border border-green-500/35 bg-green-soft/50 p-3">
           <div className="mb-2 flex items-center gap-2">
             <IconRoad size={15} className="text-green-300" />
-            <p className="text-xs font-bold uppercase tracking-wide text-green-300">Wynik od ostatniego tankowania</p>
+            <p className="text-xs font-bold uppercase tracking-wide text-green-300">Tankowanie wysłane do zatwierdzenia</p>
           </div>
           <div className="grid grid-cols-2 gap-2 text-[11px]">
             <span className="text-dim">Przejechano<br /><b className="text-ink">{formatMaybeNumber(ostatniWynik.kmSinceLastFuel, " km")}</b></span>
@@ -751,16 +826,27 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
                     </p>
                     <p className="text-[11px] text-dim">
                       {ddmm(w.data)} · {driverMonthName(lang, w.miesiac)}
-                      {w.supplierName ? ` · ${w.supplierName}` : ""}
+                      {w.supplierName || w.stationName ? ` · ${w.supplierName ?? w.stationName}` : ""}
                     </p>
                     <div className="mt-1 flex flex-wrap gap-1 text-[10px]">
                       {w.odometerKm ? <span className="rounded-full border border-line px-2 py-0.5 text-dim">{w.odometerKm} km</span> : null}
+                      {w.tachoStatus ? <span className="rounded-full border border-line px-2 py-0.5 text-dim">Tacho {w.tachoStatus}</span> : null}
+                      {w.isHistorical ? <span className="rounded-full border border-amber-brand/40 px-2 py-0.5 text-amber-brand">historyczne</span> : null}
                       {w.kmSinceLastFuel ? <span className="rounded-full border border-line px-2 py-0.5 text-dim">{w.kmSinceLastFuel} km od ost.</span> : null}
                       {w.fuelConsumptionLPer100Km ? <span className="rounded-full border border-line px-2 py-0.5 text-dim">{w.fuelConsumptionLPer100Km} L/100</span> : null}
                       <span className={`rounded-full border px-2 py-0.5 ${
                         w.fuelStatus === "ok" ? "border-green-500/40 text-green-300" : "border-amber-brand/40 text-amber-brand"
                       }`}>
                         {fuelStatusLabel(w.fuelStatus)}
+                      </span>
+                      <span className={`rounded-full border px-2 py-0.5 ${
+                        w.status === "approved"
+                          ? "border-green-500/40 text-green-300"
+                          : w.status === "rejected"
+                          ? "border-red-500/40 text-red-300"
+                          : "border-amber-brand/40 text-amber-brand"
+                      }`}>
+                        {w.status === "approved" ? "Zatwierdzone" : w.status === "rejected" ? "Odrzucone" : "Do sprawdzenia"}
                       </span>
                     </div>
                     {w.zalaczniki?.length ? (
@@ -772,7 +858,7 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
                         />
                         <ZalacznikPreview
                           zalaczniki={w.zalaczniki.filter((z) => z.typ === "licznik")}
-                          label="Licznik"
+                          label="Licznik / tacho"
                           emptyLabel=""
                           compact
                         />
@@ -780,9 +866,9 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
                     ) : null}
                   </div>
 
-                  {w.zamkniety ? (
+                  {w.zamkniety || (w.status ?? "approved") !== "pending" ? (
                     <span className="shrink-0 flex items-center gap-1 text-[10px] text-dim">
-                      <IconLock size={12} /> {t.fuel.closed}
+                      <IconLock size={12} /> {w.zamkniety ? t.fuel.closed : "wysłane"}
                     </span>
                   ) : confirmId === w.id ? (
                     <div className="shrink-0 flex items-center gap-1.5">

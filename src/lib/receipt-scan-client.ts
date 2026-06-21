@@ -3,7 +3,7 @@
 import type { VatRate } from "./types";
 
 export interface ReceiptScanResult {
-  documentType?: "receipt" | "odometer" | "unknown";
+  documentType?: "receipt" | "odometer" | "tachograph" | "unknown";
   productLine?: string | null;
   vatLine?: string | null;
   sprzedawca: string | null;
@@ -19,6 +19,10 @@ export interface ReceiptScanResult {
   fuelType?: string | null;
   documentNumber?: string | null;
   odometerKm?: number | null;
+  mileageText?: string | null;
+  tachoStatus?: string | null;
+  speed?: number | null;
+  mileageSource?: "manual" | "ocr" | "ai" | "confirmed_ai" | "tachograph";
   confidence?: number;
   needsReview?: boolean;
   vatNeedsReview?: boolean;
@@ -27,6 +31,7 @@ export interface ReceiptScanResult {
   _badFormat?: boolean;
   _apiError?: boolean;
   _empty?: boolean;
+  error?: string;
 }
 
 export function receiptHasImportantData(o: ReceiptScanResult | null | undefined): boolean {
@@ -64,7 +69,21 @@ export async function scanReceiptDataUrl(dataUrl: string, fileName = "paragon.jp
   const json = (await res.json().catch(() => ({}))) as ReceiptScanResult & { error?: string };
 
   if (!res.ok) {
-    throw new Error(json.error || "Nie udało się odczytać zdjęcia.");
+    return {
+      documentType: "unknown",
+      sprzedawca: null,
+      nip: null,
+      data: null,
+      kwotaBrutto: null,
+      vatRate: null,
+      nazwa: null,
+      litry: null,
+      cenaZaLitr: null,
+      confidence: 0,
+      needsReview: true,
+      _apiError: true,
+      error: json.error || "Nie udało się automatycznie rozpoznać danych. Wpisz je ręcznie.",
+    };
   }
   return json;
 }

@@ -12,7 +12,7 @@ import {
   WpisInnegoKosztu,
   WpisTankowania,
 } from "@/lib/types";
-import { czyKosztLeasingu, obliczWynikMiesiaca, formatZl, formatZlCaly, sumaObciazen } from "@/lib/business-logic";
+import { czyKosztLeasingu, czyTankowanieWliczane, obliczWynikMiesiaca, formatZl, formatZlCaly, sumaObciazen } from "@/lib/business-logic";
 import { POLSKIE_MIESIACE } from "@/lib/dates";
 import { Card } from "../ui/Card";
 import { PodatkiCard } from "../PodatkiCard";
@@ -147,7 +147,7 @@ export function PodsumowanieTab({
       koszt: number;
       wpis: KosztVatInfo & { koszt: number };
     }[] = [
-      ...((dane.tankowanie ?? []) as WpisTankowania[]).map((t) => ({
+      ...((dane.tankowanie ?? []) as WpisTankowania[]).filter(czyTankowanieWliczane).map((t) => ({
         id: t.id,
         typ: "paliwo" as const,
         data: t.data,

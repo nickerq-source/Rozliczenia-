@@ -8,6 +8,7 @@ import {
   FakturaWeek,
   UstawieniaPodatkowe,
   WpisInnegoKosztu,
+  WpisTankowania,
 } from "./types";
 import {
   getDniMiesiaca,
@@ -179,7 +180,11 @@ export function obliczPrzychod(faktury: FakturaWeek[]): number {
 // ─── KOSZTY ───────────────────────────────────────────────────────────────────
 
 export function obliczKosztPaliwa(tankowanie: DaneMiesiaca["tankowanie"]): number {
-  return tankowanie.reduce((sum, t) => sum + parseNum(t.koszt), 0);
+  return tankowanie.reduce((sum, t) => sum + (czyTankowanieWliczane(t) ? parseNum(t.koszt) : 0), 0);
+}
+
+export function czyTankowanieWliczane(tankowanie: Pick<WpisTankowania, "status" | "includeInReports">): boolean {
+  return (tankowanie.status ?? "approved") === "approved" && (tankowanie.includeInReports ?? true);
 }
 
 export function czyKosztLeasingu(koszt: Pick<WpisInnegoKosztu, "kategoria">): boolean {

@@ -132,6 +132,11 @@ export function useWorkspace(token: string) {
     []
   );
 
+  /** Aktualizuj całe dane workspace, gdy operacja dotyczy więcej niż jednego miesiąca. */
+  const updateWorkspace = useCallback((updater: (prev: WorkspaceData) => WorkspaceData) => {
+    setData((prev) => updater(prev));
+  }, []);
+
   /** Aktualizuj listę notatek workspace */
   const updateNotatki = useCallback(
     (updater: (prev: Notatka[]) => Notatka[]) => {
@@ -154,5 +159,5 @@ export function useWorkspace(token: string) {
     []
   );
 
-  return { data, loading, saveStatus, updateMiesiac, updateNotatki, updateUstawienia };
+  return { data, loading, saveStatus, updateMiesiac, updateWorkspace, updateNotatki, updateUstawienia };
 }

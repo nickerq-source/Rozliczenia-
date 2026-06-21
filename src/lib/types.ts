@@ -202,12 +202,13 @@ export type KosztPayer = "Artur" | "Damian" | "Firma";
 export interface KosztZalacznik {
   id: string;
   typ: "dokument" | "licznik";
+  attachmentKind?: "receipt" | "odometer" | "tachograph" | "other";
   nazwa: string;
   mime: string;
   storagePath?: string; // ścieżka w buckecie `paragony` (nowe wpisy)
   dataUrl?: string; // legacy: base64 zapisane w JSONB (stare wpisy przed migracją na Storage)
   createdAt: string;
-  aiDocumentType?: "receipt" | "odometer" | "unknown";
+  aiDocumentType?: "receipt" | "odometer" | "tachograph" | "unknown";
   aiConfidence?: number;
   aiNeedsReview?: boolean;
 }
@@ -240,15 +241,28 @@ export interface KosztVatInfo {
 export interface WpisTankowania extends KosztVatInfo {
   id: string;
   data: string;
+  expenseDate?: string; // rzeczywista data z paragonu/faktury
+  accountingMonth?: number; // miesiąc rozliczeniowy, gdy data jest historyczna
+  accountingYear?: number;
+  isHistorical?: boolean;
+  includeInReports?: boolean;
+  status?: "pending" | "approved" | "rejected";
   koszt: number;
   litry?: number; // liczba zatankowanych litrów (opcjonalnie, np. wpis od kierowcy)
+  stationName?: string;
   dodaneBy?: string; // kto dodał wpis (imię kierowcy, gdy z panelu kierowcy)
+  createdBy?: string;
   createdAt?: string;
+  updatedAt?: string;
   fuelType?: string;
   pricePerLiter?: number;
   netAmount?: number;
   vatAmount?: number;
   odometerKm?: number;
+  mileageSource?: "manual" | "ocr" | "ai" | "confirmed_ai" | "tachograph";
+  mileageConfidence?: number;
+  tachoStatus?: string;
+  speed?: number;
   previousOdometerKm?: number;
   kmSinceLastFuel?: number;
   fuelBeforeRefuelLiters?: number;
@@ -268,6 +282,8 @@ export interface WpisTankowania extends KosztVatInfo {
     | "vat_review";
   reviewReasons?: string[];
   vehicleId?: string;
+  note?: string;
+  rejectionReason?: string;
 }
 
 export interface WpisInnegoKosztu extends KosztVatInfo {

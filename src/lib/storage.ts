@@ -11,6 +11,8 @@ const EXT_BY_MIME: Record<string, string> = {
   "image/png": "png",
   "image/webp": "webp",
   "image/gif": "gif",
+  "image/heic": "heic",
+  "image/heif": "heif",
 };
 
 // Górny limit pojedynczego pliku po dekodowaniu (zdjęcia są kompresowane do
