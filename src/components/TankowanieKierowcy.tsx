@@ -15,6 +15,7 @@ import { ZalacznikPreview } from "./ZalacznikPreview";
 import {
   IconGasStation,
   IconCamera,
+  IconPaperclip,
   IconLoader,
   IconCheck,
   IconX,
@@ -460,41 +461,77 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
   const inputCls =
     "mt-0.5 w-full bg-input border border-line rounded-lg px-2.5 py-2 text-sm text-ink placeholder:text-dim/40";
 
+  const pickerCls = `flex items-center justify-center gap-1.5 py-2.5 min-h-[44px] rounded-xl border border-dashed border-amber-brand/50 px-2 text-sm text-amber-brand transition-all ${
+    busy ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-amber-brand/10"
+  }`;
+
   const photoInput = (
-    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-      <label
-        className={`flex items-center justify-center gap-1.5 py-2.5 min-h-[44px] rounded-xl border border-dashed border-amber-brand/50 px-2 text-sm text-amber-brand transition-all ${
-          busy ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-amber-brand/10"
-        }`}
-      >
-        {busy ? <IconLoader size={15} /> : <IconCamera size={15} />}
-        {busy ? t.fuel.reading : "Dodaj zdjęcie faktury/paragonu"}
-        <input
-          type="file"
-          accept="image/*,.heic,.heif"
-          capture="environment"
-          multiple
-          className="hidden"
-          disabled={busy}
-          onChange={(e) => onZdjecia(e, "receipt")}
-        />
-      </label>
-      <label
-        className={`flex items-center justify-center gap-1.5 py-2.5 min-h-[44px] rounded-xl border border-dashed border-amber-brand/50 px-2 text-sm text-amber-brand transition-all ${
-          busy ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:bg-amber-brand/10"
-        }`}
-      >
-        {busy ? <IconLoader size={15} /> : <IconCamera size={15} />}
-        {busy ? t.fuel.reading : "Dodaj zdjęcie licznika/tacho"}
-        <input
-          type="file"
-          accept="image/*,.heic,.heif"
-          multiple
-          className="hidden"
-          disabled={busy}
-          onChange={(e) => onZdjecia(e, "tachograph")}
-        />
-      </label>
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <div className="rounded-2xl border border-line bg-surface2/60 p-2">
+        <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-dim">
+          Faktura / paragon
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          <label className={pickerCls}>
+            {busy ? <IconLoader size={15} /> : <IconCamera size={15} />}
+            {busy ? t.fuel.reading : "Aparat"}
+            <input
+              type="file"
+              accept="image/*,.heic,.heif"
+              capture="environment"
+              multiple
+              className="hidden"
+              disabled={busy}
+              onChange={(e) => onZdjecia(e, "receipt")}
+            />
+          </label>
+          <label className={pickerCls}>
+            {busy ? <IconLoader size={15} /> : <IconPaperclip size={15} />}
+            {busy ? t.fuel.reading : "Galeria"}
+            <input
+              type="file"
+              accept="image/*,.heic,.heif"
+              multiple
+              className="hidden"
+              disabled={busy}
+              onChange={(e) => onZdjecia(e, "receipt")}
+            />
+          </label>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-line bg-surface2/60 p-2">
+        <p className="mb-2 text-[11px] font-bold uppercase tracking-wide text-dim">
+          Licznik / tacho
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          <label className={pickerCls}>
+            {busy ? <IconLoader size={15} /> : <IconCamera size={15} />}
+            {busy ? t.fuel.reading : "Aparat"}
+            <input
+              type="file"
+              accept="image/*,.heic,.heif"
+              capture="environment"
+              multiple
+              className="hidden"
+              disabled={busy}
+              onChange={(e) => onZdjecia(e, "tachograph")}
+            />
+          </label>
+          <label className={pickerCls}>
+            {busy ? <IconLoader size={15} /> : <IconPaperclip size={15} />}
+            {busy ? t.fuel.reading : "Galeria"}
+            <input
+              type="file"
+              accept="image/*,.heic,.heif"
+              multiple
+              className="hidden"
+              disabled={busy}
+              onChange={(e) => onZdjecia(e, "tachograph")}
+            />
+          </label>
+        </div>
+      </div>
     </div>
   );
 
