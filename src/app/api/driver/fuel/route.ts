@@ -310,9 +310,9 @@ export async function POST(req: NextRequest) {
   const wsData = (ws.data ?? {}) as WorkspaceData;
   const dane = (wsData.miesiace?.[miesiac] ?? pustyMiesiac()) as DaneMiesiaca;
 
-  if (dane.zamkniety?.locked) {
-    return NextResponse.json({ error: "Miesiąc jest zamknięty." }, { status: 409 });
-  }
+  // Tankowanie od kierowcy zapisuje się jako pending i nie wpływa na raporty,
+  // więc zamknięcie miesiąca nie może blokować samego przyjęcia zgłoszenia.
+  // Zatwierdzenie do kosztów nadal robi admin i to tam pilnujemy zamknięcia.
 
   if (!body.confirmDuplicate && similarFuelExists(dane, { ...body, data: iso, koszt, litry, odometerKm })) {
     return NextResponse.json(
@@ -583,9 +583,6 @@ export async function DELETE(req: NextRequest) {
   const wpis = dane?.tankowanie?.find((t) => t.id === id);
   if (!dane || !wpis) {
     return NextResponse.json({ error: "Nie znaleziono tankowania" }, { status: 404 });
-  }
-  if (dane.zamkniety?.locked) {
-    return NextResponse.json({ error: "Miesiąc jest zamknięty." }, { status: 409 });
   }
   if (wpis.dodaneBy !== profile.name) {
     return NextResponse.json({ error: "Możesz usuwać tylko własne tankowania." }, { status: 403 });
