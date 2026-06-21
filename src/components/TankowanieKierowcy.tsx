@@ -59,6 +59,8 @@ interface WpisListy {
   reviewReasons?: string[];
   supplierName?: string;
   stationName?: string;
+  pricePerLiter?: number;
+  invoiceNumber?: string;
   zalaczniki?: KosztZalacznik[];
   expenseDate?: string;
   isHistorical?: boolean;
@@ -90,6 +92,8 @@ function todayISO(): string {
 const num = (s: string): number => parseFloat(s.replace(",", "."));
 const ddmm = (iso: string): string => `${iso.slice(8, 10)}.${iso.slice(5, 7)}`;
 const round2 = (n: number): number => Math.round(n * 100) / 100;
+const MAIN_FROM = "2026-06-01";
+const MAIN_TO = "2026-12-31";
 
 function formatMaybeNumber(n: number | undefined | null, suffix = ""): string {
   if (n == null || !Number.isFinite(n)) return "—";
@@ -114,6 +118,21 @@ function bestPhoto(photos: PhotoItem[], type: Exclude<PhotoType, "unknown">): Ph
   return candidates[0] ?? null;
 }
 
+function dateYearSuggestion(iso: string | null | undefined): { original: string; corrected: string } | null {
+  if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
+  if (iso.slice(0, 4) === "2026") return null;
+  const corrected = `2026-${iso.slice(5, 10)}`;
+  return corrected >= MAIN_FROM && corrected <= MAIN_TO ? { original: iso, corrected } : null;
+}
+
+function hasReceiptAttachment(w: WpisListy): boolean {
+  return !!w.zalaczniki?.some((z) => z.attachmentKind === "receipt" || z.typ === "dokument");
+}
+
+function hasMeterAttachment(w: WpisListy): boolean {
+  return !!w.zalaczniki?.some((z) => z.attachmentKind === "odometer" || z.attachmentKind === "tachograph" || z.typ === "licznik");
+}
+
 export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
   const t = driverTexts(lang);
   const [open, setOpen] = useState(false);
@@ -127,6 +146,7 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
   const [lista, setLista] = useState<WpisListy[]>([]);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [delBusyId, setDelBusyId] = useState<string | null>(null);
+  const [updateBusyId, setUpdateBusyId] = useState<string | null>(null);
   const [ostatniWynik, setOstatniWynik] = useState<WpisTankowania | null>(null);
 
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
@@ -145,12 +165,15 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
   const [fSpeed, setFSpeed] = useState("");
   const [fNotatka, setFNotatka] = useState("");
   const [mileageSuggestion, setMileageSuggestion] = useState<string | null>(null);
+  const [rokSuggestion, setRokSuggestion] = useState<{ original: string; corrected: string } | null>(null);
 
   const receiptPhoto = useMemo(() => bestPhoto(photos, "receipt"), [photos]);
   const odometerPhoto = useMemo(() => bestPhoto(photos, "odometer"), [photos]);
   const tachographPhoto = useMemo(() => bestPhoto(photos, "tachograph"), [photos]);
   const anyAiReview = photos.some((p) => p.needsReview || p.type === "unknown");
-  const outsideMainRange = fData < "2026-06-01" || fData > "2026-12-31";
+  const activeYearSuggestion = rokSuggestion && fData === rokSuggestion.original ? rokSuggestion : null;
+  const outsideMainRange = fData < MAIN_FROM || fData > MAIN_TO;
+  const showHistoricalWarning = outsideMainRange && !activeYearSuggestion;
   const hasUnsavedChanges = useMemo(() => {
     if (!open) return false;
     return (
@@ -203,6 +226,7 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
     setFSpeed("");
     setFNotatka("");
     setMileageSuggestion(null);
+    setRokSuggestion(null);
     setPhotos([]);
     setScanInfo(null);
     setBlad(null);
@@ -297,7 +321,10 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
       cena = round2(scan.kwotaBrutto / scan.litry);
     }
 
-    if (scan.data) setFData(scan.data);
+    if (scan.data) {
+      setFData(scan.data);
+      setRokSuggestion(dateYearSuggestion(scan.data));
+    }
     if (scan.sprzedawca) setFSprzedawca(scan.sprzedawca);
     if (scan.nip) setFNip(scan.nip);
     if (scan.documentNumber) setFDokument(scan.documentNumber);
@@ -378,6 +405,10 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
       setBlad("Wybierz VAT albo popraw dane z paragonu.");
       return;
     }
+    if (activeYearSuggestion) {
+      setBlad("Potwierdź datę z paragonu: zostawić odczyt AI czy poprawić rok na 2026.");
+      return;
+    }
     const litry = num(fLitry);
     const cena = num(fCena);
     const netto = num(fKwotaNetto);
@@ -437,6 +468,116 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function aktualizujPending(
+    w: WpisListy,
+    patch: Record<string, unknown>
+  ) {
+    setUpdateBusyId(w.id);
+    setBlad(null);
+    try {
+      const res = await fetch("/api/driver/fuel", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: w.id, ...patch }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setBlad(json.error ?? "Nie udało się zaktualizować tankowania.");
+        return false;
+      }
+      await wczytaj();
+      return true;
+    } catch {
+      setBlad(t.fuel.connectionError);
+      return false;
+    } finally {
+      setUpdateBusyId(null);
+    }
+  }
+
+  async function onDopnijZdjecie(
+    e: React.ChangeEvent<HTMLInputElement>,
+    w: WpisListy,
+    preferredType: "receipt" | "tachograph"
+  ) {
+    const file = e.currentTarget.files?.[0];
+    e.currentTarget.value = "";
+    if (!file) return;
+    setUpdateBusyId(w.id);
+    setBlad(null);
+    try {
+      const dataUrl = await imageToCompressedDataUrl(file, 2000, 0.84);
+      const scan = await scanReceiptDataUrl(dataUrl, file.name);
+      const patch: Record<string, unknown> =
+        preferredType === "receipt"
+          ? {
+              receiptImage: dataUrl,
+              receiptConfidence: scan.confidence ?? 0,
+              aiNeedsReview: scan.needsReview ?? false,
+            }
+          : {
+              tachographImage: dataUrl,
+              tachographConfidence: scan.confidence ?? 0,
+              aiNeedsReview: scan.needsReview ?? false,
+              mileageSource: "tachograph",
+              tachoStatus: scan.tachoStatus ?? undefined,
+              speed: scan.speed ?? undefined,
+            };
+
+      if (preferredType === "tachograph" && scan.odometerKm != null) {
+        if ((scan.confidence ?? 0) >= 0.75 || window.confirm(`Możliwy przebieg: ${scan.odometerKm} km. Zapisać tę wartość?`)) {
+          patch.odometerKm = scan.odometerKm;
+          patch.mileageConfidence = scan.confidence ?? 0;
+        }
+      }
+      const ok = await aktualizujPending(w, patch);
+      if (ok && preferredType === "tachograph" && scan.odometerKm == null) {
+        window.alert("Zdjęcie zapisane. Nie udało się rozpoznać przebiegu — wpisz go ręcznie.");
+      }
+    } catch {
+      setBlad("Nie udało się dodać zdjęcia. Spróbuj ponownie albo wpisz dane ręcznie.");
+    } finally {
+      setUpdateBusyId(null);
+    }
+  }
+
+  async function uzupelnijPrzebieg(w: WpisListy) {
+    const raw = window.prompt("Podaj przebieg pojazdu (km):", w.odometerKm ? String(w.odometerKm) : "");
+    if (raw === null) return;
+    const value = num(raw);
+    if (!isFinite(value) || value <= 0) {
+      window.alert("Podaj prawidłowy przebieg.");
+      return;
+    }
+    await aktualizujPending(w, { odometerKm: Math.round(value * 10) / 10, mileageSource: "manual" });
+  }
+
+  async function edytujPending(w: WpisListy) {
+    const data = window.prompt("Data paragonu (YYYY-MM-DD):", w.expenseDate ?? w.data);
+    if (data === null) return;
+    const kosztRaw = window.prompt("Kwota brutto:", String(w.koszt));
+    if (kosztRaw === null) return;
+    const litryRaw = window.prompt("Litry (opcjonalnie):", w.litry ? String(w.litry) : "");
+    if (litryRaw === null) return;
+    const stacja = window.prompt("Stacja (opcjonalnie):", w.stationName ?? w.supplierName ?? "");
+    if (stacja === null) return;
+    const note = window.prompt("Notatka (opcjonalnie):", w.note ?? "");
+    if (note === null) return;
+    const koszt = num(kosztRaw);
+    const litry = litryRaw.trim() ? num(litryRaw) : undefined;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(data) || !isFinite(koszt) || koszt <= 0) {
+      window.alert("Sprawdź datę i kwotę.");
+      return;
+    }
+    await aktualizujPending(w, {
+      data,
+      koszt,
+      litry: litry != null && isFinite(litry) && litry > 0 ? litry : undefined,
+      sprzedawca: stacja,
+      note,
+    });
   }
 
   async function usun(w: WpisListy) {
@@ -665,7 +806,15 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
                 <div className="grid grid-cols-2 gap-2 text-xs">
                   <label className="text-dim">
                     {t.fuel.date}
-                    <input type="date" value={fData} onChange={(e) => setFData(e.target.value)} className={inputCls} />
+                    <input
+                      type="date"
+                      value={fData}
+                      onChange={(e) => {
+                        setFData(e.target.value);
+                        setRokSuggestion(dateYearSuggestion(e.target.value));
+                      }}
+                      className={inputCls}
+                    />
                   </label>
                   <label className="text-dim">
                     {t.fuel.station}
@@ -743,7 +892,33 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
                 </div>
               </div>
 
-              {outsideMainRange && (
+              {activeYearSuggestion && (
+                <div className="rounded-xl border border-amber-brand/45 bg-amber-brand/10 p-3 text-xs text-amber-brand">
+                  <IconAlertTriangle size={13} className="mr-1 inline" />
+                  AI odczytało datę jako {activeYearSuggestion.original}. Czy to na pewno {activeYearSuggestion.original.slice(0, 4)}, czy poprawić na {activeYearSuggestion.corrected}?
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setRokSuggestion(null)}
+                      className="rounded-lg border border-line px-2 py-1.5 text-[11px] font-bold text-dim hover:text-ink"
+                    >
+                      Zostaw {activeYearSuggestion.original.slice(0, 4)}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFData(activeYearSuggestion.corrected);
+                        setRokSuggestion(null);
+                      }}
+                      className="rounded-lg bg-amber-brand px-2 py-1.5 text-[11px] font-bold text-amber-ink"
+                    >
+                      Popraw na 2026
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {showHistoricalWarning && (
                 <div className="rounded-xl border border-amber-brand/45 bg-amber-brand/10 p-3 text-xs text-amber-brand">
                   <IconAlertTriangle size={13} className="mr-1 inline" />
                   Data z paragonu jest spoza głównego zakresu rozliczeń 2026. Tankowanie zostanie wysłane do admina jako historyczne i domyślnie nie wejdzie do raportów.
@@ -869,6 +1044,13 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
                       {w.odometerKm ? <span className="rounded-full border border-line px-2 py-0.5 text-dim">{w.odometerKm} km</span> : null}
                       {w.tachoStatus ? <span className="rounded-full border border-line px-2 py-0.5 text-dim">Tacho {w.tachoStatus}</span> : null}
                       {w.isHistorical ? <span className="rounded-full border border-amber-brand/40 px-2 py-0.5 text-amber-brand">historyczne</span> : null}
+                      <span className={`rounded-full border px-2 py-0.5 ${hasReceiptAttachment(w) ? "border-green-500/35 text-green-300" : "border-red-500/35 text-red-300"}`}>
+                        Paragon: {hasReceiptAttachment(w) ? "dodany" : "brak"}
+                      </span>
+                      <span className={`rounded-full border px-2 py-0.5 ${hasMeterAttachment(w) ? "border-green-500/35 text-green-300" : "border-red-500/35 text-red-300"}`}>
+                        Licznik/tacho: {hasMeterAttachment(w) ? "dodany" : "brak"}
+                      </span>
+                      {!w.odometerKm ? <span className="rounded-full border border-red-500/35 px-2 py-0.5 text-red-300">brak przebiegu</span> : null}
                       {w.kmSinceLastFuel ? <span className="rounded-full border border-line px-2 py-0.5 text-dim">{w.kmSinceLastFuel} km od ost.</span> : null}
                       {w.fuelConsumptionLPer100Km ? <span className="rounded-full border border-line px-2 py-0.5 text-dim">{w.fuelConsumptionLPer100Km} L/100</span> : null}
                       <span className={`rounded-full border px-2 py-0.5 ${
@@ -900,6 +1082,51 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
                           compact
                         />
                       </div>
+                    ) : null}
+                    {(w.status ?? "approved") === "pending" && (
+                      <div className="mt-2 grid grid-cols-2 gap-1.5">
+                        <label className={`rounded-lg border border-line px-2 py-1.5 text-center text-[11px] font-bold text-amber-brand ${updateBusyId === w.id ? "opacity-50" : "cursor-pointer hover:bg-amber-brand/10"}`}>
+                          {hasReceiptAttachment(w) ? "Zmień paragon" : "Dodaj paragon"}
+                          <input
+                            type="file"
+                            accept="image/*,.heic,.heif"
+                            className="hidden"
+                            disabled={updateBusyId === w.id}
+                            onChange={(e) => onDopnijZdjecie(e, w, "receipt")}
+                          />
+                        </label>
+                        <label className={`rounded-lg border border-line px-2 py-1.5 text-center text-[11px] font-bold text-amber-brand ${updateBusyId === w.id ? "opacity-50" : "cursor-pointer hover:bg-amber-brand/10"}`}>
+                          {hasMeterAttachment(w) ? "Zmień licznik/tacho" : "Dodaj licznik/tacho"}
+                          <input
+                            type="file"
+                            accept="image/*,.heic,.heif"
+                            className="hidden"
+                            disabled={updateBusyId === w.id}
+                            onChange={(e) => onDopnijZdjecie(e, w, "tachograph")}
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => uzupelnijPrzebieg(w)}
+                          disabled={updateBusyId === w.id}
+                          className="rounded-lg border border-line px-2 py-1.5 text-[11px] font-bold text-dim hover:text-ink disabled:opacity-50"
+                        >
+                          Uzupełnij przebieg
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => edytujPending(w)}
+                          disabled={updateBusyId === w.id}
+                          className="rounded-lg border border-line px-2 py-1.5 text-[11px] font-bold text-dim hover:text-ink disabled:opacity-50"
+                        >
+                          Edytuj dane
+                        </button>
+                      </div>
+                    )}
+                    {w.status === "rejected" && w.rejectionReason ? (
+                      <p className="mt-2 rounded-lg border border-red-500/35 bg-red-soft px-2 py-1.5 text-[10px] text-red-200">
+                        Powód odrzucenia: {w.rejectionReason}
+                      </p>
                     ) : null}
                   </div>
 

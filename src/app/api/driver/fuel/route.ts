@@ -76,13 +76,15 @@ function findPreviousFuel(
   profile: Profile,
   currentIso: string,
   currentOdometerKm?: number,
-  vehicleId?: string
+  vehicleId?: string,
+  excludeId?: string
 ): WpisTankowania | null {
   if (!currentOdometerKm) return null;
   const candidates: WpisTankowania[] = [];
   for (const m of MIESIACE_ZAKRESU) {
     const entries = wsData.miesiace?.[m as MiesiącId]?.tankowanie ?? [];
     for (const entry of entries) {
+      if (entry.id === excludeId) continue;
       const odometer = parseNum(entry.odometerKm);
       if (odometer <= 0 || odometer >= currentOdometerKm) continue;
       if (!sameFuelScope(entry, profile, vehicleId)) continue;
@@ -92,6 +94,19 @@ function findPreviousFuel(
   }
   candidates.sort((a, b) => parseNum(b.odometerKm) - parseNum(a.odometerKm));
   return candidates[0] ?? null;
+}
+
+function findFuelEntry(
+  wsData: WorkspaceData,
+  id: string
+): { miesiac: MiesiącId; dane: DaneMiesiaca; wpis: WpisTankowania } | null {
+  for (const m of MIESIACE_ZAKRESU) {
+    const miesiac = m as MiesiącId;
+    const dane = (wsData.miesiace?.[miesiac] ?? pustyMiesiac()) as DaneMiesiaca;
+    const wpis = dane.tankowanie?.find((t) => t.id === id);
+    if (wpis) return { miesiac, dane, wpis };
+  }
+  return null;
 }
 
 function similarFuelExists(
@@ -442,6 +457,194 @@ export async function POST(req: NextRequest) {
   });
 
   return NextResponse.json({ ok: true, wpis });
+}
+
+/**
+ * Aktualizacja własnego tankowania kierowcy, dopóki wpis ma status pending.
+ * Służy m.in. do dopięcia zdjęcia licznika/tacho po wysłaniu paragonu.
+ */
+export async function PATCH(req: NextRequest) {
+  const profile = await getSessionProfile();
+  if (!profile) return NextResponse.json({ error: "Brak sesji" }, { status: 401 });
+  if (profile.role !== "driver") {
+    return NextResponse.json({ error: "Tylko dla kierowcy" }, { status: 403 });
+  }
+
+  let body: {
+    id?: string;
+    data?: string;
+    koszt?: number;
+    litry?: number;
+    cenaZaLitr?: number;
+    sprzedawca?: string;
+    documentNumber?: string;
+    odometerKm?: number;
+    mileageSource?: WpisTankowania["mileageSource"];
+    mileageConfidence?: number;
+    tachoStatus?: string;
+    speed?: number;
+    note?: string;
+    receiptImage?: string;
+    odometerImage?: string;
+    tachographImage?: string;
+    receiptConfidence?: number;
+    odometerConfidence?: number;
+    tachographConfidence?: number;
+    aiNeedsReview?: boolean;
+  };
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Nieprawidłowy JSON" }, { status: 400 });
+  }
+  if (!body.id) return NextResponse.json({ error: "Brak ID tankowania." }, { status: 400 });
+
+  const admin = getAdminSupabase();
+  const { data: ws, error } = await admin
+    .from("workspaces")
+    .select("data")
+    .eq("id", profile.workspace_id)
+    .single();
+  if (error || !ws) return NextResponse.json({ error: "Workspace nie znaleziony" }, { status: 404 });
+
+  const wsData = (ws.data ?? {}) as WorkspaceData;
+  const found = findFuelEntry(wsData, body.id);
+  if (!found) return NextResponse.json({ error: "Nie znaleziono tankowania." }, { status: 404 });
+  const { miesiac: sourceMonth, dane: sourceDane, wpis } = found;
+
+  if (wpis.dodaneBy !== profile.name && wpis.createdBy !== profile.id) {
+    return NextResponse.json({ error: "Możesz edytować tylko własne tankowania." }, { status: 403 });
+  }
+  if ((wpis.status ?? "approved") !== "pending") {
+    return NextResponse.json({ error: "Możesz edytować tylko tankowania do sprawdzenia." }, { status: 403 });
+  }
+
+  const iso =
+    typeof body.data === "string" && /^\d{4}-\d{2}-\d{2}$/.test(body.data)
+      ? body.data
+      : wpis.expenseDate ?? wpis.data;
+  const isHistorical = !inMainAccountingRange(iso);
+  const accountingMonth = isHistorical ? normalizeAccountingMonth(wpis.accountingMonth, iso) : monthFromIso(iso);
+  const accountingYear = ROK;
+  const includeInReports = isHistorical ? false : true;
+  const koszt =
+    typeof body.koszt === "number" && isFinite(body.koszt) && body.koszt > 0
+      ? Math.round(body.koszt * 100) / 100
+      : wpis.koszt;
+  const litry =
+    typeof body.litry === "number" && isFinite(body.litry) && body.litry > 0
+      ? Math.round(body.litry * 100) / 100
+      : body.litry === null
+      ? undefined
+      : wpis.litry;
+  const pricePerLiter = validPositiveNumber(body.cenaZaLitr) ?? wpis.pricePerLiter;
+  const odometerKm = validMileage(body.odometerKm) ?? wpis.odometerKm;
+
+  const [receiptAttachment, odometerAttachment, tachographAttachment] = await Promise.all([
+    uploadFuelAttachment(profile.workspace_id, body.receiptImage, "dokument", "paragon.jpg", {
+      aiDocumentType: "receipt",
+      attachmentKind: "receipt",
+      aiConfidence: body.receiptConfidence,
+      aiNeedsReview: body.aiNeedsReview,
+    }),
+    uploadFuelAttachment(profile.workspace_id, body.odometerImage, "licznik", "licznik.jpg", {
+      aiDocumentType: "odometer",
+      attachmentKind: "odometer",
+      aiConfidence: body.odometerConfidence,
+      aiNeedsReview: body.aiNeedsReview,
+    }),
+    uploadFuelAttachment(profile.workspace_id, body.tachographImage, "licznik", "tachograf.jpg", {
+      aiDocumentType: "tachograph",
+      attachmentKind: "tachograph",
+      aiConfidence: body.tachographConfidence,
+      aiNeedsReview: body.aiNeedsReview,
+    }),
+  ]);
+  const addedAttachments = [receiptAttachment, odometerAttachment, tachographAttachment].filter(Boolean) as KosztZalacznik[];
+  const zalaczniki = [...(wpis.zalaczniki ?? []), ...addedAttachments];
+  const hasReceiptPhoto = zalaczniki.some((z) => z.attachmentKind === "receipt" || z.typ === "dokument");
+  const hasOdometerPhoto = zalaczniki.some((z) => z.attachmentKind === "odometer" || z.attachmentKind === "tachograph" || z.typ === "licznik");
+  const previous = findPreviousFuel(wsData, profile, iso, odometerKm, wpis.vehicleId, wpis.id);
+  const metrics = computeFuelMetrics({
+    litersFilled: litry,
+    grossAmount: koszt,
+    netAmount: wpis.netAmount,
+    currentOdometerKm: odometerKm,
+    previousOdometerKm: previous?.odometerKm,
+    hasReceiptPhoto,
+    hasOdometerPhoto,
+    aiNeedsReview: body.aiNeedsReview ?? wpis.needsReview,
+    vatNeedsReview: wpis.vatRate ? false : true,
+  });
+
+  const updated: WpisTankowania = {
+    ...wpis,
+    data: iso,
+    expenseDate: iso,
+    accountingMonth,
+    accountingYear,
+    isHistorical,
+    includeInReports,
+    status: "pending",
+    koszt,
+    litry,
+    pricePerLiter,
+    supplierName: typeof body.sprzedawca === "string" ? body.sprzedawca.trim() || undefined : wpis.supplierName,
+    stationName: typeof body.sprzedawca === "string" ? body.sprzedawca.trim() || undefined : wpis.stationName,
+    invoiceNumber: typeof body.documentNumber === "string" ? body.documentNumber.trim() || undefined : wpis.invoiceNumber,
+    odometerKm,
+    mileageSource:
+      body.mileageSource ??
+      (tachographAttachment ? "tachograph" : odometerAttachment ? "ai" : odometerKm ? wpis.mileageSource ?? "manual" : undefined),
+    mileageConfidence: validPositiveNumber(body.mileageConfidence ?? body.tachographConfidence ?? body.odometerConfidence) ?? wpis.mileageConfidence,
+    tachoStatus: typeof body.tachoStatus === "string" ? body.tachoStatus.trim() || undefined : wpis.tachoStatus,
+    speed: typeof body.speed === "number" && isFinite(body.speed) ? body.speed : wpis.speed,
+    note: typeof body.note === "string" ? body.note.trim() || undefined : wpis.note,
+    documentStatus: hasReceiptPhoto ? "paragon" : wpis.documentStatus,
+    hasInvoice: hasReceiptPhoto ? wpis.hasInvoice : false,
+    zalaczniki: zalaczniki.length ? zalaczniki : undefined,
+    updatedAt: new Date().toISOString(),
+    ...metrics,
+  };
+
+  const targetMonth = accountingMonth as MiesiącId;
+  const targetDane = (wsData.miesiace?.[targetMonth] ?? pustyMiesiac()) as DaneMiesiaca;
+  const nowaData: WorkspaceData = {
+    ...wsData,
+    miesiace: {
+      ...wsData.miesiace,
+      [sourceMonth]:
+        sourceMonth === targetMonth
+          ? { ...sourceDane, tankowanie: sourceDane.tankowanie.map((t) => (t.id === wpis.id ? updated : t)) }
+          : { ...sourceDane, tankowanie: sourceDane.tankowanie.filter((t) => t.id !== wpis.id) },
+      ...(sourceMonth === targetMonth
+        ? {}
+        : { [targetMonth]: { ...targetDane, tankowanie: [...(targetDane.tankowanie ?? []), updated] } }),
+    },
+  };
+
+  const { error: saveErr } = await admin
+    .from("workspaces")
+    .update({ data: nowaData, updated_at: new Date().toISOString() })
+    .eq("id", profile.workspace_id);
+  if (saveErr) return NextResponse.json({ error: saveErr.message }, { status: 503 });
+
+  const addedTacho = !!tachographAttachment || !!odometerAttachment;
+  const opis = addedTacho
+    ? odometerKm
+      ? `Kierowca ${profile.name} dodał zdjęcie tacho. Rozpoznany przebieg: ${odometerKm} km.`
+      : `Kierowca ${profile.name} dodał zdjęcie licznika/tacho do tankowania ${formatZlCaly(koszt)} z dnia ${iso}.`
+    : `Kierowca ${profile.name} zaktualizował tankowanie ${formatZlCaly(koszt)} z dnia ${iso}.`;
+  await powiadomAdminow(admin, profile, {
+    action: addedTacho ? "tankowanie_tacho_dodane" : "tankowanie_kierowca_zmienione",
+    entityId: wpis.id,
+    oldValue: { koszt: wpis.koszt, data: wpis.data, odometerKm: wpis.odometerKm },
+    newValue: { koszt: updated.koszt, data: updated.data, odometerKm: updated.odometerKm, status: updated.status },
+    opis,
+    url: `/admin?miesiac=${targetMonth}&zakladka=koszty`,
+  });
+
+  return NextResponse.json({ ok: true, wpis: updated, miesiac: targetMonth });
 }
 
 /**
