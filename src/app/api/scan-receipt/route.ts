@@ -166,9 +166,9 @@ function normalizeDate(raw: unknown): string | null {
     }
   }
   if (!iso) return null;
-  // Aplikacja rozlicza wyłącznie rok ROK (2026). Błędnie odczytany rok przez
-  // OCR (np. 2025) korygujemy na ROK — nie podpinamy paragonów z innych lat.
-  if (iso.slice(0, 4) !== String(ROK)) iso = `${ROK}${iso.slice(4)}`;
+  // Akceptujemy rok ROK (2026) i późniejsze. Rok wcześniejszy (np. 2025) to
+  // błędny odczyt OCR — podbijamy do ROK, zachowując miesiąc i dzień.
+  if (parseInt(iso.slice(0, 4), 10) < ROK) iso = `${ROK}${iso.slice(4)}`;
   return iso;
 }
 

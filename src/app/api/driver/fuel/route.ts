@@ -53,9 +53,9 @@ function inMainAccountingRange(iso: string): boolean {
   return iso >= `${ROK}-06-01` && iso <= `${ROK}-12-31`;
 }
 
-/** Korekta roku na ROK (2026) — nie przyjmujemy tankowań z innych lat. */
+/** Akceptujemy rok ROK (2026) i późniejsze; rok wcześniejszy → ROK. */
 function korygujRok(iso: string): string {
-  return iso.slice(0, 4) === String(ROK) ? iso : `${ROK}${iso.slice(4)}`;
+  return parseInt(iso.slice(0, 4), 10) < ROK ? `${ROK}${iso.slice(4)}` : iso;
 }
 
 function monthFromIso(iso: string): MiesiącId {
