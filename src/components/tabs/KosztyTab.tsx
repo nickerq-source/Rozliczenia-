@@ -16,6 +16,7 @@ import {
   KosztZalacznik,
   MiesiącId,
   UstawieniaPodatkowe,
+  VatRate,
   WpisTankowania,
   WpisInnegoKosztu,
   ZgloszenieDnia,
@@ -317,6 +318,47 @@ function PayerSelect({
         {PAYER_OPTIONS.map((payer) => (
           <option key={payer.id} value={payer.id}>
             {payer.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+const VAT_STAWKI: { id: VatRate; label: string }[] = [
+  { id: "0.23", label: "23%" },
+  { id: "0.08", label: "8%" },
+  { id: "0.05", label: "5%" },
+  { id: "0", label: "0%" },
+  { id: "zw", label: "zw." },
+  { id: "np", label: "np." },
+];
+
+// Zawsze widoczny wybór stawki VAT — admin może poprawić VAT bez rozwijania
+// szczegółów, niezależnie od statusu wpisu (AI mogło źle dobrać albo wcale).
+function VatSelect({
+  value,
+  onChange,
+  compact = false,
+  className,
+}: {
+  value: VatRate;
+  onChange: (value: VatRate) => void;
+  compact?: boolean;
+  className?: string;
+}) {
+  return (
+    <label className={cn("block text-[11px] font-semibold text-dim", compact && "min-w-[92px]", className)}>
+      <span className="sr-only sm:not-sr-only">VAT</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value as VatRate)}
+        className="mt-0 sm:mt-1 w-full min-h-[40px] rounded-full border border-line bg-input px-3 py-2 text-xs font-bold text-ink"
+        title="Stawka VAT kosztu"
+      >
+        {VAT_STAWKI.map((s) => (
+          <option key={s.id} value={s.id}>
+            VAT {s.label}
           </option>
         ))}
       </select>
@@ -2064,10 +2106,13 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
 
   // Paginacja: tyle stron ile trzeba, po KOSZTY_NA_STRONE pozycji.
   // Stronę klampujemy, żeby po usunięciu wpisów nie wisieć na nieistniejącej.
-  const tankTotalStron = Math.max(1, Math.ceil(dane.tankowanie.length / KOSZTY_NA_STRONE));
-  const tankStrona = Math.min(stronaTank, tankTotalStron);
-  const tankowanieWidoczne = dane.tankowanie.slice((tankStrona - 1) * KOSZTY_NA_STRONE, tankStrona * KOSZTY_NA_STRONE);
+  // Pending (od kierowcy) żyją wyłącznie w karcie „do zatwierdzenia", żeby nie
+  // dublowały się w głównej liście z innym wyglądem. Lista pokazuje resztę.
   const tankowaniaDoZatwierdzenia = (dane.tankowanie ?? []).filter((t) => t.status === "pending");
+  const tankowaniaZatwierdzone = (dane.tankowanie ?? []).filter((t) => t.status !== "pending");
+  const tankTotalStron = Math.max(1, Math.ceil(tankowaniaZatwierdzone.length / KOSZTY_NA_STRONE));
+  const tankStrona = Math.min(stronaTank, tankTotalStron);
+  const tankowanieWidoczne = tankowaniaZatwierdzone.slice((tankStrona - 1) * KOSZTY_NA_STRONE, tankStrona * KOSZTY_NA_STRONE);
   const leasingEntries = dane.inneKoszty.filter((k) => czyKosztLeasingu(k));
   const inneBezLeasingu = dane.inneKoszty.filter((k) => !czyKosztLeasingu(k));
   const inneTotalStron = Math.max(1, Math.ceil(inneBezLeasingu.length / KOSZTY_NA_STRONE));
@@ -2255,16 +2300,40 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
                     <p className="tabular-nums font-bold text-ink">{t.litry ? `${t.litry} l` : "brak"}</p>
                   </div>
                   <div className="rounded-xl border border-line bg-input px-2 py-1.5">
-                    <p className="text-dim">Przebieg</p>
-                    <p className="tabular-nums font-bold text-ink">{t.odometerKm ? `${t.odometerKm} km` : "brak"}</p>
-                  </div>
-                  <div className="rounded-xl border border-line bg-input px-2 py-1.5">
-                    <p className="text-dim">Tacho</p>
-                    <p className="font-bold text-ink">{t.tachoStatus || "brak"}</p>
-                  </div>
-                  <div className="rounded-xl border border-line bg-input px-2 py-1.5">
                     <p className="text-dim">Raporty</p>
                     <p className="font-bold text-ink">{t.includeInReports ? "wliczane" : "archiwum"}</p>
+                  </div>
+                </div>
+                <div className="mt-2">
+                  <p className="mb-0.5 text-[10px] font-bold uppercase tracking-wider text-dim">
+                    Przebieg (km){t.odometerKm ? "" : " — brak, wpisz ręcznie"}
+                  </p>
+                  <NumInput
+                    value={t.odometerKm ?? 0}
+                    onChange={(v) => updateTankowanie(t.id, { odometerKm: v > 0 ? v : undefined, mileageSource: "manual" })}
+                    placeholder="np. 252320"
+                  />
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <div>
+                    <p className="mb-0.5 text-[10px] font-bold uppercase tracking-wider text-dim">Kto zapłacił</p>
+                    <PayerSelect
+                      value={t.paidBy}
+                      onChange={(paidBy) => updateTankowanie(t.id, { paidBy })}
+                      compact
+                    />
+                  </div>
+                  <div>
+                    <p className="mb-0.5 text-[10px] font-bold uppercase tracking-wider text-dim">Stawka VAT</p>
+                    <VatSelect
+                      value={t.vatRate ?? domyslnyVatKategorii(t.kategoria ?? "paliwo_adblue", ustawienia).vatRate}
+                      onChange={(vatRate) => {
+                        const patch = { vatRate, vatZrodlo: "manual" as const };
+                        updateTankowanie(t.id, patch);
+                        logVatPatch("paliwo", t.id, patch, t);
+                      }}
+                      compact
+                    />
                   </div>
                 </div>
                 {t.isHistorical && (
@@ -2748,7 +2817,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
         <div className="space-y-2">
           {tankowanieWidoczne.map((t) => (
             <div key={t.id} className="rounded-xl border border-line/60 p-2 space-y-1.5">
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-[auto_minmax(0,1fr)_auto_auto] sm:items-center">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-[auto_minmax(0,1fr)_auto_auto_auto] sm:items-center">
                 <DatePill
                   value={t.data}
                   onChange={(v) => updateTankowanie(t.id, { data: v })}
@@ -2765,7 +2834,17 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
                   value={t.paidBy}
                   onChange={(paidBy) => updateTankowanie(t.id, { paidBy })}
                   compact
-                  className="col-span-2 sm:col-span-1"
+                  className="sm:col-span-1"
+                />
+                <VatSelect
+                  value={t.vatRate ?? domyslnyVatKategorii(t.kategoria ?? "paliwo_adblue", ustawienia).vatRate}
+                  onChange={(vatRate) => {
+                    const patch = { vatRate, vatZrodlo: "manual" as const };
+                    updateTankowanie(t.id, patch);
+                    logVatPatch("paliwo", t.id, patch, t);
+                  }}
+                  compact
+                  className="sm:col-span-1"
                 />
                 <div className="col-span-2 flex justify-end gap-1 sm:col-span-1">
                   <SzczegolyToggle
@@ -2806,6 +2885,15 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
                   )}
                 </p>
               )}
+              <label className="mt-1.5 flex items-center gap-2 text-[11px] font-semibold text-dim">
+                <span className="shrink-0">Przebieg (km){t.odometerKm ? "" : " — brak"}</span>
+                <NumInput
+                  value={t.odometerKm ?? 0}
+                  onChange={(v) => updateTankowanie(t.id, { odometerKm: v > 0 ? v : undefined, mileageSource: "manual" })}
+                  placeholder="wpisz, jeśli brak"
+                  className="!text-left max-w-[160px]"
+                />
+              </label>
               <VatMiniInfo
                 wpis={{ ...t, kategoria: t.kategoria ?? "paliwo_adblue" }}
                 ustawienia={ustawienia}

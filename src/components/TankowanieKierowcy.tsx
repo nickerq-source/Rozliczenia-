@@ -351,7 +351,7 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
       for (const file of files) {
         const dataUrl = await imageToCompressedDataUrl(file, 2000, 0.84);
         try {
-          const scan = await scanReceiptDataUrl(dataUrl, file.name);
+          const scan = await scanReceiptDataUrl(dataUrl, file.name, preferredType);
           const type = ((scan.documentType && scan.documentType !== "unknown" ? scan.documentType : preferredType) ?? "unknown") as PhotoType;
           nextItems.push({
             id: crypto.randomUUID(),
@@ -509,7 +509,7 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
     setBlad(null);
     try {
       const dataUrl = await imageToCompressedDataUrl(file, 2000, 0.84);
-      const scan = await scanReceiptDataUrl(dataUrl, file.name);
+      const scan = await scanReceiptDataUrl(dataUrl, file.name, preferredType);
       const patch: Record<string, unknown> =
         preferredType === "receipt"
           ? {
@@ -873,14 +873,6 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
                       {mileageSuggestion}
                     </p>
                   )}
-                  <label className="text-dim">
-                    Status tacho
-                    <input value={fTachoStatus} onChange={(e) => setFTachoStatus(e.target.value.toUpperCase())} placeholder="np. OUT" className={inputCls} />
-                  </label>
-                  <label className="text-dim">
-                    Prędkość
-                    <input inputMode="decimal" value={fSpeed} onChange={(e) => setFSpeed(e.target.value)} placeholder="0" className={`${inputCls} tabular-nums`} />
-                  </label>
                   <label className="text-dim col-span-2">
                     Nr dokumentu
                     <input value={fDokument} onChange={(e) => setFDokument(e.target.value)} placeholder="opcjonalnie" className={inputCls} />

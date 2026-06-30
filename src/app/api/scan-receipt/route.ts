@@ -125,6 +125,36 @@ Licznik:
 
 Jeśli pole nie jest widoczne, zwróć null. Nie zgaduj.`;
 
+// Dedykowany prompt, gdy kierowca wprost wskazał "Licznik / tacho". Skupiamy
+// model wyłącznie na odczycie przebiegu z wyświetlacza (7-seg, pomarańczowe/
+// czerwone/zielone podświetlenie) — to znacząco poprawia trudne zdjęcia.
+const MILEAGE_PROMPT = `To zdjęcie LICZNIKA przebiegu albo wyświetlacza TACHOGRAFU w ciężarówce. Cyfry są często 7-segmentowe, na POMARAŃCZOWYM, bursztynowym, czerwonym albo zielonym podświetleniu i na ciemnym tle; zdjęcie bywa pod kątem, z odblaskiem i nieostre.
+Twoje JEDYNE zadanie: odczytać CAŁKOWITY przebieg pojazdu w kilometrach — dużą liczbę, zwykle 5–7 cyfr, czasem z jedną cyfrą po kropce/przecinku (np. 252020.8).
+
+NIE bierz jako przebiegu:
+- prędkości (liczba tuż przed "km/h"),
+- godziny/zegara (np. 05:34, 14:07),
+- licznika dziennego / TRIP / "Trip" (mniejsza liczba),
+- temperatury, zasięgu (DTE), spalania chwilowego, obrotów (rpm), poziomu paliwa.
+Jeśli widzisz kilka liczb, przebieg to ta NAJWIĘKSZA, całkowita (bez "km/h", bez ":").
+
+Zwróć WYŁĄCZNIE czysty JSON, bez markdown:
+{
+  "documentType": "odometer" | "tachograph",
+  "odometerKm": number | null,
+  "mileage": number | null,
+  "mileage_text": string | null,
+  "tacho_status": string | null,
+  "speed": number | null,
+  "confidence": number
+}
+- documentType: "tachograph" gdy widać status (OUT/IN/REST/DRIVE/WORK) lub "km/h"; inaczej "odometer".
+- odometerKm i mileage = ta sama liczba (całkowity przebieg), kropka dziesiętna.
+- mileage_text = dokładnie odczytany ciąg, np. "252020.8 km".
+- tacho_status = OUT/IN/REST/DRIVE/WORK jeśli widoczny, inaczej null.
+- speed = liczba przed km/h jeśli widoczna, inaczej null.
+- confidence 0..1 — jak pewny jesteś odczytu przebiegu. Jeśli naprawdę nie widać przebiegu: odometerKm=null, mileage=null.`;
+
 function empty(type: DocumentType = "unknown"): OdczytZdjeciaTankowania {
   return { ...PUSTY, documentType: type };
 }
@@ -291,10 +321,20 @@ function validateVatMath(input: {
   return { needsReview: reasons.length > 0, reasons };
 }
 
-function waliduj(raw: unknown): OdczytZdjeciaTankowania {
-  if (!raw || typeof raw !== "object") return empty("unknown");
+function waliduj(raw: unknown, opts: { forceMileage?: boolean } = {}): OdczytZdjeciaTankowania {
+  if (!raw || typeof raw !== "object") {
+    // Kierowca wprost wskazał licznik/tacho — nie pozwól, by pusty/niejasny
+    // odczyt wpadł w gałąź "receipt"; zwróć pustą gałąź przebiegu do uzupełnienia.
+    return opts.forceMileage ? empty("odometer") : empty("unknown");
+  }
   const o = raw as Record<string, unknown>;
-  const documentType = normalizeDocumentType(o.documentType);
+  let documentType = normalizeDocumentType(o.documentType);
+  // Gdy hint = licznik/tacho, a model się waha (unknown/receipt) — wymuś gałąź
+  // przebiegu, żeby zawsze próbować odczytać kilometry (status/prędkość → tacho).
+  if (opts.forceMileage && documentType !== "odometer" && documentType !== "tachograph") {
+    const maTacho = typeof o.tacho_status === "string" || typeof o.tachoStatus === "string" || o.speed != null;
+    documentType = maTacho ? "tachograph" : "odometer";
+  }
   const confidence = clamp01(toNum(o.confidence));
   const baseNeedsReview = typeof o.needsReview === "boolean" ? o.needsReview : true;
 
@@ -447,11 +487,17 @@ function parseDataUrl(dataUrl: string): { data: string } | null {
   return { data: m[1].replace(/\s/g, "") };
 }
 
+function normalizeHint(raw: unknown): DocumentType | undefined {
+  if (raw === "receipt" || raw === "odometer" || raw === "tachograph") return raw;
+  return undefined;
+}
+
 async function readImageFromRequest(req: NextRequest): Promise<{
   data: string;
   fileName?: string;
   fileType?: string;
   fileSize: number;
+  hint?: DocumentType;
 }> {
   const contentType = req.headers.get("content-type") ?? "";
   const dev = process.env.NODE_ENV !== "production";
@@ -464,11 +510,13 @@ async function readImageFromRequest(req: NextRequest): Promise<{
     if (file.size > MAX_IMAGE_BYTES) throw new Error("Zdjęcie jest za duże po kompresji.");
 
     const buffer = Buffer.from(await file.arrayBuffer());
+    const hint = normalizeHint(form.get("hint"));
     if (dev) {
       console.log("[scan-receipt] file", {
         name: file.name,
         type: file.type,
         size: file.size,
+        hint,
       });
     }
 
@@ -477,10 +525,11 @@ async function readImageFromRequest(req: NextRequest): Promise<{
       fileName: file.name,
       fileType: file.type,
       fileSize: file.size,
+      hint,
     };
   }
 
-  let body: { image?: string };
+  let body: { image?: string; hint?: string };
   try {
     body = await req.json();
   } catch {
@@ -491,11 +540,13 @@ async function readImageFromRequest(req: NextRequest): Promise<{
   if (!parsed) throw new Error("Brak prawidłowego obrazu.");
   const bytes = Math.ceil((parsed.data.length * 3) / 4);
   if (bytes > MAX_IMAGE_BYTES) throw new Error("Zdjęcie jest za duże po kompresji.");
-  if (dev) console.log("[scan-receipt] dataUrl", { bytes });
+  const hint = normalizeHint(body.hint);
+  if (dev) console.log("[scan-receipt] dataUrl", { bytes, hint });
 
   return {
     data: parsed.data,
     fileSize: bytes,
+    hint,
   };
 }
 
@@ -506,7 +557,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Brak dostępu" }, { status: 403 });
   }
 
-  let image: { data: string; fileName?: string; fileType?: string; fileSize: number };
+  let image: { data: string; fileName?: string; fileType?: string; fileSize: number; hint?: DocumentType };
   try {
     image = await readImageFromRequest(req);
   } catch (error) {
@@ -538,10 +589,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const mileageHint = image.hint === "odometer" || image.hint === "tachograph";
+
   try {
     const client = new Anthropic({ apiKey: apiKey.key });
     const response = await client.messages.create({
-      model: "claude-haiku-4-5",
+      // Dla odczytu przebiegu z wyświetlacza (trudne zdjęcia 7-seg na kolorowym
+      // podświetleniu) bierzemy mocniejszy model; paragony zostają na tańszym Haiku.
+      model: mileageHint ? "claude-sonnet-4-6" : "claude-haiku-4-5",
       max_tokens: 600,
       messages: [
         {
@@ -555,7 +610,7 @@ export async function POST(req: NextRequest) {
                 data: image.data,
               },
             },
-            { type: "text", text: PROMPT },
+            { type: "text", text: mileageHint ? MILEAGE_PROMPT : PROMPT },
           ],
         },
       ],
@@ -570,13 +625,13 @@ export async function POST(req: NextRequest) {
       if (process.env.NODE_ENV !== "production") console.log("[scan-receipt] brak JSON w odpowiedzi:", text.slice(0, 300));
       return NextResponse.json(
         {
-          ...empty("unknown"),
+          ...empty(mileageHint ? "odometer" : "unknown"),
           _empty: true,
           error: "Nie udało się automatycznie rozpoznać danych. Wpisz je ręcznie.",
         }
       );
     }
-    const wynik = waliduj(JSON.parse(match[0]));
+    const wynik = waliduj(JSON.parse(match[0]), { forceMileage: mileageHint });
     if (process.env.NODE_ENV !== "production") {
       console.log("[scan-receipt] odczyt:", JSON.stringify({
         ...wynik,
@@ -597,7 +652,7 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json(
       {
-        ...empty("unknown"),
+        ...empty(mileageHint ? "odometer" : "unknown"),
         _apiError: true,
         error: "Nie udało się automatycznie rozpoznać danych. Wpisz je ręcznie.",
         reviewReasons: [message],

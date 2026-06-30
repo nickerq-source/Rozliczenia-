@@ -57,10 +57,15 @@ function dataUrlToBlob(dataUrl: string): Blob {
   return new Blob([bytes], { type: mime });
 }
 
-export async function scanReceiptDataUrl(dataUrl: string, fileName = "paragon.jpg"): Promise<ReceiptScanResult> {
+export async function scanReceiptDataUrl(
+  dataUrl: string,
+  fileName = "paragon.jpg",
+  hint?: "receipt" | "odometer" | "tachograph"
+): Promise<ReceiptScanResult> {
   const blob = dataUrlToBlob(dataUrl);
   const form = new FormData();
   form.append("file", blob, fileName.replace(/\.(heic|heif)$/i, ".jpg"));
+  if (hint) form.append("hint", hint);
 
   const res = await fetch("/api/scan-receipt", {
     method: "POST",
