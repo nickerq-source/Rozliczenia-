@@ -44,6 +44,7 @@ import {
 } from "@/lib/business-logic";
 import { buildFuelStats, FuelStatsRow } from "@/lib/fuel-stats";
 import { fuelStatusLabel } from "@/lib/fuel-calculations";
+import { scanReceiptDataUrl } from "@/lib/receipt-scan-client";
 import {
   getDniMiesiaca,
   isSobota,
@@ -1516,6 +1517,29 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
       });
     } catch (error) {
       showToast(error instanceof Error ? error.message : "Nie udało się dodać załącznika");
+      return;
+    }
+
+    // Zdjęcie licznika na tankowaniu — spróbuj odczytać przebieg (OCR jak u
+    // kierowcy: hint "odometer" → Sonnet + mileage-prompt) i wpisać go w wpis.
+    if (kosztTyp === "tankowanie" && zalacznikTyp === "licznik") {
+      try {
+        showToast("Odczytuję przebieg ze zdjęcia…");
+        const dataUrl = await imageToCompressedDataUrl(file);
+        const scan = await scanReceiptDataUrl(dataUrl, file.name, "odometer");
+        if (scan.odometerKm != null) {
+          updateTankowanie(id, {
+            odometerKm: scan.odometerKm,
+            mileageSource: scan.tachoStatus ? "tachograph" : "ai",
+            mileageConfidence: scan.confidence,
+          });
+          showToast(`Odczytano przebieg: ${scan.odometerKm} km`);
+        } else {
+          showToast("Nie odczytano przebiegu — wpisz ręcznie w polu „Przebieg (km)”.");
+        }
+      } catch {
+        showToast("Nie udało się odczytać przebiegu — wpisz ręcznie.");
+      }
     }
   }
 
