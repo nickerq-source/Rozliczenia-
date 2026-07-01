@@ -21,7 +21,7 @@ import {
   WpisInnegoKosztu,
   ZgloszenieDnia,
 } from "@/lib/types";
-import { KATEGORIE, kategoriaLabel, domyslnyVatKategorii, rozbijWpis } from "@/lib/tax";
+import { kategoriaLabel, domyslnyVatKategorii, rozbijWpis } from "@/lib/tax";
 import { TYP_DNIA_LABEL, TYPY_DNIA, typDniaMeta, czyWolny, maKolka, maZlecenia } from "@/lib/day-type";
 import { kategoryzujLokalnie } from "@/lib/categorize";
 import {
@@ -72,6 +72,7 @@ import {
 } from "../ui/icons";
 import { logChange } from "@/lib/audit";
 import { SkanParagonu } from "../SkanParagonu";
+import { Rozliczenie5050Panel } from "../Rozliczenie5050Panel";
 import { ZalacznikPreview } from "../ZalacznikPreview";
 import { cn } from "@/lib/utils";
 import { useAppBackLayer, useSwipeNavigation } from "@/lib/mobile-navigation";
@@ -83,6 +84,8 @@ interface Props {
   token: string;
   userName: string;
   ustawienia: UstawieniaPodatkowe;
+  // Wszystkie miesiące — potrzebne do rozliczenia 50/50 narastająco
+  wszystkieMiesiace?: Partial<Record<MiesiącId, DaneMiesiaca>>;
   // Id zgłoszenia z deep-linku powiadomienia — podświetlamy dzień
   focusZgloszenieId?: string | null;
   onMoveTankowanie?: (id: string, targetMonth: MiesiącId, patch: Partial<WpisTankowania>) => boolean;
@@ -160,8 +163,6 @@ const PAYER_OPTIONS: { id: KosztPayer; label: string }[] = [
   { id: "Firma", label: "Firma" },
 ];
 
-type PayerFilter = "all" | KosztPayer;
-type PodkategoriaKosztow = "all" | "tankowanie" | "leasing" | "samochod_dzialalnosc";
 type WidokKosztow =
   | "podsumowanie"
   | "wyplata"
@@ -169,13 +170,6 @@ type WidokKosztow =
   | "samochod"
   | "rozliczenie"
   | "statystyki";
-
-const PODKATEGORIE_KOSZTOW: { id: PodkategoriaKosztow; label: string }[] = [
-  { id: "all", label: "wszystkie" },
-  { id: "tankowanie", label: "Tankowanie" },
-  { id: "leasing", label: "Leasing" },
-  { id: "samochod_dzialalnosc", label: "Samochód i działalność" },
-];
 
 const WIDOKI_KOSZTOW: { id: WidokKosztow; label: string; short: string }[] = [
   { id: "podsumowanie", label: "Podsumowanie", short: "Podsum." },
@@ -210,11 +204,6 @@ function kosztRozliczanyZFirma(wpis: KosztVatInfo): boolean {
   return wpis.settleWithCompany ?? wpis.kategoria === "leasing";
 }
 
-function podkategoriaKosztu(typ: "tankowanie" | "inne", kategoria: KategoriaKosztu | undefined): Exclude<PodkategoriaKosztow, "all"> {
-  if (typ === "tankowanie" || kategoria === "paliwo_adblue") return "tankowanie";
-  if (kategoria === "leasing") return "leasing";
-  return "samochod_dzialalnosc";
-}
 
 function KosztySectionSwitch({
   active,
@@ -364,6 +353,44 @@ function VatSelect({
         ))}
       </select>
     </label>
+  );
+}
+
+// Przełącznik „Wlicz do 50/50" + opcjonalna notatka (np. „prywatne").
+function Split5050Control({
+  value,
+  note,
+  onToggle,
+  onNote,
+}: {
+  value: boolean;
+  note?: string;
+  onToggle: () => void;
+  onNote: (v: string) => void;
+}) {
+  return (
+    <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center">
+      <button
+        type="button"
+        onClick={onToggle}
+        className={cn(
+          "rounded-full border px-3 py-1.5 text-[11px] font-bold transition-colors",
+          value
+            ? "border-green-500/40 bg-green-soft text-green-200 hover:bg-green-500/20"
+            : "border-line bg-input text-dim hover:text-ink"
+        )}
+        title="Czy koszt wchodzi do rozliczenia 50/50 Artur/Damian"
+      >
+        {value ? "✓ Rozliczenie 50/50" : "Poza 50/50"}
+      </button>
+      <input
+        type="text"
+        value={note ?? ""}
+        onChange={(e) => onNote(e.target.value)}
+        placeholder="notatka 50/50 (np. prywatne)"
+        className="w-full min-w-0 rounded-full border border-line bg-input px-3 py-1.5 text-[11px] text-ink placeholder:text-dim/40"
+      />
+    </div>
   );
 }
 
@@ -838,335 +865,9 @@ function FuelStatsPanel({
   );
 }
 
-type RozliczenieKosztu = {
-  id: string;
-  nazwa: string;
-  paidBy: KosztPayer;
-  kategoria: KategoriaKosztu;
-  podkategoria: Exclude<PodkategoriaKosztow, "all">;
-  netto: number;
-  vat: number;
-  brutto: number;
-  includeInSplit: boolean;
-  settleWithCompany: boolean;
-};
 
-type PayerSuma = {
-  paidBy: KosztPayer | "Razem";
-  liczba: number;
-  netto: number;
-  vat: number;
-  brutto: number;
-};
 
-function emptyPayerSuma(paidBy: PayerSuma["paidBy"]): PayerSuma {
-  return { paidBy, liczba: 0, netto: 0, vat: 0, brutto: 0 };
-}
-
-function addToSuma(suma: PayerSuma, koszt: Pick<RozliczenieKosztu, "netto" | "vat" | "brutto">) {
-  suma.liczba += 1;
-  suma.netto += koszt.netto;
-  suma.vat += koszt.vat;
-  suma.brutto += koszt.brutto;
-}
-
-function rozliczenieRows(pozycje: RozliczenieKosztu[]): PayerSuma[] {
-  const map = new Map<KosztPayer | "Razem", PayerSuma>([
-    ["Artur", emptyPayerSuma("Artur")],
-    ["Damian", emptyPayerSuma("Damian")],
-    ["Firma", emptyPayerSuma("Firma")],
-    ["Razem", emptyPayerSuma("Razem")],
-  ]);
-
-  for (const koszt of pozycje) {
-    addToSuma(map.get(koszt.paidBy)!, koszt);
-    addToSuma(map.get("Razem")!, koszt);
-  }
-
-  return ["Artur", "Damian", "Firma", "Razem"].map((x) => map.get(x as PayerSuma["paidBy"])!);
-}
-
-function RozliczenieRowView({ row }: { row: PayerSuma }) {
-  const isTotal = row.paidBy === "Razem";
-  return (
-    <tr className={cn("border-t border-line/60", isTotal && "bg-surface2 font-bold text-white")}>
-      <td className="px-3 py-2 text-ink">{row.paidBy}</td>
-      <td className="px-3 py-2 text-right tabular-nums text-dim">{row.liczba}</td>
-      <td className="px-3 py-2 text-right tabular-nums text-ink">{formatZl(row.netto)}</td>
-      <td className="px-3 py-2 text-right tabular-nums text-ink">{formatZl(row.vat)}</td>
-      <td className="px-3 py-2 text-right tabular-nums text-white">{formatZl(row.brutto)}</td>
-    </tr>
-  );
-}
-
-function RozliczenieMobileCard({ row }: { row: PayerSuma }) {
-  const isTotal = row.paidBy === "Razem";
-  return (
-    <div className={cn("rounded-xl border border-line bg-surface2/60 p-3", isTotal && "border-amber-brand/35 bg-amber-brand/10")}>
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <p className="text-sm font-bold text-white">{row.paidBy}</p>
-        <span className="rounded-full border border-line px-2 py-0.5 text-[11px] text-dim">
-          {row.liczba} kosztów
-        </span>
-      </div>
-      <div className="grid grid-cols-3 gap-2 text-[11px]">
-        <div>
-          <p className="text-dim">Netto</p>
-          <p className="tabular-nums font-bold text-ink">{formatZl(row.netto)}</p>
-        </div>
-        <div>
-          <p className="text-dim">VAT</p>
-          <p className="tabular-nums font-bold text-ink">{formatZl(row.vat)}</p>
-        </div>
-        <div>
-          <p className="text-dim">Brutto</p>
-          <p className="tabular-nums font-bold text-white">{formatZl(row.brutto)}</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function RozliczenieKosztowPanel({
-  dane,
-  ustawienia,
-  miesiac,
-}: {
-  dane: DaneMiesiaca;
-  ustawienia: UstawieniaPodatkowe;
-  miesiac: MiesiącId;
-}) {
-  const [podkategoria, setPodkategoria] = useState<PodkategoriaKosztow>("all");
-  const [kategoria, setKategoria] = useState<"all" | KategoriaKosztu>("all");
-  const [payer, setPayer] = useState<PayerFilter>("all");
-
-  const pozycje = useMemo<RozliczenieKosztu[]>(() => {
-    const rows: RozliczenieKosztu[] = [];
-
-    for (const t of dane.tankowanie ?? []) {
-      if (!czyTankowanieWliczane(t)) continue;
-      if (parseNum(t.koszt) <= 0) continue;
-      const wpis = { ...t, kategoria: t.kategoria ?? ("paliwo_adblue" as KategoriaKosztu) };
-      const r = rozbijWpis(wpis, ustawienia, "paliwo_adblue");
-      rows.push({
-        id: t.id,
-        nazwa: "Tankowanie",
-        paidBy: normalizePayer(t.paidBy),
-        kategoria: r.kategoria,
-        podkategoria: "tankowanie",
-        netto: r.netto,
-        vat: r.vat,
-        brutto: r.brutto,
-        includeInSplit: kosztWchodziDo5050(t),
-        settleWithCompany: kosztRozliczanyZFirma({ ...t, kategoria: r.kategoria }),
-      });
-    }
-
-    for (const k of dane.inneKoszty ?? []) {
-      if (parseNum(k.koszt) <= 0) continue;
-      const r = rozbijWpis(k, ustawienia, "inne");
-      rows.push({
-        id: k.id,
-        nazwa: k.nazwa || "Koszt",
-        paidBy: normalizePayer(k.paidBy),
-        kategoria: r.kategoria,
-        podkategoria: podkategoriaKosztu("inne", r.kategoria),
-        netto: r.netto,
-        vat: r.vat,
-        brutto: r.brutto,
-        includeInSplit: kosztWchodziDo5050(k),
-        settleWithCompany: kosztRozliczanyZFirma({ ...k, kategoria: r.kategoria }),
-      });
-    }
-
-    return rows;
-  }, [dane.tankowanie, dane.inneKoszty, ustawienia]);
-
-  const przefiltrowane = useMemo(
-    () =>
-      pozycje.filter((koszt) => {
-        if (podkategoria !== "all" && koszt.podkategoria !== podkategoria) return false;
-        if (kategoria !== "all" && koszt.kategoria !== kategoria) return false;
-        if (payer !== "all" && koszt.paidBy !== payer) return false;
-        return true;
-      }),
-    [pozycje, podkategoria, kategoria, payer]
-  );
-
-  const doRozliczenia5050 = useMemo(
-    () =>
-      pozycje.filter((koszt) => {
-        if (!koszt.includeInSplit) return false;
-        if (podkategoria !== "all" && koszt.podkategoria !== podkategoria) return false;
-        if (kategoria !== "all" && koszt.kategoria !== kategoria) return false;
-        return true;
-      }),
-    [pozycje, podkategoria, kategoria]
-  );
-
-  const rows = useMemo(() => rozliczenieRows(przefiltrowane), [przefiltrowane]);
-  const prywatne5050 = useMemo(
-    () => doRozliczenia5050.filter((koszt) => koszt.paidBy === "Artur" || koszt.paidBy === "Damian"),
-    [doRozliczenia5050]
-  );
-  const firmowe5050 = useMemo(
-    () => doRozliczenia5050.filter((koszt) => koszt.paidBy === "Firma" && koszt.settleWithCompany),
-    [doRozliczenia5050]
-  );
-  const rows5050 = useMemo(() => rozliczenieRows(prywatne5050), [prywatne5050]);
-  const arturPaid = rows5050.find((r) => r.paidBy === "Artur")?.brutto ?? 0;
-  const damianPaid = rows5050.find((r) => r.paidBy === "Damian")?.brutto ?? 0;
-  const firmaPaid = firmowe5050.reduce((sum, koszt) => sum + koszt.brutto, 0);
-  const privateTotal = arturPaid + damianPaid;
-  const eachShare = privateTotal / 2;
-  const firmShare = firmaPaid / 2;
-  const diff = Math.round((arturPaid - eachShare) * 100) / 100;
-  const settlement =
-    Math.abs(diff) < 0.01
-      ? "Artur i Damian są rozliczeni na zero."
-      : diff > 0
-      ? `Damian powinien oddać Arturowi: ${formatZl(diff)}`
-      : `Artur powinien oddać Damianowi: ${formatZl(Math.abs(diff))}`;
-
-  return (
-    <Card>
-      <div className="mb-3 flex items-start gap-2">
-        <IconUsers size={18} className="mt-0.5 text-amber-brand" />
-        <div className="min-w-0 flex-1">
-          <CardTitle className="mb-1">Rozliczenie kosztów</CardTitle>
-          <p className="text-[11px] text-dim">
-            {POLSKIE_MIESIACE[miesiac]} 2026 · tylko koszty z faktur/paragonów, bez wypłaty kierowcy.
-          </p>
-        </div>
-      </div>
-
-      <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
-        <label className="text-[11px] font-semibold text-dim">
-          Podkategoria
-          <select
-            value={podkategoria}
-            onChange={(e) => setPodkategoria(e.target.value as PodkategoriaKosztow)}
-            className="mt-1 w-full min-h-[42px] rounded-lg border border-line bg-input px-2 py-2 text-sm text-ink"
-          >
-            {PODKATEGORIE_KOSZTOW.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="text-[11px] font-semibold text-dim">
-          Kategoria
-          <select
-            value={kategoria}
-            onChange={(e) => setKategoria(e.target.value as "all" | KategoriaKosztu)}
-            className="mt-1 w-full min-h-[42px] rounded-lg border border-line bg-input px-2 py-2 text-sm text-ink"
-          >
-            <option value="all">wszystkie</option>
-            {KATEGORIE.map((k) => (
-              <option key={k.id} value={k.id}>
-                {k.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="text-[11px] font-semibold text-dim">
-          Kto zapłacił
-          <select
-            value={payer}
-            onChange={(e) => setPayer(e.target.value as PayerFilter)}
-            className="mt-1 w-full min-h-[42px] rounded-lg border border-line bg-input px-2 py-2 text-sm text-ink"
-          >
-            <option value="all">wszyscy</option>
-            {PAYER_OPTIONS.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-
-      <div className="space-y-2 sm:hidden">
-        {rows.map((row) => (
-          <RozliczenieMobileCard key={row.paidBy} row={row} />
-        ))}
-      </div>
-
-      <div className="hidden overflow-x-auto rounded-xl border border-line sm:block">
-        <table className="w-full text-left text-xs">
-          <thead className="bg-surface2 text-[10px] uppercase tracking-wide text-dim">
-            <tr>
-              <th className="px-3 py-2">Kto zapłacił</th>
-              <th className="px-3 py-2 text-right">Liczba</th>
-              <th className="px-3 py-2 text-right">Suma netto</th>
-              <th className="px-3 py-2 text-right">VAT z dokumentów</th>
-              <th className="px-3 py-2 text-right">Suma brutto</th>
-            </tr>
-          </thead>
-          <tbody>{rows.map((row) => <RozliczenieRowView key={row.paidBy} row={row} />)}</tbody>
-        </table>
-      </div>
-
-      <div className="mt-3 rounded-2xl border border-amber-brand/35 bg-amber-brand/10 p-3">
-        <p className="mb-2 text-xs font-bold uppercase tracking-wider text-amber-brand">
-          Rozliczenie 50/50 Artur / Damian
-        </p>
-        <div className="grid grid-cols-1 gap-1 text-sm sm:grid-cols-2">
-          <div className="flex justify-between gap-3">
-            <span className="text-dim">Artur zapłacił</span>
-            <span className="tabular-nums font-bold text-white">{formatZl(arturPaid)}</span>
-          </div>
-          <div className="flex justify-between gap-3">
-            <span className="text-dim">Damian zapłacił</span>
-            <span className="tabular-nums font-bold text-white">{formatZl(damianPaid)}</span>
-          </div>
-          <div className="flex justify-between gap-3">
-            <span className="text-dim">Firma do rozliczenia</span>
-            <span className="tabular-nums font-bold text-white">{formatZl(firmaPaid)}</span>
-          </div>
-          <div className="flex justify-between gap-3">
-            <span className="text-dim">Koszty prywatne</span>
-            <span className="tabular-nums font-bold text-white">{formatZl(privateTotal)}</span>
-          </div>
-          <div className="flex justify-between gap-3">
-            <span className="text-dim">Udział Artura</span>
-            <span className="tabular-nums font-bold text-white">{formatZl(eachShare)}</span>
-          </div>
-          <div className="flex justify-between gap-3">
-            <span className="text-dim">Udział Damiana</span>
-            <span className="tabular-nums font-bold text-white">{formatZl(eachShare)}</span>
-          </div>
-          {firmaPaid > 0 && (
-            <>
-              <div className="flex justify-between gap-3">
-                <span className="text-dim">Artur wobec Firmy</span>
-                <span className="tabular-nums font-bold text-white">{formatZl(firmShare)}</span>
-              </div>
-              <div className="flex justify-between gap-3">
-                <span className="text-dim">Damian wobec Firmy</span>
-                <span className="tabular-nums font-bold text-white">{formatZl(firmShare)}</span>
-              </div>
-            </>
-          )}
-        </div>
-        <p className="mt-3 rounded-xl bg-surface/70 px-3 py-2 text-sm font-bold text-white">
-          {settlement}
-        </p>
-        {firmaPaid > 0 && (
-          <p className="mt-2 rounded-xl border border-green-500/25 bg-green-soft px-3 py-2 text-sm font-bold text-green-200">
-            Do rozliczenia wobec Firmy: Artur {formatZl(firmShare)} · Damian {formatZl(firmShare)}.
-          </p>
-        )}
-        <p className="mt-2 text-[11px] text-dim">
-          Prywatne 50/50 liczy tylko koszty Artur/Damian z włączonym rozliczeniem. Koszty opłacone przez Firmę trafiają osobno do rozliczenia wobec Firmy, jeśli mają włączony taki przełącznik.
-        </p>
-      </div>
-    </Card>
-  );
-}
-
-export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia, focusZgloszenieId, onMoveTankowanie }: Props) {
+export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia, wszystkieMiesiace, focusZgloszenieId, onMoveTankowanie }: Props) {
   // Rozwinięte panele szczegółów VAT (klucz: id wpisu)
   const [rozwiniete, setRozwiniete] = useState<Record<string, boolean>>({});
   const [autoBusyId, setAutoBusyId] = useState<string | null>(null);
@@ -1816,7 +1517,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
       ...prev,
       tankowanie: [
         ...prev.tankowanie,
-        { id: uuidv4(), data: "", koszt: 0, paidBy: "Firma", status: "approved", includeInReports: true, isHistorical: false },
+        { id: uuidv4(), data: "", koszt: 0, paidBy: ustawienia.defaultPayer ?? "Firma", status: "approved", includeInReports: true, isHistorical: false },
       ],
     }));
     setStronaTank(Math.ceil((dane.tankowanie.length + 1) / KOSZTY_NA_STRONE));
@@ -1982,7 +1683,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
       ...prev,
       inneKoszty: [
         ...prev.inneKoszty,
-        { id: uuidv4(), data: "", nazwa: "", koszt: 0, paidBy: "Firma", includeInSplit: true },
+        { id: uuidv4(), data: "", nazwa: "", koszt: 0, paidBy: ustawienia.defaultPayer ?? "Firma", includeInSplit: true },
       ],
     }));
     setStronaInne(Math.ceil((liczbaInnych + 1) / KOSZTY_NA_STRONE));
@@ -1993,6 +1694,53 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
       ...prev,
       inneKoszty: prev.inneKoszty.map((k) => (k.id === id ? { ...k, ...patch } : k)),
     }));
+  }
+
+  // ─── PŁATNIK / 50/50 (wspólne dla tankowania i innych kosztów) ───────────────
+  function patchKoszt(typ: "tankowanie" | "inne", id: string, patch: Partial<KosztVatInfo>) {
+    if (typ === "tankowanie") updateTankowanie(id, patch);
+    else updateInny(id, patch);
+  }
+
+  function zmienPlatnika(
+    typ: "tankowanie" | "inne",
+    id: string,
+    nazwa: string,
+    stary: KosztPayer | undefined,
+    nowy: KosztPayer,
+    extra?: Partial<KosztVatInfo>
+  ) {
+    patchKoszt(typ, id, { paidBy: nowy, ...extra });
+    if (normalizePayer(stary) === nowy) return;
+    logChange({
+      workspaceId: token,
+      userName,
+      action: "koszt_platnik_zmieniony",
+      entity: "cost",
+      entityId: id,
+      oldValue: { paidBy: normalizePayer(stary) },
+      newValue: { paidBy: nowy },
+      description: `${userName} zmienił płatnika kosztu ${nazwa}: ${normalizePayer(stary)} → ${nowy}`,
+      url: `/admin?miesiac=${miesiac}&zakladka=koszty`,
+    });
+  }
+
+  function zmienSplit(typ: "tankowanie" | "inne", id: string, nazwa: string, nowy: boolean) {
+    patchKoszt(typ, id, { includeInSplit: nowy });
+    logChange({
+      workspaceId: token,
+      userName,
+      action: "koszt_5050_zmieniony",
+      entity: "cost",
+      entityId: id,
+      newValue: { includeInSplit: nowy },
+      description: `${userName} ${nowy ? "włączył" : "wyłączył"} koszt ${nazwa} w rozliczeniu 50/50`,
+      url: `/admin?miesiac=${miesiac}&zakladka=koszty`,
+    });
+  }
+
+  function zmienSplitNote(typ: "tankowanie" | "inne", id: string, nowy: string) {
+    patchKoszt(typ, id, { splitNote: nowy || undefined });
   }
 
   // ─── LEASING ─────────────────────────────────────────────────────────────────
@@ -2346,7 +2094,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
                     <p className="mb-0.5 text-[10px] font-bold uppercase tracking-wider text-dim">Kto zapłacił</p>
                     <PayerSelect
                       value={t.paidBy}
-                      onChange={(paidBy) => updateTankowanie(t.id, { paidBy })}
+                      onChange={(paidBy) => zmienPlatnika("tankowanie", t.id, "paliwo", t.paidBy, paidBy)}
                       compact
                     />
                   </div>
@@ -2362,6 +2110,15 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
                       compact
                     />
                   </div>
+                </div>
+                <div className="mt-2">
+                  <p className="mb-0.5 text-[10px] font-bold uppercase tracking-wider text-dim">Rozliczenie 50/50</p>
+                  <Split5050Control
+                    value={t.includeInSplit ?? true}
+                    note={t.splitNote}
+                    onToggle={() => zmienSplit("tankowanie", t.id, "paliwo", !(t.includeInSplit ?? true))}
+                    onNote={(v) => zmienSplitNote("tankowanie", t.id, v)}
+                  />
                 </div>
                 {t.isHistorical && (
                   <p className="mt-2 rounded-xl border border-amber-brand/35 bg-amber-brand/10 px-3 py-2 text-[11px] font-bold text-amber-brand">
@@ -2859,7 +2616,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
                 </div>
                 <PayerSelect
                   value={t.paidBy}
-                  onChange={(paidBy) => updateTankowanie(t.id, { paidBy })}
+                  onChange={(paidBy) => zmienPlatnika("tankowanie", t.id, "paliwo", t.paidBy, paidBy)}
                   compact
                   className="sm:col-span-1"
                 />
@@ -2926,6 +2683,12 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
                 ustawienia={ustawienia}
                 domyslnaKategoria="paliwo_adblue"
               />
+              <Split5050Control
+                value={t.includeInSplit ?? true}
+                note={t.splitNote}
+                onToggle={() => zmienSplit("tankowanie", t.id, "paliwo", !(t.includeInSplit ?? true))}
+                onNote={(v) => zmienSplitNote("tankowanie", t.id, v)}
+              />
               <div className="mt-1.5 grid grid-cols-1 gap-1.5 sm:flex sm:flex-wrap sm:items-center">
                 <RozliczeniePodatkoweButton
                   checked={czyRozliczanyPodatkowo(t)}
@@ -2983,10 +2746,11 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
       )}
 
       {showRozliczenie && (
-        <RozliczenieKosztowPanel
+        <Rozliczenie5050Panel
           dane={dane}
-          ustawienia={ustawienia}
           miesiac={miesiac}
+          ustawienia={ustawienia}
+          wszystkieMiesiace={wszystkieMiesiace}
         />
       )}
 
@@ -3022,7 +2786,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
                 </div>
                 <PayerSelect
                   value={k.paidBy}
-                  onChange={(paidBy) => updateInny(k.id, { paidBy })}
+                  onChange={(paidBy) => zmienPlatnika("inne", k.id, k.nazwa || "inny", k.paidBy, paidBy)}
                   compact
                   className="min-w-0"
                 />
@@ -3053,6 +2817,12 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
                   autoBusy={autoBusyId === k.id}
                 />
                 <VatMiniInfo wpis={k} ustawienia={ustawienia} />
+                <Split5050Control
+                  value={k.includeInSplit ?? true}
+                  note={k.splitNote}
+                  onToggle={() => zmienSplit("inne", k.id, k.nazwa || "inny", !(k.includeInSplit ?? true))}
+                  onNote={(v) => zmienSplitNote("inne", k.id, v)}
+                />
                 <div className="grid grid-cols-1 gap-1.5 sm:flex sm:flex-wrap sm:items-center">
                   <RozliczeniePodatkoweButton
                     checked={czyRozliczanyPodatkowo(k)}

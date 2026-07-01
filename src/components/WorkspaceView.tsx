@@ -430,6 +430,7 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
                       token={token}
                       userName={userName ?? ""}
                       ustawienia={ustawienia}
+                      wszystkieMiesiace={data.miesiace}
                       focusZgloszenieId={focusZgloszenie}
                       onMoveTankowanie={moveTankowanieDoMiesiaca}
                     />

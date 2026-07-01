@@ -233,6 +233,7 @@ export interface KosztVatInfo {
   kategoriaPotwierdzona?: boolean; // admin zatwierdził wynik AI
   vatZrodlo?: ZrodloKategorii; // domyślnie "rule"
   includeInSplit?: boolean; // czy koszt wchodzi do rozliczenia 50/50; domyślnie true
+  splitNote?: string; // notatka do 50/50, np. "prywatne", "tylko Artur"
   settleWithCompany?: boolean; // gdy paidBy=Firma: rozliczać po 50% wobec Firmy
   leasingMonth?: string; // YYYY-MM dla rat leasingu
   opis?: string;
@@ -356,6 +357,7 @@ export interface Notatka {
 /** Ustawienia podatkowe workspace (przechowywane w workspaces.data) */
 export interface UstawieniaPodatkowe {
   // Koszty (domyślne wartości nowych kosztów)
+  defaultPayer?: KosztPayer; // domyślny płatnik nowych kosztów/tankowań (domyślnie "Firma")
   defaultCostAmountMode: "netto" | "brutto"; // brutto
   defaultCostVatRate: VatRate; // "0.23"
   defaultCostHasInvoice: boolean; // true

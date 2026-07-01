@@ -3,7 +3,7 @@
 // Zakładka Ustawienia (admin) — koszty/VAT, paliwo, sprzedaż, podatek dochodowy, zdrowotna.
 // Każda zmiana trafia do audit logu.
 
-import { UstawieniaPodatkowe } from "@/lib/types";
+import { KosztPayer, UstawieniaPodatkowe } from "@/lib/types";
 import { Card, CardTitle } from "../ui/Card";
 import { NumInput } from "../ui/NumInput";
 import { logChange } from "@/lib/audit";
@@ -67,6 +67,20 @@ export function UstawieniaTab({ ustawienia: u, onUpdate, token, userName }: Prop
           >
             <option value="brutto">brutto</option>
             <option value="netto">netto</option>
+          </select>
+        </div>
+        <div className={rowCls}>
+          <span className={labelCls}>Domyślny płatnik nowych kosztów</span>
+          <select
+            value={u.defaultPayer ?? "Firma"}
+            onChange={(e) =>
+              zmien({ defaultPayer: e.target.value as KosztPayer }, `zmienił domyślnego płatnika kosztów na ${e.target.value}`)
+            }
+            className={selectCls}
+          >
+            <option value="Firma">Firma</option>
+            <option value="Artur">Artur</option>
+            <option value="Damian">Damian</option>
           </select>
         </div>
         <p className="text-[11px] text-dim/60 mt-2">

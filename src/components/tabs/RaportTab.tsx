@@ -27,6 +27,7 @@ import {
 } from "../ui/icons";
 import { podatkiRoku, kosztyWgKategorii, getUstawienia } from "@/lib/tax";
 import { cn } from "@/lib/utils";
+import { Rozliczenie5050Panel } from "../Rozliczenie5050Panel";
 
 interface Props {
   data: WorkspaceData;
@@ -557,6 +558,13 @@ export function RaportTab({ data }: Props) {
           ))}
         </div>
       </Card>
+
+      <Rozliczenie5050Panel
+        ustawienia={ustawienia}
+        wszystkieMiesiace={data.miesiace}
+        domyslnyZakres="okres"
+        tytul="Rozliczenie 50/50 (Artur / Damian)"
+      />
     </div>
   );
 }
