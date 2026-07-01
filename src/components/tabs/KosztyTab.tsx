@@ -2841,9 +2841,9 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
         <p className="mb-3 text-xs text-dim">
           Paliwo, AdBlue oraz faktury/paragony za tankowanie.
         </p>
-        <div className="space-y-2">
+        <div className="space-y-3">
           {tankowanieWidoczne.map((t) => (
-            <div key={t.id} className="rounded-xl border border-line/60 p-2 space-y-1.5">
+            <div key={t.id} className="rounded-2xl border border-line bg-surface2/40 p-3 space-y-2 shadow-sm">
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-[auto_minmax(0,1fr)_auto_auto_auto] sm:items-center">
                 <DatePill
                   value={t.data}
