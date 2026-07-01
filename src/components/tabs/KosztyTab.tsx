@@ -485,8 +485,7 @@ function DokumentyKosztu({
         + dokument
         <input
           type="file"
-          accept="image/*"
-          capture="environment"
+          accept="image/*,.heic,.heif"
           className="hidden"
           onChange={(e) => {
             const file = e.target.files?.[0];
@@ -502,8 +501,7 @@ function DokumentyKosztu({
           + licznik
           <input
             type="file"
-            accept="image/*"
-            capture="environment"
+            accept="image/*,.heic,.heif"
             className="hidden"
             onChange={(e) => {
               const file = e.target.files?.[0];
