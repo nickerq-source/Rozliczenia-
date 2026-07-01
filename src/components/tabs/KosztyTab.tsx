@@ -1863,12 +1863,17 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
       rejectionReason: undefined,
     };
     const targetMonth = accountingMonth as MiesiącId;
-    const moved =
-      isAssign &&
-      targetMonth !== miesiac &&
-      onMoveTankowanie?.(wpis.id, targetMonth, patch);
-    if (moved === false) return;
-    if (!moved) updateTankowanie(wpis.id, patch);
+    // Przeniesienie między miesiącami dotyczy TYLKO trybu "assign" do innego
+    // miesiąca. Wcześniej `moved` skracał się do `false` przy zwykłym
+    // zatwierdzeniu (isAssign=false) i guard `moved === false` cofał całą akcję
+    // — przez co zielony „Zatwierdź" i „Jako archiwum" nic nie robiły.
+    if (isAssign && targetMonth !== miesiac) {
+      const moved = onMoveTankowanie?.(wpis.id, targetMonth, patch);
+      if (moved === false) return; // przeniesienie odrzucone (np. miesiąc zamknięty)
+      if (!moved) updateTankowanie(wpis.id, patch); // brak movera → aktualizuj u siebie
+    } else {
+      updateTankowanie(wpis.id, patch);
+    }
     logChange({
       workspaceId: token,
       userName,
