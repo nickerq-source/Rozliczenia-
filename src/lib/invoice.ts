@@ -44,6 +44,16 @@ function isNumberToken(token: string | undefined): boolean {
   return !!token && /^\d{1,6}(?:[,\.]\d{1,4})?$/.test(token);
 }
 
+// Uwagi bywają datą DD.MM (kropka) — nie mylić z kwotą (przecinek dziesiętny),
+// inaczej np. "17.06" trafia jako koszt zamiast prawdziwej kwoty "274,00".
+function isDateArtifact(token: string | undefined): boolean {
+  return !!token && /^\d{1,2}\.\d{2}$/.test(token);
+}
+
+function isCostToken(token: string | undefined): boolean {
+  return isNumberToken(token) && !isDateArtifact(token);
+}
+
 function isStatusToken(token: string | undefined): boolean {
   return !!token && /^(Rozliczony|Zrealizowan|Zrealizowany)$/i.test(token);
 }
@@ -200,8 +210,16 @@ const ISO_RE = /\b\d{4}-\d{2}-\d{2}\b/g;
 
 function extractContinuationSurname(lines: string[]): string | null {
   for (const line of lines.slice(0, 3)) {
+    // Trasy /D: nazwisko po przecinku, np. "/D KRAKÓW, PITIANIN".
     const afterComma = line.match(/,\s*([A-Za-zĄĆĘŁŃÓŚŹŻąćęłńóśźż-]{2,})\b/);
     if (afterComma) return afterComma[1].toUpperCase();
+    // Zlecenia /I: nazwisko zaraz po znaczniku, bez przecinka, np.
+    // "/I PITIANIN przewóz na" → pierwszy token pisany WERSALIKAMI po znaczniku.
+    const marker = line.match(/^\/[A-Za-z]\b\s*(.*)$/);
+    if (marker) {
+      const caps = marker[1].match(/\b([A-ZĄĆĘŁŃÓŚŹŻ]{2,})\b/);
+      if (caps) return caps[1].toUpperCase();
+    }
   }
   return null;
 }
@@ -257,7 +275,7 @@ function parseAfterDate(afterDate: string): {
   let cursor = 3;
   const notesTokens: string[] = [];
 
-  while (cursor < tokens.length && !isNumberToken(tokens[cursor]) && !isStatusToken(tokens[cursor])) {
+  while (cursor < tokens.length && !isCostToken(tokens[cursor]) && !isStatusToken(tokens[cursor])) {
     notesTokens.push(tokens[cursor]);
     cursor++;
   }
@@ -265,7 +283,7 @@ function parseAfterDate(afterDate: string): {
   const numericCosts: number[] = [];
   while (cursor < tokens.length && numericCosts.length < 6) {
     if (isStatusToken(tokens[cursor])) break;
-    if (isNumberToken(tokens[cursor])) numericCosts.push(parsePolishNumber(tokens[cursor]));
+    if (isCostToken(tokens[cursor])) numericCosts.push(parsePolishNumber(tokens[cursor]));
     else if (tokens[cursor]) notesTokens.push(tokens[cursor]);
     cursor++;
   }
