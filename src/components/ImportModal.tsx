@@ -52,6 +52,10 @@ interface FilteredResult {
   filters?: ImportFilterInfo;
   ileKolek: number;
   ileZlecen?: number;
+  kolkaNetto?: number;
+  kolkaBrutto?: number;
+  zleceniaNetto?: number;
+  zleceniaBrutto?: number;
   sumaKm: number;
   netto: number;
   brutto: number;
@@ -255,9 +259,15 @@ function calculateFilteredResult(
   }
 
   const totalRows = includedRows.length;
-  const ileZlecen = includedRows.filter((row) => row.isAdditional || !!row.notes.trim()).length;
-  const ileKolek = totalRows - ileZlecen;
+  const zleceniaRows = includedRows.filter((row) => row.isAdditional || !!row.notes.trim());
+  const kolkaRows = includedRows.filter((row) => !(row.isAdditional || !!row.notes.trim()));
+  const ileZlecen = zleceniaRows.length;
+  const ileKolek = kolkaRows.length;
   const sumaKm = includedRows.reduce((sum, row) => sum + row.km, 0);
+  const kolkaNetto = round2(kolkaRows.reduce((sum, row) => sum + row.cost, 0));
+  const zleceniaNetto = round2(zleceniaRows.reduce((sum, row) => sum + row.cost, 0));
+  const kolkaBrutto = round2(kolkaNetto * (1 + VAT));
+  const zleceniaBrutto = round2(zleceniaNetto * (1 + VAT));
   const courseNetto = round2(includedRows.reduce((sum, row) => sum + row.cost, 0));
   const courseBrutto = round2(courseNetto * (1 + VAT));
   const invoiceAdditions = params.additions.filter((addition) => addition.addToInvoice);
@@ -293,6 +303,10 @@ function calculateFilteredResult(
     totalBrutto,
     ileKolek,
     ileZlecen,
+    kolkaNetto,
+    kolkaBrutto,
+    zleceniaNetto,
+    zleceniaBrutto,
     sumaKm,
     netto: totalNetto,
     brutto: totalBrutto,
@@ -636,10 +650,31 @@ export function ImportModal({
 
               <section className="space-y-1">
                 <p className="text-xs font-bold uppercase tracking-wide text-amber-400">Podsumowanie</p>
-                <Row label="Kółka (trasy)" value={String(currentFiltered?.ileKolek ?? 0)} />
-                {((currentFiltered?.ileZlecen ?? 0) > 0) && (
-                  <Row label="Zlecenia (z uwagą)" value={String(currentFiltered?.ileZlecen ?? 0)} />
-                )}
+                {(() => {
+                  // Rozbicie kółka/zlecenia — dla starych importów bez zapisanych
+                  // sum liczymy je z pozycji uwzględnionych.
+                  const rows = currentFiltered?.includedRows ?? [];
+                  const jestZlecenie = (r: ImportDiagnosticRow) => !!r.isAdditional || !!(r.notes ?? "").trim();
+                  const zlecRows = rows.filter(jestZlecenie);
+                  const kolkaNetto =
+                    currentFiltered?.kolkaNetto ??
+                    round2(rows.filter((r) => !jestZlecenie(r)).reduce((s, r) => s + r.cost, 0));
+                  const zleceniaNetto =
+                    currentFiltered?.zleceniaNetto ?? round2(zlecRows.reduce((s, r) => s + r.cost, 0));
+                  const kolkaBrutto = currentFiltered?.kolkaBrutto ?? round2(kolkaNetto * (1 + VAT));
+                  const zleceniaBrutto = currentFiltered?.zleceniaBrutto ?? round2(zleceniaNetto * (1 + VAT));
+                  const ileZlecen = currentFiltered?.ileZlecen ?? zlecRows.length;
+                  return (
+                    <>
+                      <Row label="Kółka (trasy)" value={String(currentFiltered?.ileKolek ?? 0)} />
+                      <Row label="Kółka netto" value={formatZl(kolkaNetto)} />
+                      <Row label="Kółka brutto" value={formatZl(kolkaBrutto)} />
+                      <Row label="Zlecenia (z uwagą)" value={String(ileZlecen)} />
+                      <Row label="Zlecenia netto" value={formatZl(zleceniaNetto)} />
+                      <Row label="Zlecenia brutto" value={formatZl(zleceniaBrutto)} />
+                    </>
+                  );
+                })()}
                 <Row label="Suma km" value={`${currentFiltered?.sumaKm ?? 0} km`} />
                 <Row label="Suma z kursów netto" value={formatZl(currentFiltered?.courseNetto ?? currentFiltered?.netto ?? 0)} />
                 <Row label="Suma z kursów brutto" value={formatZl(currentFiltered?.courseBrutto ?? currentFiltered?.brutto ?? 0)} />

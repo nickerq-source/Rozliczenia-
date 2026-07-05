@@ -101,6 +101,10 @@ export interface PDFImportData {
   totalBrutto?: number;
   ileKolek: number;
   ileZlecen?: number; // wiersze ze zleceniem (komentarz w Uwagach)
+  kolkaNetto?: number; // suma kosztu potwierdzonego samych kółek
+  kolkaBrutto?: number;
+  zleceniaNetto?: number; // suma kosztu potwierdzonego samych zleceń
+  zleceniaBrutto?: number;
   sumaKm: number;
   netto: number;
   brutto: number;

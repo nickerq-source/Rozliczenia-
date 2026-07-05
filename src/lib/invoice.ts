@@ -158,6 +158,10 @@ export interface ParsedInvoice {
   filters: InvoiceFilter;
   ileKolek: number; // trasy bez komentarza w Uwagach
   ileZlecen: number; // wiersze dodatkowe / z komentarzem w Uwagach
+  kolkaNetto: number; // suma kosztu potwierdzonego samych kółek
+  kolkaBrutto: number;
+  zleceniaNetto: number; // suma kosztu potwierdzonego samych zleceń
+  zleceniaBrutto: number;
   sumaKm: number;
   netto: number;
   brutto: number;
@@ -670,10 +674,16 @@ export function buildResult(
   allRows: InvoiceRecord[] = rows,
   debugText?: string
 ): ParsedInvoice {
-  const ileZlecen = rows.filter(isAdditionalOrder).length;
-  const ileKolek = rows.length - ileZlecen;
+  const zlecenia = rows.filter(isAdditionalOrder);
+  const kolka = rows.filter((r) => !isAdditionalOrder(r));
+  const ileZlecen = zlecenia.length;
+  const ileKolek = kolka.length;
   const total = rows.length;
   const sumaKm = rows.reduce((s, r) => s + r.distanceKm, 0);
+  const kolkaNetto = round2(kolka.reduce((s, r) => s + r.confirmedCost, 0));
+  const zleceniaNetto = round2(zlecenia.reduce((s, r) => s + r.confirmedCost, 0));
+  const kolkaBrutto = round2(kolkaNetto * (1 + VAT));
+  const zleceniaBrutto = round2(zleceniaNetto * (1 + VAT));
   const netto = round2(rows.reduce((s, r) => s + r.confirmedCost, 0));
   const brutto = round2(netto * (1 + VAT));
   const sredniaKm = total > 0 ? round2(sumaKm / total) : 0;
@@ -693,6 +703,10 @@ export function buildResult(
     filters,
     ileKolek,
     ileZlecen,
+    kolkaNetto,
+    kolkaBrutto,
+    zleceniaNetto,
+    zleceniaBrutto,
     sumaKm,
     netto,
     brutto,
