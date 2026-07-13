@@ -10,6 +10,22 @@ export const POLSKIE_MIESIACE = [
 export const ROK = 2026;
 export const MIESIACE_ZAKRESU = [6, 7, 8, 9, 10, 11, 12] as const;
 
+/**
+ * Domyślny miesiąc po wejściu = aktualny miesiąc z daty systemowej,
+ * przycięty do zakresu Cze–Gru ROK. Poza rokiem: Czerwiec (przed) / Grudzień (po).
+ */
+export function getDefaultMonth(now: Date = new Date()): (typeof MIESIACE_ZAKRESU)[number] {
+  const first = MIESIACE_ZAKRESU[0]; // 6
+  const last = MIESIACE_ZAKRESU[MIESIACE_ZAKRESU.length - 1]; // 12
+  const rok = now.getFullYear();
+  if (rok < ROK) return first;
+  if (rok > ROK) return last;
+  const m = now.getMonth() + 1;
+  if (m < first) return first;
+  if (m > last) return last;
+  return m as (typeof MIESIACE_ZAKRESU)[number];
+}
+
 /** Formatuje datę jako DD.MM */
 export function formatDDMM(date: Date): string {
   const dd = String(date.getDate()).padStart(2, "0");

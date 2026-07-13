@@ -36,6 +36,7 @@ import {
   replaceVars,
 } from "@/lib/driver-translations";
 import { useAppBackLayer, useSwipeNavigation } from "@/lib/mobile-navigation";
+import { getDefaultMonth } from "@/lib/dates";
 
 interface DzienRozbicie {
   data: string;
@@ -122,11 +123,14 @@ export function DriverView({ name }: { name: string }) {
       const json = await r.json();
       setMiesiace(json.miesiace);
       setError(false);
-      // Domyślnie otwórz pierwszy aktywny miesiąc
+      // Domyślnie otwórz aktualny miesiąc (jeśli jest na liście), inaczej pierwszy z wypłatą
       setOtwarty((prev) => {
         if (prev !== null) return prev;
-        const first = (json.miesiace as MiesiacWyplata[]).find((m) => m.wynagrodzenie > 0);
-        return first ? first.miesiac : null;
+        const list = json.miesiace as MiesiacWyplata[];
+        const biezacy = getDefaultMonth();
+        if (list.some((m) => m.miesiac === biezacy)) return biezacy;
+        const first = list.find((m) => m.wynagrodzenie > 0);
+        return first ? first.miesiac : (list[0]?.miesiac ?? null);
       });
     } catch {
       setError(true);

@@ -57,6 +57,13 @@ function ddmmrr(iso: string): string {
   return `${iso.slice(8, 10)}.${iso.slice(5, 7)}`;
 }
 
+function formatDataCzas(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "—";
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(d.getDate())}.${p(d.getMonth() + 1)}.${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
 export function Rozliczenie5050Panel({
   dane,
   miesiac,
@@ -111,6 +118,10 @@ export function Rozliczenie5050Panel({
       ? "Czerwiec–Grudzień 2026"
       : "Cały okres";
 
+  // Wybrany pojedynczy miesiąc zamknięty → pokazujemy snapshot z chwili zamknięcia.
+  const snapshot = zakres === "miesiac" ? dane?.zamkniety?.saldo5050 : undefined;
+  const miesiacZamkniety = zakres === "miesiac" && !!dane?.zamkniety?.locked;
+
   return (
     <Card>
       <div className="mb-3 flex items-start gap-2">
@@ -143,26 +154,59 @@ export function Rozliczenie5050Panel({
         </div>
       )}
 
-      <div className="rounded-2xl border border-amber-brand/35 bg-amber-brand/10 p-3">
-        <div className="grid grid-cols-1 gap-1 text-sm sm:grid-cols-2">
-          <Wiersz label="Koszty 50/50 razem" value={formatZl(saldo.kosztyRazem)} />
-          <Wiersz label="Zapłaciła Firma (osobno)" value={formatZl(saldo.firmaPaid)} />
-          <Wiersz label="Zapłacił Artur" value={formatZl(saldo.arturPaid)} />
-          <Wiersz label="Zapłacił Damian" value={formatZl(saldo.damianPaid)} />
-          <Wiersz label="Udział Artura 50%" value={formatZl(saldo.udzialArtura)} />
-          <Wiersz label="Udział Damiana 50%" value={formatZl(saldo.udzialDamiana)} />
+      {miesiacZamkniety && snapshot ? (
+        <div className="rounded-2xl border border-green-500/30 bg-green-soft/60 p-3">
+          <div className="mb-2 flex items-center gap-2">
+            <span className="rounded-full border border-green-500/45 bg-green-soft px-2.5 py-0.5 text-[11px] font-bold text-green-200">
+              ✓ Rozliczone
+            </span>
+            <span className="text-[11px] text-dim">Snapshot z dnia zamknięcia</span>
+          </div>
+          <div className="grid grid-cols-1 gap-1 text-sm sm:grid-cols-2">
+            <Wiersz label="Koszty 50/50 razem" value={formatZl(snapshot.kosztyRazem)} />
+            <Wiersz label="Zapłaciła Firma (osobno)" value={formatZl(snapshot.firmaPaid)} />
+            <Wiersz label="Zapłacił Artur" value={formatZl(snapshot.arturPaid)} />
+            <Wiersz label="Zapłacił Damian" value={formatZl(snapshot.damianPaid)} />
+          </div>
+          <p className="mt-3 rounded-xl bg-surface/70 px-3 py-2 text-sm font-bold text-white">
+            Rozliczenie 50/50 zamknięte —{" "}
+            {snapshot.kto === "rozliczone"
+              ? "nikt nikomu nie był winny"
+              : snapshot.kto === "damian_arturowi"
+              ? `Damian oddał Arturowi ${formatZl(snapshot.ile)}`
+              : `Artur oddał Damianowi ${formatZl(snapshot.ile)}`}
+          </p>
+          <p className="mt-2 text-[11px] text-dim">
+            Zamknięte przez {snapshot.settledBy || "—"} · {formatDataCzas(snapshot.settledAt)} · nie wchodzi do bieżącego salda.
+          </p>
         </div>
-        <p
-          className={cn(
-            "mt-3 rounded-xl px-3 py-2 text-sm font-bold",
-            saldo.kto === "rozliczone"
-              ? "bg-surface/70 text-white"
-              : "border border-green-500/25 bg-green-soft text-green-200"
+      ) : (
+        <div className="rounded-2xl border border-amber-brand/35 bg-amber-brand/10 p-3">
+          <div className="grid grid-cols-1 gap-1 text-sm sm:grid-cols-2">
+            <Wiersz label="Koszty 50/50 razem" value={formatZl(saldo.kosztyRazem)} />
+            <Wiersz label="Zapłaciła Firma (osobno)" value={formatZl(saldo.firmaPaid)} />
+            <Wiersz label="Zapłacił Artur" value={formatZl(saldo.arturPaid)} />
+            <Wiersz label="Zapłacił Damian" value={formatZl(saldo.damianPaid)} />
+            <Wiersz label="Udział Artura 50%" value={formatZl(saldo.udzialArtura)} />
+            <Wiersz label="Udział Damiana 50%" value={formatZl(saldo.udzialDamiana)} />
+          </div>
+          <p
+            className={cn(
+              "mt-3 rounded-xl px-3 py-2 text-sm font-bold",
+              saldo.kto === "rozliczone"
+                ? "bg-surface/70 text-white"
+                : "border border-green-500/25 bg-green-soft text-green-200"
+            )}
+          >
+            {tekstSalda(saldo, formatZl)}
+          </p>
+          {saldo.rozliczoneZamkniete > 0 && (
+            <p className="mt-2 text-[11px] text-dim">
+              Zamknięte (rozliczone): {formatZl(saldo.rozliczoneZamkniete)} — z zamkniętych miesięcy, nie wchodzi do bieżącego salda.
+            </p>
           )}
-        >
-          {tekstSalda(saldo, formatZl)}
-        </p>
-      </div>
+        </div>
+      )}
 
       <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
         <label className="text-[11px] font-semibold text-dim">

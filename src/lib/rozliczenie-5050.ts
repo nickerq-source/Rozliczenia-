@@ -4,6 +4,9 @@
 //   net > 0 → Damian oddaje Arturowi net
 //   net < 0 → Artur oddaje Damianowi |net|
 //   net = 0 → rozliczone
+// Zamknięcie miesiąca = Artur i Damian rozliczyli się przy zamknięciu, więc
+// pozycje z zamkniętych miesięcy NIE liczą się do bieżącego salda (są widoczne
+// na liście jako "rozliczone"). Odemknięcie miesiąca przywraca jego saldo.
 
 import {
   DaneMiesiaca,
@@ -32,11 +35,12 @@ export interface Pozycja5050 {
   includeInSplit: boolean;
   splitNote?: string;
   status?: string;
+  zamknietyMiesiac: boolean; // miesiąc zamknięty → pozycja rozliczona, poza saldem
 }
 
 export interface Saldo5050 {
   liczba: number;
-  kosztyRazem: number; // brutto pozycji wchodzących do 50/50
+  kosztyRazem: number; // brutto pozycji wchodzących do 50/50 (tylko otwarte miesiące)
   arturPaid: number;
   damianPaid: number;
   firmaPaid: number; // pozycje 50/50 zapłacone przez firmę (osobno, bez długu)
@@ -45,6 +49,7 @@ export interface Saldo5050 {
   net: number; // (arturPaid - damianPaid) / 2
   kto: "damian_arturowi" | "artur_damianowi" | "rozliczone";
   ile: number; // |net|
+  rozliczoneZamkniete: number; // brutto pozycji 50/50 z zamkniętych miesięcy (saldo 0)
 }
 
 function normalizePayer(v: unknown): KosztPayer {
@@ -60,6 +65,7 @@ export function zbierzPozycjeMiesiaca(
   miesiac: MiesiącId
 ): Pozycja5050[] {
   const rows: Pozycja5050[] = [];
+  const zamknietyMiesiac = !!dane.zamkniety?.locked;
 
   for (const t of dane.tankowanie ?? []) {
     if (!czyTankowanieWliczane(t)) continue; // tylko approved + include_in_reports
@@ -83,6 +89,7 @@ export function zbierzPozycjeMiesiaca(
       includeInSplit: t.includeInSplit ?? true,
       splitNote: t.splitNote,
       status: t.status,
+      zamknietyMiesiac,
     });
   }
 
@@ -103,6 +110,7 @@ export function zbierzPozycjeMiesiaca(
       includeInSplit: k.includeInSplit ?? true,
       splitNote: k.splitNote,
       status: undefined,
+      zamknietyMiesiac,
     });
   }
 
@@ -123,9 +131,16 @@ export function zbierzPozycje(
   return out;
 }
 
-/** Saldo 50/50 z listy pozycji (liczy tylko te z includeInSplit). */
+/**
+ * Saldo 50/50 z listy pozycji (liczy tylko includeInSplit z OTWARTYCH miesięcy).
+ * Zamknięty miesiąc = rozliczony przy zamknięciu → jego pozycje mają saldo 0.
+ */
 export function podsumujSaldo(pozycje: Pozycja5050[]): Saldo5050 {
-  const split = pozycje.filter((p) => p.includeInSplit);
+  const wszystkieSplit = pozycje.filter((p) => p.includeInSplit);
+  const split = wszystkieSplit.filter((p) => !p.zamknietyMiesiac);
+  const rozliczoneZamkniete = r2(
+    wszystkieSplit.filter((p) => p.zamknietyMiesiac).reduce((s, p) => s + p.brutto, 0)
+  );
   const suma = (payer: KosztPayer) =>
     split.filter((p) => p.paidBy === payer).reduce((s, p) => s + p.brutto, 0);
 
@@ -147,6 +162,7 @@ export function podsumujSaldo(pozycje: Pozycja5050[]): Saldo5050 {
     net,
     kto,
     ile: Math.abs(net),
+    rozliczoneZamkniete,
   };
 }
 

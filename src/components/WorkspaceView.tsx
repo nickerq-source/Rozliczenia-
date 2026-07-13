@@ -15,12 +15,13 @@ import { LegendaWyplaty } from "./LegendaWyplaty";
 import { UstawieniaTab } from "./tabs/UstawieniaTab";
 import { getUstawienia, podatkiMiesiaca } from "@/lib/tax";
 import { UserNameModal } from "./UserNameModal";
-import { MiesiącId, WpisTankowania } from "@/lib/types";
-import { domyslneDaneMiesiaca } from "@/lib/business-logic";
+import { MiesiącId, Saldo5050Snapshot, WpisTankowania } from "@/lib/types";
+import { domyslneDaneMiesiaca, formatZlCaly } from "@/lib/business-logic";
+import { podsumujSaldo, zbierzPozycjeMiesiaca, tekstSalda } from "@/lib/rozliczenie-5050";
 import { getUserName, setUserName } from "@/lib/push";
 import { logChange } from "@/lib/audit";
 import { IconLock, IconLockOpen } from "./ui/icons";
-import { getWeeksOfMonth, POLSKIE_MIESIACE, MIESIACE_ZAKRESU } from "@/lib/dates";
+import { getWeeksOfMonth, POLSKIE_MIESIACE, MIESIACE_ZAKRESU, getDefaultMonth } from "@/lib/dates";
 import { useAppBackLayer, useSwipeNavigation } from "@/lib/mobile-navigation";
 
 // Tło z obrazu + ciemna nakładka; karty leżą nad nakładką
@@ -185,7 +186,8 @@ interface Props {
 
 export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props) {
   const { data, loading, saveStatus, updateMiesiac, updateWorkspace, updateNotatki, updateUstawienia } = useWorkspace(token);
-  const [aktywnyMiesiac, setAktywnyMiesiac] = useState<MiesiącId>(6);
+  // Domyślnie aktualny miesiąc (nie zawsze Czerwiec). URL param ma priorytet — patrz efekt niżej.
+  const [aktywnyMiesiac, setAktywnyMiesiac] = useState<MiesiącId>(getDefaultMonth());
   const [aktywnaZakladka, setAktywnaZakladka] = useState<TabName>("podsumowanie");
   const [focusZgloszenie, setFocusZgloszenie] = useState<string | null>(null);
   const tabHistory = useRef<TabName[]>([]);
@@ -194,7 +196,8 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
   // Deep-link z powiadomienia: /admin?miesiac=6&zakladka=koszty&zgloszenie=ID
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const m = Number(params.get("miesiac"));
+    // Priorytet miesiąca: URL (?miesiac= albo ?month=) > aktualny miesiąc (init).
+    const m = Number(params.get("miesiac") ?? params.get("month"));
     const z = params.get("zakladka");
     const zgl = params.get("zgloszenie");
     if (MIESIACE_ZAKRESU.includes(m as (typeof MIESIACE_ZAKRESU)[number])) {
@@ -333,22 +336,49 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
 
   function toggleMonthLock() {
     const nazwa = POLSKIE_MIESIACE[aktywnyMiesiac];
+    // Saldo 50/50 liczone teraz (miesiąc jeszcze otwarty) — snapshot na zamknięcie.
+    const saldo = podsumujSaldo(zbierzPozycjeMiesiaca(daneMiesiaca, ustawienia, aktywnyMiesiac));
+    const saldoTekst = tekstSalda(saldo, formatZlCaly);
+
     if (monthLocked) {
-      if (!window.confirm(`Odblokować miesiąc ${nazwa} 2026?`)) return;
+      if (
+        !window.confirm(
+          `Odblokować miesiąc ${nazwa} 2026?\n\nUWAGA: odblokowanie cofnie status rozliczenia 50/50 i koszty tego miesiąca znów wejdą do bieżącego salda Artur/Damian.`
+        )
+      )
+        return;
     } else {
       const braki = closeChecklist.filter((x) => !x.ok);
       const detail = braki.length
         ? `\n\nDo sprawdzenia:\n${braki.map((x) => `- ${x.label}: ${x.detail}`).join("\n")}`
         : "";
-      if (!window.confirm(`Zamknąć miesiąc ${nazwa} 2026? Wszystkie pola staną się tylko do odczytu.${detail}`)) return;
+      if (
+        !window.confirm(
+          `Zamknąć miesiąc ${nazwa} 2026? Wszystkie pola staną się tylko do odczytu.\n\nRozliczenie 50/50 zostanie uznane za rozliczone: ${saldoTekst}${detail}`
+        )
+      )
+        return;
     }
     const newLocked = !monthLocked;
+    const snapshot: Saldo5050Snapshot | undefined = newLocked
+      ? {
+          arturPaid: saldo.arturPaid,
+          damianPaid: saldo.damianPaid,
+          firmaPaid: saldo.firmaPaid,
+          kosztyRazem: saldo.kosztyRazem,
+          kto: saldo.kto,
+          ile: saldo.ile,
+          settledAt: new Date().toISOString(),
+          settledBy: userName ?? "",
+        }
+      : undefined;
     updateMiesiac(aktywnyMiesiac, (prev) => ({
       ...prev,
       zamkniety: {
         locked: newLocked,
         lockedBy: userName ?? "",
         lockedAt: new Date().toISOString(),
+        saldo5050: snapshot,
       },
     }));
     logChange({
@@ -357,7 +387,9 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
       action: newLocked ? "miesiac_zamkniety" : "miesiac_odblokowany",
       entity: "month",
       entityId: String(aktywnyMiesiac),
-      description: `${userName} ${newLocked ? "zamknął" : "odblokował"} miesiąc ${nazwa} 2026`,
+      description: newLocked
+        ? `${userName} zamknął miesiąc ${nazwa} 2026. Rozliczenie 50/50: ${saldoTekst}`
+        : `${userName} odblokował miesiąc ${nazwa} 2026. Snapshot 50/50 został cofnięty.`,
       url: `/admin?miesiac=${aktywnyMiesiac}&zakladka=podsumowanie`,
     });
   }

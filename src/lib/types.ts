@@ -148,10 +148,23 @@ export interface WyplataInfo {
 }
 
 /** Zamknięcie miesiąca (readonly) */
+export interface Saldo5050Snapshot {
+  arturPaid: number;
+  damianPaid: number;
+  firmaPaid: number;
+  kosztyRazem: number;
+  kto: "damian_arturowi" | "artur_damianowi" | "rozliczone";
+  ile: number;
+  settledAt: string;
+  settledBy?: string;
+}
+
 export interface MonthLock {
   locked: boolean;
   lockedBy?: string;
   lockedAt?: string;
+  // Snapshot rozliczenia 50/50 z chwili zamknięcia (miesiąc = rozliczony na zero).
+  saldo5050?: Saldo5050Snapshot;
 }
 
 /** Typ dnia pracy kierowcy */
