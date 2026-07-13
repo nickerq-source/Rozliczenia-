@@ -3,6 +3,7 @@ import { getAdminSupabase } from "@/lib/supabase-admin";
 import { cronAuthorized, notifyWorkspace } from "@/lib/cron";
 import { DaneMiesiaca, MiesiącId, WorkspaceData } from "@/lib/types";
 import { MIESIACE_ZAKRESU } from "@/lib/dates";
+import { getInvoiceWeekIndex } from "@/lib/invoice-weeks";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,6 +40,7 @@ export async function GET(req: NextRequest) {
 
         dane.faktury = dane.faktury.map((f, i) => {
           if (!f?.issueDate || f.status === "oplacona") return f;
+          const weekNumber = getInvoiceWeekIndex(f, i, m as MiesiącId) + 1;
 
           // payment_date = issueDate + 21 dni
           const due = new Date(f.issueDate + "T12:00:00");
@@ -51,7 +53,7 @@ export async function GET(req: NextRequest) {
             notifyWorkspace(
               ws.id,
               "faktura_oplacona",
-              `Faktura (tydzień ${i + 1}) automatycznie oznaczona jako opłacona (21 dni)`
+              `Faktura (tydzień ${weekNumber}) automatycznie oznaczona jako opłacona (21 dni)`
             ).catch(() => {});
             admin.from("audit_log").insert({
               workspace_id: ws.id,
@@ -61,7 +63,7 @@ export async function GET(req: NextRequest) {
               entity_id: f.id,
               old_value: { status: f.status },
               new_value: { status: "oplacona" },
-              description: `Faktura (tydzień ${i + 1}) automatycznie oznaczona jako opłacona (21 dni)`,
+              description: `Faktura (tydzień ${weekNumber}) automatycznie oznaczona jako opłacona (21 dni)`,
             }).then(() => {});
             return { ...f, status: "oplacona" as const };
           }

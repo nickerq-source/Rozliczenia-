@@ -284,6 +284,7 @@ export function domyslneDaneMiesiaca(miesiac: number): DaneMiesiaca {
     id: `w${miesiac}-${i}`,
     label: w.label,
     kwota: 0,
+    weekIndex: i,
   }));
 
   return {

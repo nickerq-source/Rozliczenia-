@@ -10,11 +10,11 @@ import {
   formatZl,
 } from "@/lib/business-logic";
 import {
-  getWeeksOfMonth,
   formatRangeLabel,
   POLSKIE_MIESIACE,
   MIESIACE_ZAKRESU,
 } from "@/lib/dates";
+import { normalizeMonthInvoices } from "@/lib/invoice-weeks";
 import { Card } from "../ui/Card";
 import {
   IconChartBar,
@@ -34,6 +34,7 @@ interface Props {
 }
 
 interface RankRow {
+  id: string;
   label: string;
   monthName: string;
   weekNumber: number;
@@ -152,10 +153,9 @@ export function RaportTab({ data }: Props) {
       });
 
       // Ranking tygodni + suma km/kółek z importów PDF
-      const weeks = getWeeksOfMonth(m);
-      weeks.forEach((w, i) => {
-        const saved = dane.faktury[i];
-        if (!saved) return;
+      const invoices = normalizeMonthInvoices(dane.faktury, m);
+      invoices.forEach((saved) => {
+        const weekIndex = saved.weekIndex ?? 0;
         const imp = saved.pdfImport;
         if (imp) {
           kmTotal += imp.sumaKm;
@@ -163,11 +163,12 @@ export function RaportTab({ data }: Props) {
         }
         if ((saved.kwota ?? 0) > 0) {
           ranking.push({
+            id: saved.id,
             label: saved.customRange
               ? formatRangeLabel(saved.customRange.od, saved.customRange.do)
-              : w.label,
+              : saved.label,
             monthName: POLSKIE_MIESIACE[m],
-            weekNumber: i + 1,
+            weekNumber: weekIndex + 1,
             kwota: saved.kwota,
             pdf: imp,
           });
@@ -491,7 +492,7 @@ export function RaportTab({ data }: Props) {
                 raport.sortedDesc.length > 1 && rank === raport.sortedDesc.length;
               return (
                 <div
-                  key={`${row.monthName}-${row.weekNumber}`}
+                  key={`${row.monthName}-${row.id}`}
                   className="flex items-center gap-2.5 rounded-xl px-3 py-2.5"
                   style={ostatni ? { background: "#3a1212" } : undefined}
                 >

@@ -23,6 +23,7 @@ import { logChange } from "@/lib/audit";
 import { IconLock, IconLockOpen } from "./ui/icons";
 import { getWeeksOfMonth, POLSKIE_MIESIACE, MIESIACE_ZAKRESU, getDefaultMonth } from "@/lib/dates";
 import { useAppBackLayer, useSwipeNavigation } from "@/lib/mobile-navigation";
+import { getInvoiceWeekIndex } from "@/lib/invoice-weeks";
 
 // Tło z obrazu + ciemna nakładka; karty leżą nad nakładką
 function Background() {
@@ -142,7 +143,12 @@ function FooterGraphic() {
 
 function buildCloseChecklist(dane: ReturnType<typeof domyslneDaneMiesiaca>, miesiac: MiesiącId) {
   const weeks = getWeeksOfMonth(miesiac);
-  const fakturyZKwota = (dane.faktury ?? []).filter((f) => (f.kwota ?? 0) > 0).length;
+  const tygodnieZFaktura = new Set(
+    (dane.faktury ?? [])
+      .map((f, index) => ({ f, index }))
+      .filter(({ f }) => (f.kwota ?? 0) > 0)
+      .map(({ f, index }) => getInvoiceWeekIndex(f, index, miesiac))
+  );
   const koszty = [...(dane.tankowanie ?? []), ...(dane.inneKoszty ?? [])];
   const kosztyZKategoria = koszty.filter((k) => !!k.kategoria).length;
   const kosztyZeStatusem = koszty.filter((k) => k.documentStatus || k.hasInvoice !== undefined).length;
@@ -151,8 +157,8 @@ function buildCloseChecklist(dane: ReturnType<typeof domyslneDaneMiesiaca>, mies
   return [
     {
       label: "Faktury wpisane",
-      ok: fakturyZKwota > 0 && fakturyZKwota === weeks.length,
-      detail: `${fakturyZKwota}/${weeks.length}`,
+      ok: tygodnieZFaktura.size === weeks.length,
+      detail: `${tygodnieZFaktura.size}/${weeks.length} tygodni`,
     },
     {
       label: "Koszty mają kategorię",

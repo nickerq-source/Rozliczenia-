@@ -129,6 +129,8 @@ export interface FakturaWeek {
   id: string;
   label: string; // "Faktura DD.MM–DD.MM.2026"
   kwota: number;
+  /** Kalendarzowy tydzień miesiąca (indeks 0-based). Pozwala przechowywać kilka faktur dla tego samego tygodnia. */
+  weekIndex?: number;
   pdfImport?: PDFImportData; // zaimportowane dane z PDF
   // Zakres dat z PDF nadpisujący standardowy zakres tygodnia (pon–niedz).
   // null/undefined = użyj standardowego zakresu kalendarzowego.

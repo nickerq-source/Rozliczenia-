@@ -19,6 +19,11 @@ import { NumInput } from "../ui/NumInput";
 import { CardTitle } from "../ui/Card";
 import { IconPaperclip, IconCheck, IconX, IconLoader } from "../ui/icons";
 import { ImportModal, ImportModalProps } from "../ImportModal";
+import {
+  createAdditionalInvoiceId,
+  isEmptyInvoiceSlot,
+  normalizeMonthInvoices,
+} from "@/lib/invoice-weeks";
 
 interface Props {
   miesiac: MiesiącId;
@@ -38,6 +43,8 @@ interface ModalState {
   isOverwrite: boolean;
   // Auto-wybrany tydzień docelowy (na podstawie dat z PDF)
   targetIdx: number;
+  targetRecordId: string | null;
+  replaceExisting: boolean;
   targetLabel: string;
   targetWeekNumber: number;
   monthName: string;
@@ -63,21 +70,12 @@ function terminPlatnosci(issueDate: string): string {
 export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) {
   const weeks = useMemo(() => getWeeksOfMonth(miesiac), [miesiac]);
 
-  // Dopasuj faktury do tygodni, zachowując zapisane kwoty, pdfImport i customRange.
-  // Etykieta: customRange z PDF wygrywa nad standardowym zakresem pon–niedz.
-  const faktury: FakturaWeek[] = weeks.map((w, i) => {
-    const saved = dane.faktury[i];
-    const customRange = saved?.customRange ?? null;
-    return {
-      id: `w${miesiac}-${i}`,
-      label: customRange ? formatRangeLabel(customRange.od, customRange.do) : w.label,
-      kwota: saved?.kwota ?? 0,
-      pdfImport: saved?.pdfImport,
-      customRange,
-      status: saved?.status ?? "do_wystawienia",
-      issueDate: saved?.issueDate,
-    };
-  });
+  // Każdy tydzień ma co najmniej jeden wiersz, ale może mieć wiele
+  // niezależnych faktur (np. fakturę główną i fakturę z dodatkiem).
+  const faktury = useMemo(
+    () => normalizeMonthInvoices(dane.faktury, miesiac),
+    [dane.faktury, miesiac]
+  );
 
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalState | null>(null);
@@ -86,15 +84,13 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
   const [importDateFrom, setImportDateFrom] = useState("");
   const [importDateTo, setImportDateTo] = useState("");
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const uploadIntent = useRef<{ fakturaId: string; replaceExisting: boolean } | null>(null);
   const notifiedInvoiceValues = useRef<Record<string, number>>({});
 
   // ─── WGRYWANIE PDF ─────────────────────────────────────────────────────────
 
-  function triggerFileInput(fakturaId: string, hasExistingImport: boolean) {
-    if (hasExistingImport) {
-      const ok = window.confirm("Nadpisać poprzedni import?");
-      if (!ok) return;
-    }
+  function triggerFileInput(fakturaId: string, replaceExisting = false) {
+    uploadIntent.current = { fakturaId, replaceExisting };
     fileInputRefs.current[fakturaId]?.click();
   }
 
@@ -165,7 +161,16 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
           }
         : null;
       const clickedIdx = faktury.findIndex((f) => f.id === fakturaId);
-      const target = resolveTargetWeek(filteredFromApi, clickedIdx);
+      const clicked = faktury[clickedIdx];
+      const target = resolveTargetWeek(filteredFromApi, clicked?.weekIndex ?? 0);
+      const intent = uploadIntent.current?.fakturaId === fakturaId
+        ? uploadIntent.current
+        : { fakturaId, replaceExisting: false };
+      const preferredTarget = intent.replaceExisting
+        ? clicked
+        : clicked && clicked.weekIndex === target.idx && !clicked.pdfImport
+          ? clicked
+          : faktury.find((invoice) => invoice.weekIndex === target.idx && isEmptyInvoiceSlot(invoice));
 
       setModal({
         mode: "confirm",
@@ -174,8 +179,10 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
         invoiceNumber: json.invoiceNumber ?? null,
         filtered: filteredFromApi,
         message: json.message,
-        isOverwrite: !!faktury[target.idx]?.pdfImport,
+        isOverwrite: intent.replaceExisting && !!clicked?.pdfImport,
         targetIdx: target.idx,
+        targetRecordId: preferredTarget?.id ?? null,
+        replaceExisting: intent.replaceExisting,
         targetLabel: target.label,
         targetWeekNumber: target.idx + 1,
         monthName: POLSKIE_MIESIACE[miesiac],
@@ -184,6 +191,7 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
     } catch {
       alert("Błąd połączenia — sprawdź, czy serwer działa.");
     } finally {
+      uploadIntent.current = null;
       setUploadingId(null);
     }
   }
@@ -198,7 +206,8 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
     if (!filtered) return;
     const isPreviewUpdate = modal!.mode === "preview";
     const clickedIdx = faktury.findIndex((f) => f.id === modal!.fakturaId);
-    const target = resolveTargetWeek(filtered, clickedIdx);
+    const clicked = faktury[clickedIdx];
+    const target = resolveTargetWeek(filtered, clicked?.weekIndex ?? modal!.targetIdx);
 
     const pdfImport: PDFImportData = {
       nazwaPliku: fileName,
@@ -237,18 +246,48 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
       sourceRows: filtered.sourceRows,
     };
 
-    // Zapis do auto-wybranego tygodnia (na podstawie dat z PDF), nie do klikniętego
+    const preferred = modal!.targetRecordId
+      ? faktury.find((invoice) => invoice.id === modal!.targetRecordId)
+      : undefined;
+    const available = faktury.find(
+      (invoice) => invoice.weekIndex === target.idx && isEmptyInvoiceSlot(invoice)
+    );
+    const canReusePreferred = preferred
+      && preferred.weekIndex === target.idx
+      && !preferred.pdfImport;
+    const destinationId = isPreviewUpdate || modal!.replaceExisting
+      ? modal!.fakturaId
+      : canReusePreferred
+        ? preferred.id
+        : available?.id ?? createAdditionalInvoiceId(miesiac, target.idx);
+
+    // Zapis do auto-wybranego tygodnia. Gdy tydzień ma już fakturę,
+    // tworzymy osobny rekord zamiast nadpisywać istniejący import.
     onUpdate((prev) => {
-      const newFaktury = [...faktury];
-      if (target.idx >= 0 && target.idx < newFaktury.length) {
-        newFaktury[target.idx] = {
-          ...newFaktury[target.idx],
-          kwota: filtered.brutto,
-          pdfImport,
-          customRange: target.customRange,
-        };
-      }
-      return { ...prev, faktury: newFaktury };
+      const newFaktury = normalizeMonthInvoices(prev.faktury, miesiac);
+      const destinationIdx = newFaktury.findIndex((invoice) => invoice.id === destinationId);
+      const current = destinationIdx >= 0
+        ? newFaktury[destinationIdx]
+        : {
+            id: destinationId,
+            weekIndex: target.idx,
+            label: target.label,
+            kwota: 0,
+            status: "do_wystawienia" as InvoiceStatus,
+          };
+      const updated: FakturaWeek = {
+        ...current,
+        weekIndex: target.idx,
+        label: target.label,
+        kwota: filtered.brutto,
+        pdfImport,
+        customRange: target.customRange,
+      };
+
+      if (destinationIdx >= 0) newFaktury[destinationIdx] = updated;
+      else newFaktury.push(updated);
+
+      return { ...prev, faktury: normalizeMonthInvoices(newFaktury, miesiac) };
     });
 
     logChange({
@@ -256,7 +295,7 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
       userName,
       action: "faktura_zapisana",
       entity: "invoice",
-      entityId: faktury[target.idx]?.id,
+      entityId: destinationId,
       newValue: {
         amount: filtered.brutto,
         source: "pdf",
@@ -300,7 +339,7 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
 
   function removeImport(fakturaId: string) {
     onUpdate((prev) => {
-      const newFaktury = [...faktury];
+      const newFaktury = normalizeMonthInvoices(prev.faktury, miesiac);
       const idx = newFaktury.findIndex((f) => f.id === fakturaId);
       if (idx >= 0) {
         // Usuń import oraz customRange — etykieta wraca do standardowego tygodnia
@@ -315,10 +354,12 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
   // ─── PODGLĄD ZAPISANEGO IMPORTU ────────────────────────────────────────────
 
   // Otwórz modal w trybie preview, czytając dane z zapisanego stanu tygodnia
-  function openPreview(idx: number) {
-    const f = faktury[idx];
+  function openPreview(fakturaId: string) {
+    const f = faktury.find((invoice) => invoice.id === fakturaId);
+    if (!f) return;
     const imp = f.pdfImport;
     if (!imp) return;
+    const weekIndex = f.weekIndex ?? 0;
 
     setModal({
       mode: "preview",
@@ -357,9 +398,11 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
         totalBrutto: imp.totalBrutto,
       },
       isOverwrite: false,
-      targetIdx: idx,
+      targetIdx: weekIndex,
+      targetRecordId: f.id,
+      replaceExisting: true,
       targetLabel: f.label,
-      targetWeekNumber: idx + 1,
+      targetWeekNumber: weekIndex + 1,
       monthName: POLSKIE_MIESIACE[miesiac],
       customRange: f.customRange ?? null,
     });
@@ -381,19 +424,21 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
 
   // ─── EDYCJA RĘCZNA KWOTY ───────────────────────────────────────────────────
 
-  function setKwota(idx: number, kwota: number) {
+  function setKwota(fakturaId: string, kwota: number) {
     onUpdate((prev) => {
-      const newFaktury = [...faktury];
-      newFaktury[idx] = { ...newFaktury[idx], kwota };
+      const newFaktury = normalizeMonthInvoices(prev.faktury, miesiac);
+      const idx = newFaktury.findIndex((invoice) => invoice.id === fakturaId);
+      if (idx >= 0) newFaktury[idx] = { ...newFaktury[idx], kwota };
       return { ...prev, faktury: newFaktury };
     });
   }
 
-  function notifyManualInvoice(idx: number, kwota: number) {
+  function notifyManualInvoice(fakturaId: string, kwota: number) {
     if (kwota <= 0) return;
-    const faktura = faktury[idx];
+    const faktura = faktury.find((invoice) => invoice.id === fakturaId);
     if (!faktura || notifiedInvoiceValues.current[faktura.id] === kwota) return;
     notifiedInvoiceValues.current[faktura.id] = kwota;
+    const weekNumber = (faktura.weekIndex ?? 0) + 1;
 
     logChange({
       workspaceId: token,
@@ -401,19 +446,23 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
       action: "faktura_zapisana",
       entity: "invoice",
       entityId: faktura.id,
-      newValue: { amount: kwota, source: "manual", week: idx + 1 },
-      description: `${userName} dodał fakturę: ${formatZlCaly(kwota)} (tydzień ${idx + 1})`,
+      newValue: { amount: kwota, source: "manual", week: weekNumber },
+      description: `${userName} dodał fakturę: ${formatZlCaly(kwota)} (tydzień ${weekNumber})`,
       url: `/admin?miesiac=${miesiac}&zakladka=zarobek`,
     });
   }
 
   // ─── STATUS FAKTURY ────────────────────────────────────────────────────────
 
-  function setStatus(idx: number, status: InvoiceStatus) {
-    const stary = faktury[idx].status ?? "do_wystawienia";
+  function setStatus(fakturaId: string, status: InvoiceStatus) {
+    const faktura = faktury.find((invoice) => invoice.id === fakturaId);
+    if (!faktura) return;
+    const stary = faktura.status ?? "do_wystawienia";
+    const weekNumber = (faktura.weekIndex ?? 0) + 1;
     onUpdate((prev) => {
-      const newFaktury = [...faktury];
-      newFaktury[idx] = { ...newFaktury[idx], status };
+      const newFaktury = normalizeMonthInvoices(prev.faktury, miesiac);
+      const idx = newFaktury.findIndex((invoice) => invoice.id === fakturaId);
+      if (idx >= 0) newFaktury[idx] = { ...newFaktury[idx], status };
       return { ...prev, faktury: newFaktury };
     });
     logChange({
@@ -421,23 +470,39 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
       userName,
       action: "faktura_status",
       entity: "invoice",
-      entityId: faktury[idx].id,
+      entityId: faktura.id,
       oldValue: { status: stary },
       newValue: { status },
-      description: `${userName} zmienił status faktury (tydzień ${idx + 1}) na ${STATUSY.find((s) => s.id === status)?.label}`,
+      description: `${userName} zmienił status faktury (tydzień ${weekNumber}) na ${STATUSY.find((s) => s.id === status)?.label}`,
       url: `/admin?miesiac=${miesiac}&zakladka=zarobek`,
     });
   }
 
-  function setIssueDate(idx: number, issueDate: string) {
+  function setIssueDate(fakturaId: string, issueDate: string) {
     onUpdate((prev) => {
-      const newFaktury = [...faktury];
-      newFaktury[idx] = { ...newFaktury[idx], issueDate: issueDate || undefined };
+      const newFaktury = normalizeMonthInvoices(prev.faktury, miesiac);
+      const idx = newFaktury.findIndex((invoice) => invoice.id === fakturaId);
+      if (idx >= 0) {
+        newFaktury[idx] = { ...newFaktury[idx], issueDate: issueDate || undefined };
+      }
       return { ...prev, faktury: newFaktury };
     });
   }
 
   const sumaFaktur = obliczPrzychod(faktury);
+  const invoiceCountByWeek = new Map<number, number>();
+  const invoicePositionById = new Map<string, number>();
+  for (const invoice of faktury) {
+    const weekIndex = invoice.weekIndex ?? 0;
+    invoiceCountByWeek.set(weekIndex, (invoiceCountByWeek.get(weekIndex) ?? 0) + 1);
+  }
+  const seenByWeek = new Map<number, number>();
+  for (const invoice of faktury) {
+    const weekIndex = invoice.weekIndex ?? 0;
+    const position = (seenByWeek.get(weekIndex) ?? 0) + 1;
+    seenByWeek.set(weekIndex, position);
+    invoicePositionById.set(invoice.id, position);
+  }
 
   return (
     <>
@@ -490,21 +555,27 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
         </div>
 
         <div className="space-y-3">
-          {faktury.map((faktura, idx) => (
+          {faktury.map((faktura) => (
             <div
               key={faktura.id}
               className="rounded-2xl border border-line border-l-4 border-l-amber-brand bg-surface p-4 space-y-3"
             >
               {/* Etykieta + przycisk PDF */}
               <div className="flex items-center justify-between gap-2">
-                <label className="text-[15px] font-bold text-white leading-tight">
-                  {faktura.label}
-                </label>
+                <div className="min-w-0">
+                  <p className="text-[15px] font-bold text-white leading-tight">
+                    {faktura.label}
+                  </p>
+                  {(invoiceCountByWeek.get(faktura.weekIndex ?? 0) ?? 0) > 1 && (
+                    <p className="mt-1 text-[11px] font-semibold text-amber-brand">
+                      Faktura {invoicePositionById.get(faktura.id)} z {invoiceCountByWeek.get(faktura.weekIndex ?? 0)} dla tego tygodnia
+                    </p>
+                  )}
+                </div>
                 <button
-                  onClick={() =>
-                    triggerFileInput(faktura.id, !!faktura.pdfImport)
-                  }
+                  onClick={() => triggerFileInput(faktura.id)}
                   disabled={uploadingId === faktura.id}
+                  title={faktura.pdfImport ? "Dodaj kolejną fakturę PDF dla tego tygodnia" : "Dodaj fakturę PDF"}
                   className="shrink-0 flex items-center gap-1.5 px-3 py-2 min-h-[36px] rounded-xl text-xs font-medium
                     border border-amber-brand/60 text-amber-brand bg-transparent
                     hover:bg-amber-brand/10
@@ -543,8 +614,8 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
                 <div className="relative">
                   <NumInput
                     value={faktura.kwota}
-                    onChange={(val) => setKwota(idx, val)}
-                    onBlur={(e) => notifyManualInvoice(idx, parseNum(e.currentTarget.value))}
+                    onChange={(val) => setKwota(faktura.id, val)}
+                    onBlur={(e) => notifyManualInvoice(faktura.id, parseNum(e.currentTarget.value))}
                     placeholder="0"
                     className="!text-xl !py-3 !pr-12"
                   />
@@ -558,7 +629,7 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
               <div className="flex items-center gap-2 flex-wrap text-xs">
                 <select
                   value={faktura.status ?? "do_wystawienia"}
-                  onChange={(e) => setStatus(idx, e.target.value as InvoiceStatus)}
+                  onChange={(e) => setStatus(faktura.id, e.target.value as InvoiceStatus)}
                   className={`bg-input border rounded-lg px-2 py-1.5 ${STATUSY.find((s) => s.id === (faktura.status ?? "do_wystawienia"))?.cls}`}
                 >
                   {STATUSY.map((s) => (
@@ -568,7 +639,7 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
                 <input
                   type="date"
                   value={faktura.issueDate ?? ""}
-                  onChange={(e) => setIssueDate(idx, e.target.value)}
+                  onChange={(e) => setIssueDate(faktura.id, e.target.value)}
                   title="Data wystawienia"
                   className="bg-input border border-line rounded-lg px-2 py-1.5 text-dim tabular-nums"
                 />
@@ -585,7 +656,7 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
                 <div className="flex items-center justify-between gap-2">
                   <button
                     type="button"
-                    onClick={() => openPreview(idx)}
+                    onClick={() => openPreview(faktura.id)}
                     title="Pokaż podgląd importu PDF"
                     className="group flex items-center gap-1.5 min-w-0 text-left cursor-pointer
                       px-3 py-1.5 rounded-full bg-green-soft border border-green-500/40
@@ -613,7 +684,9 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
                     </span>
                   </button>
                   <button
-                    onClick={() => removeImport(faktura.id)}
+                    onClick={() => {
+                      if (window.confirm("Na pewno usunąć import PDF?")) removeImport(faktura.id);
+                    }}
                     title="Usuń import PDF"
                     className="shrink-0 p-1.5 rounded-lg text-dim hover:text-red-400 hover:bg-red-soft transition-all duration-150"
                   >
@@ -625,7 +698,7 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
               {faktura.pdfImport?.komentarz && (
                 <button
                   type="button"
-                  onClick={() => openPreview(idx)}
+                  onClick={() => openPreview(faktura.id)}
                   className="w-full text-left rounded-xl border border-line bg-surface2 px-3 py-2 text-xs text-dim hover:border-amber-brand/50 hover:text-ink transition-colors"
                 >
                   <span className="text-amber-brand font-semibold">Komentarz:</span>{" "}
