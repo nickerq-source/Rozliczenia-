@@ -349,22 +349,42 @@ export function RaportTab({ data }: Props) {
         )}
 
         <p className="text-xs font-bold uppercase tracking-wider text-amber-brand mb-1 mt-4">Podatek dochodowy</p>
-        <Row label="Przychód netto" value={podatkiSuma.sprzedazNetto} />
-        <Row label="Koszty podatkowe" value={podatkiSuma.kosztyPodatkowe} />
+        <Row label="Przychód netto (sprzedaż)" value={podatkiSuma.sprzedazNetto} />
+        <Row label="Koszty uznane do PIT" value={podatkiSuma.kosztyPodatkowe} />
         <Row
-          label={podatkiSuma.dochodYtd >= 0 ? "Dochód narastająco" : "Strata narastająco"}
+          label={podatkiSuma.dochodYtd >= 0 ? "Łączny wynik podatkowy od początku roku" : "Niewykorzystana strata od początku roku"}
           value={Math.abs(podatkiSuma.dochodYtd)}
         />
-        <Row label="Podatek narastająco" value={podatkiSuma.pitYtd} />
-        <Row label="Suma zaliczek podatku" value={podatkiSuma.pit} />
+        <Row label="PIT wyliczony od początku roku" value={podatkiSuma.pitYtd} />
+        <Row label="Suma PIT do zapłaty (miesięczne)" value={podatkiSuma.pit} />
 
         <p className="text-xs font-bold uppercase tracking-wider text-amber-brand mb-1 mt-4">Zdrowotna</p>
-        <Row label="Suma składek" value={podatkiSuma.zdrowotna} />
+        <Row label="Suma składek zdrowotnych" value={podatkiSuma.zdrowotna} />
 
-        <p className="text-xs font-bold uppercase tracking-wider text-amber-brand mb-1 mt-4">Zysk</p>
-        <Row label="Przed podatkami" value={raport.zysk} />
-        <Row label="Po dochodowym i zdrowotnej" value={podatkiSuma.zyskPo} />
-        <Row label="Cashflow po podatkach" value={podatkiSuma.cashflow} />
+        <p className="text-xs font-bold uppercase tracking-wider text-amber-brand mb-1 mt-4">Ile zostaje</p>
+        <Row label="Zysk przed podatkami" value={raport.zysk} />
+        <Row label="Na czysto po PIT i zdrowotnej" value={podatkiSuma.zyskPo} />
+        <Row label="Gotówka po podatkach i VAT" value={podatkiSuma.cashflow} />
+
+        {/* Łączne podatki i składki za okres (VAT do zapłaty nigdy ujemny) */}
+        {(() => {
+          const vatOkres = podatkiSuma.aktywneMiesiace.reduce((s, p) => s + Math.max(0, p.vatDoZaplaty), 0);
+          const total = Math.round((vatOkres + podatkiSuma.pit + podatkiSuma.zdrowotna) * 100) / 100;
+          return (
+            <div className="mt-4 rounded-2xl border border-amber-brand/40 bg-amber-brand/10 p-3">
+              <p className="mb-1 text-xs font-bold uppercase tracking-wider text-amber-brand">
+                Łączne podatki i składki — Czerwiec–Grudzień 2026
+              </p>
+              <Row label="VAT do zapłaty łącznie" value={vatOkres} />
+              <Row label="PIT do zapłaty łącznie" value={podatkiSuma.pit} />
+              <Row label="Składki zdrowotne łącznie" value={podatkiSuma.zdrowotna} />
+              <Row label="ŁĄCZNIE POWINNO WYJŚĆ ZA OKRES" value={total} valueClass="text-amber-brand" />
+              <p className="mt-2 text-[11px] text-dim/70">
+                Wyliczenie obejmuje okres Czerwiec–Grudzień 2026. Wyliczenia są szacunkowe — ostateczne rozliczenie potwierdza księgowa.
+              </p>
+            </div>
+          );
+        })()}
 
         {/* Tabela miesięczna */}
         {podatkiSuma.aktywneMiesiace.length > 0 && (
