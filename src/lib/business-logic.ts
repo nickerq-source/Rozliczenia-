@@ -19,6 +19,7 @@ import {
   getWeeksOfMonth,
 } from "./dates";
 import { czyWolny, maKolka, maZlecenia } from "./day-type";
+import { obliczObciazeniaPracownika } from "./employee-costs";
 
 /** Bezpieczne parsowanie liczby — puste lub NaN zwraca 0 */
 export function parseNum(val: string | number | undefined | null): number {
@@ -249,19 +250,26 @@ export function obliczWynikMiesiaca(
   const inne = obliczInneKoszty(daneM.inneKoszty);
   const leasing = obliczKosztLeasingu(daneM);
 
-  // ZUS pracodawcy — realny koszt na wierzchu pensji (gdy włączone oficjalne
-  // wynagrodzenie i kierowca w tym miesiącu pracował).
-  const zusPracodawcy =
-    ustawienia?.pracownikOficjalnyEnabled && wynagrodzenie > 0
-      ? parseNum(ustawienia.pracownikZusPracodawcyMies)
-      : 0;
+  // Stałe obciążenia pracownika są realnym miesięcznym kosztem firmy na
+  // wierzchu wypłaty liczonej z kółek. Naliczamy je tylko w miesiącu z wypłatą.
+  const {
+    podatekDochodowyPracownika,
+    skladkaZdrowotnaPracownika,
+    pozostaleSkladkiZusPracownika,
+    obciazeniaPracownika,
+  } = obliczObciazeniaPracownika(ustawienia, wynagrodzenie > 0);
+  const zusPracodawcy = pozostaleSkladkiZusPracownika;
 
-  const zysk = przychod - wynagrodzenie - zusPracodawcy - paliwo - inne - leasing;
+  const zysk = przychod - wynagrodzenie - obciazeniaPracownika - paliwo - inne - leasing;
 
   return {
     przychod,
     wynagrodzeniePracownika: wynagrodzenie,
     zusPracodawcy,
+    podatekDochodowyPracownika,
+    skladkaZdrowotnaPracownika,
+    pozostaleSkladkiZusPracownika,
+    obciazeniaPracownika,
     paliwo,
     inne,
     leasing,

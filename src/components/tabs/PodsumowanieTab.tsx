@@ -184,7 +184,7 @@ export function PodsumowanieTab({
     });
 
     // Pozycje bez faktury kosztowej, ale będące kosztem podatkowym: oficjalna
-    // pensja (brutto wg umowy) + ZUS pracodawcy + leasing. Nieoficjalna nadwyżka
+    // pensja (brutto wg umowy) + obciążenia pracownika + leasing. Nieoficjalna nadwyżka
     // NIE trafia do eksportu dla księgowej.
     const dodatkowe: EksportRow[] = [];
     const realnaPensja = wynik.wynagrodzeniePracownika;
@@ -205,20 +205,26 @@ export function PodsumowanieTab({
         vatDoOdliczenia: 0,
         kosztPodatkowy: brutto,
       });
-      if (oficjalneOn && wynik.zusPracodawcy > 0) {
+      const obciazenia = [
+        { typ: "podatek_pracownika", nazwa: "Podatek dochodowy pracownika", kategoria: "podatek pracownika", kwota: wynik.podatekDochodowyPracownika },
+        { typ: "zdrowotna_pracownika", nazwa: "Składka zdrowotna pracownika", kategoria: "ZUS", kwota: wynik.skladkaZdrowotnaPracownika },
+        { typ: "zus_pracownika", nazwa: "Pozostałe składki ZUS pracownika", kategoria: "ZUS", kwota: wynik.pozostaleSkladkiZusPracownika },
+      ];
+      for (const obciazenie of obciazenia) {
+        if (obciazenie.kwota <= 0) continue;
         dodatkowe.push({
           data: "",
-          typ: "zus",
-          nazwa: "ZUS pracodawcy",
-          kategoria: "ZUS",
+          typ: obciazenie.typ,
+          nazwa: obciazenie.nazwa,
+          kategoria: obciazenie.kategoria,
           statusDokumentu: "deklaracja",
           rozliczanyPodatkowo: "tak",
           zalaczniki: 0,
-          kwotaBrutto: wynik.zusPracodawcy,
-          netto: wynik.zusPracodawcy,
+          kwotaBrutto: obciazenie.kwota,
+          netto: obciazenie.kwota,
           vat: 0,
           vatDoOdliczenia: 0,
-          kosztPodatkowy: wynik.zusPracodawcy,
+          kosztPodatkowy: obciazenie.kwota,
         });
       }
     }
@@ -285,7 +291,10 @@ export function PodsumowanieTab({
       csvCell("PODSUMOWANIE"),
       `${csvCell("VAT do zapłaty")};${csvCell(podatki?.vatDoZaplaty ?? 0)}`,
       `${csvCell("Podatek dochodowy")};${csvCell(podatki?.pitMiesiac ?? 0)}`,
-      `${csvCell("Zdrowotna")};${csvCell(podatki?.zdrowotna ?? 0)}`,
+      `${csvCell("Zdrowotna właściciela")};${csvCell(podatki?.zdrowotna ?? 0)}`,
+      `${csvCell("Podatek dochodowy pracownika")};${csvCell(podatki?.podatekDochodowyPracownika ?? 0)}`,
+      `${csvCell("Zdrowotna pracownika")};${csvCell(podatki?.skladkaZdrowotnaPracownika ?? 0)}`,
+      `${csvCell("Pozostałe składki ZUS pracownika")};${csvCell(podatki?.pozostaleSkladkiZusPracownika ?? 0)}`,
       `${csvCell("Koszty bez dokumentów")};${csvCell(kosztyBezDokumentu.reduce((s, k) => s + k.kwotaBrutto, 0))}`,
     ];
     downloadText(
@@ -314,7 +323,10 @@ export function PodsumowanieTab({
         <tr><th>Pozycja</th><th>Kwota</th></tr>
         <tr><td>VAT do zapłaty</td><td>${podatki?.vatDoZaplaty ?? 0}</td></tr>
         <tr><td>Podatek dochodowy</td><td>${podatki?.pitMiesiac ?? 0}</td></tr>
-        <tr><td>Zdrowotna</td><td>${podatki?.zdrowotna ?? 0}</td></tr>
+        <tr><td>Zdrowotna właściciela</td><td>${podatki?.zdrowotna ?? 0}</td></tr>
+        <tr><td>Podatek dochodowy pracownika</td><td>${podatki?.podatekDochodowyPracownika ?? 0}</td></tr>
+        <tr><td>Zdrowotna pracownika</td><td>${podatki?.skladkaZdrowotnaPracownika ?? 0}</td></tr>
+        <tr><td>Pozostałe składki ZUS pracownika</td><td>${podatki?.pozostaleSkladkiZusPracownika ?? 0}</td></tr>
         <tr><td>Koszty bez dokumentów</td><td>${kosztyBezDokumentu.reduce((s, k) => s + k.kwotaBrutto, 0)}</td></tr>
       </table>
       </body></html>
@@ -353,7 +365,10 @@ export function PodsumowanieTab({
         <div class="box">Koszty (do księgowości): <b>${formatZl(kosztyEksport.reduce((s, k) => s + k.kwotaBrutto, 0))}</b></div>
         <div class="box">VAT do zapłaty: <b>${formatZl(podatki?.vatDoZaplaty ?? 0)}</b></div>
         <div class="box">Podatek dochodowy: <b>${formatZl(podatki?.pitMiesiac ?? 0)}</b></div>
-        <div class="box">Zdrowotna: <b>${formatZl(podatki?.zdrowotna ?? 0)}</b></div>
+        <div class="box">Zdrowotna właściciela: <b>${formatZl(podatki?.zdrowotna ?? 0)}</b></div>
+        <div class="box">Podatek pracownika: <b>${formatZl(podatki?.podatekDochodowyPracownika ?? 0)}</b></div>
+        <div class="box">Zdrowotna pracownika: <b>${formatZl(podatki?.skladkaZdrowotnaPracownika ?? 0)}</b></div>
+        <div class="box">Pozostałe składki ZUS pracownika: <b>${formatZl(podatki?.pozostaleSkladkiZusPracownika ?? 0)}</b></div>
         <div class="box">Koszty bez dokumentów: <b>${formatZl(kosztyBezDokumentu.reduce((s, k) => s + k.kwotaBrutto, 0))}</b></div>
       </div>
       <h2>Koszty</h2>
@@ -429,9 +444,9 @@ export function PodsumowanieTab({
         <div className="mb-4">
           <p className="text-xs font-bold uppercase tracking-wider text-dim mb-1">Koszty</p>
           <Row icon={<IconUsers size={18} />} label="Wynagrodzenie kierowcy" value={wynik.wynagrodzeniePracownika} />
-          {wynik.zusPracodawcy > 0 && (
-            <Row icon={<IconUsers size={18} />} label="ZUS pracodawcy" value={wynik.zusPracodawcy} />
-          )}
+          {wynik.podatekDochodowyPracownika > 0 && <Row icon={<IconUsers size={18} />} label="Podatek dochodowy pracownika" value={wynik.podatekDochodowyPracownika} />}
+          {wynik.skladkaZdrowotnaPracownika > 0 && <Row icon={<IconUsers size={18} />} label="Składka zdrowotna pracownika" value={wynik.skladkaZdrowotnaPracownika} />}
+          {wynik.pozostaleSkladkiZusPracownika > 0 && <Row icon={<IconUsers size={18} />} label="Pozostałe składki ZUS pracownika" value={wynik.pozostaleSkladkiZusPracownika} />}
           <Row icon={<IconGasStation size={18} />} label="Paliwo" value={wynik.paliwo} />
           <Row icon={<IconPackage size={18} />} label="Inne koszty" value={wynik.inne} />
           <Row icon={<IconCar size={18} />} label="Leasing" value={wynik.leasing} />
@@ -492,9 +507,15 @@ export function PodsumowanieTab({
               <span className="tabular-nums text-red-300">{formatZl(podatki.pitMiesiac)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-dim">Odłożyć na zdrowotną</span>
+              <span className="text-dim">Odłożyć na zdrowotną właściciela</span>
               <span className="tabular-nums text-red-300">{formatZl(podatki.zdrowotna)}</span>
             </div>
+            {podatki.obciazeniaPracownika > 0 && (
+              <div className="flex justify-between border-t border-line pt-1">
+                <span className="text-dim">Obciążenia pracownika (ujęte w kosztach)</span>
+                <span className="tabular-nums text-red-300">{formatZl(podatki.obciazeniaPracownika)}</span>
+              </div>
+            )}
           </div>
         </Card>
       )}

@@ -16,6 +16,7 @@ import {
 } from "./types";
 import { czyTankowanieWliczane, obliczWynagrodzenie, parseNum } from "./business-logic";
 import { MIESIACE_ZAKRESU } from "./dates";
+import { obliczObciazeniaPracownika } from "./employee-costs";
 
 // ─── USTAWIENIA DOMYŚLNE ─────────────────────────────────────────────────────
 
@@ -42,11 +43,23 @@ export const DOMYSLNE_USTAWIENIA: UstawieniaPodatkowe = {
   pracownikOficjalnyEnabled: false,
   pracownikBruttoMies: 1255,
   pracownikZusPracodawcyMies: 0,
+  pracownikPodatekDochodowyMies: 107,
+  pracownikSkladkaZdrowotnaMies: 120.30,
+  pracownikPozostaleSkladkiZusMies: 165,
 };
 
 /** Ustawienia z danych workspace + domyślne dla brakujących pól */
 export function getUstawienia(data: WorkspaceData): UstawieniaPodatkowe {
-  const ustawienia = { ...DOMYSLNE_USTAWIENIA, ...(data.ustawienia ?? {}) };
+  const zapisane = data.ustawienia ?? {};
+  const ustawienia = { ...DOMYSLNE_USTAWIENIA, ...zapisane };
+  // Starsze workspace miały tylko jedno pole ZUS. Jeżeli zawierało realną
+  // kwotę, przenieś ją do nowej rubryki; stare 0 nie blokuje nowej stawki 165 zł.
+  if (
+    zapisane.pracownikPozostaleSkladkiZusMies === undefined
+    && parseNum(zapisane.pracownikZusPracodawcyMies) > 0
+  ) {
+    ustawienia.pracownikPozostaleSkladkiZusMies = parseNum(zapisane.pracownikZusPracodawcyMies);
+  }
   if (ustawienia.healthMinEnabled && ustawienia.healthMinMonthly <= 0) {
     ustawienia.healthMinMonthly = DOMYSLNE_USTAWIENIA.healthMinMonthly;
   }
@@ -266,8 +279,12 @@ export interface PodatkiMiesiaca {
   // PIT
   przychodNetto: number;
   kosztyPodatkowe: number;
-  wynagrodzeniePodatkowe: number; // wynagrodzenie wliczone do kosztów podatkowych (oficjalne+ZUS lub realne)
-  zusPracodawcy: number; // składki ZUS pracodawcy wliczone w koszty podatkowe
+  wynagrodzeniePodatkowe: number; // wynagrodzenie i obciążenia pracownika wliczone do kosztów podatkowych
+  zusPracodawcy: number; // alias zgodności: pozostałe składki ZUS pracownika
+  podatekDochodowyPracownika: number;
+  skladkaZdrowotnaPracownika: number;
+  pozostaleSkladkiZusPracownika: number;
+  obciazeniaPracownika: number;
   dochod: number; // może być ujemny (strata)
   dochodYtd: number;
   pitYtd: number;
@@ -321,6 +338,8 @@ function podstawyMiesiaca(m: MiesiącId, dane: DaneMiesiaca, u: UstawieniaPodatk
       sprzedazNetto: 0, vatNalezny: 0, kosztyNetto: 0, vatNaliczony: 0,
       kosztyPodatkowe: 0, dochod: 0, zyskPrzedPodatkami: 0,
       wynagrodzeniePodatkowe: 0, zusPracodawcy: 0,
+      podatekDochodowyPracownika: 0, skladkaZdrowotnaPracownika: 0,
+      pozostaleSkladkiZusPracownika: 0, obciazeniaPracownika: 0,
     };
   }
 
@@ -328,18 +347,25 @@ function podstawyMiesiaca(m: MiesiącId, dane: DaneMiesiaca, u: UstawieniaPodatk
   //  • do PODATKU dochodowego liczymy tylko oficjalny brutto z umowy + ZUS
   //    pracodawcy (gdy włączone) — bo tylko ta część jest udokumentowana.
   //  • do realnego P&L bierzemy całą realną wypłatę (kierowca dostaje ją w ręce)
-  //    plus ZUS pracodawcy (realny wydatek na wierzchu brutto).
+  //    oraz trzy stałe zobowiązania odprowadzane za pracownika.
   // Nadwyżka (realna − oficjalna) jest realnym kosztem, ale NIE pomniejsza podatku.
-  const oficjalne = u.pracownikOficjalnyEnabled && wynagrodzenie > 0;
-  const zusPracodawcy = oficjalne ? round2(parseNum(u.pracownikZusPracodawcyMies)) : 0;
+  const maWyplate = wynagrodzenie > 0;
+  const oficjalne = u.pracownikOficjalnyEnabled && maWyplate;
+  const {
+    podatekDochodowyPracownika,
+    skladkaZdrowotnaPracownika,
+    pozostaleSkladkiZusPracownika,
+    obciazeniaPracownika,
+  } = obliczObciazeniaPracownika(u, maWyplate);
+  const zusPracodawcy = pozostaleSkladkiZusPracownika;
   const wynagrodzeniePodatkowe = oficjalne
-    ? round2(parseNum(u.pracownikBruttoMies) + zusPracodawcy)
-    : wynagrodzenie;
+    ? round2(parseNum(u.pracownikBruttoMies) + obciazeniaPracownika)
+    : round2(wynagrodzenie + obciazeniaPracownika);
 
   const leasingLegacy = wpisyLeasingu.length > 0 ? 0 : parseNum(dane.leasing);
   const kosztyPodatkowe = round2(kosztyPitFaktury + wynagrodzeniePodatkowe + leasingLegacy);
   const dochod = round2(sprzedazNetto - kosztyPodatkowe);
-  const zyskPrzedPodatkami = round2(przychodBrutto - wynagrodzenie - zusPracodawcy - kosztyBrutto - leasingLegacy);
+  const zyskPrzedPodatkami = round2(przychodBrutto - wynagrodzenie - obciazeniaPracownika - kosztyBrutto - leasingLegacy);
 
   return {
     sprzedazNetto: round2(sprzedazNetto),
@@ -351,6 +377,10 @@ function podstawyMiesiaca(m: MiesiącId, dane: DaneMiesiaca, u: UstawieniaPodatk
     zyskPrzedPodatkami,
     wynagrodzeniePodatkowe,
     zusPracodawcy,
+    podatekDochodowyPracownika,
+    skladkaZdrowotnaPracownika,
+    pozostaleSkladkiZusPracownika,
+    obciazeniaPracownika,
   };
 }
 
@@ -387,6 +417,10 @@ export function podatkiRoku(data: WorkspaceData): PodatkiMiesiaca[] {
       kosztyPodatkowe: p.kosztyPodatkowe,
       wynagrodzeniePodatkowe: p.wynagrodzeniePodatkowe,
       zusPracodawcy: p.zusPracodawcy,
+      podatekDochodowyPracownika: p.podatekDochodowyPracownika,
+      skladkaZdrowotnaPracownika: p.skladkaZdrowotnaPracownika,
+      pozostaleSkladkiZusPracownika: p.pozostaleSkladkiZusPracownika,
+      obciazeniaPracownika: p.obciazeniaPracownika,
       dochod: p.dochod,
       dochodYtd,
       pitYtd: pitNarastajaco,

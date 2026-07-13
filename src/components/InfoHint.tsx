@@ -77,7 +77,7 @@ export function InfoHint({ term, className }: { term: TaxTermId; className?: str
 const GRUPY: { tytul: string; terms: TaxTermId[] }[] = [
   { tytul: "VAT", terms: ["vat_nalezny", "vat_naliczony", "vat_do_zaplaty", "nadwyzka_vat"] },
   { tytul: "PIT (podatek dochodowy)", terms: ["koszty_pit", "dochod_pit", "koszty_ponad_przychod", "wynik_ytd", "pit_ytd", "pit_miesiac"] },
-  { tytul: "Zdrowotna", terms: ["zdrowotna"] },
+  { tytul: "Zdrowotna właściciela", terms: ["zdrowotna"] },
   { tytul: "Wynik i łącznie", terms: ["wynik_po_podatkach", "wynik_na_czysto", "lacznie"] },
 ];
 
@@ -137,7 +137,7 @@ export function JakCzytacPodatki() {
                 Firma wystawiła fakturę na 10 000 zł netto + 2 300 zł VAT. Koszty: 6 000 zł netto + VAT.
                 <br />Dochód do PIT: 10 000 − 6 000 = 4 000 zł.
                 <br />VAT do zapłaty: 2 300 − odliczalny VAT z kosztów.
-                <br />Łącznie powinno wyjść: VAT do zapłaty + PIT za miesiąc + zdrowotna.
+                <br />Łącznie powinno wyjść: VAT + podatek firmy + zdrowotna właściciela + zobowiązania za pracownika.
               </p>
             </div>
           </div>

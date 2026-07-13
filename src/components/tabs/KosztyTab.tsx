@@ -46,6 +46,7 @@ import {
 import { buildFuelStats, FuelStatsRow } from "@/lib/fuel-stats";
 import { fuelStatusLabel } from "@/lib/fuel-calculations";
 import { DEFAULT_FUEL_VEHICLE } from "@/lib/recalculate-fuel-chain";
+import { obliczObciazeniaPracownika } from "@/lib/employee-costs";
 import { scanReceiptDataUrl } from "@/lib/receipt-scan-client";
 import {
   getDniMiesiaca,
@@ -1951,9 +1952,12 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
       firmaPolowa: firmaDoRozliczenia / 2,
     };
   }, [dane.tankowanie, dane.inneKoszty]);
-  const sumaKosztow = wynagrodzenie + sumaFuel + sumaInne + leasing;
+  const obciazeniaPracownika = obliczObciazeniaPracownika(ustawienia, wynagrodzenie > 0);
+  const sumaKosztowPracownika = wynagrodzenie + obciazeniaPracownika.obciazeniaPracownika;
+  const sumaKosztow = sumaKosztowPracownika + sumaFuel + sumaInne + leasing;
   const glowneKoszty = [
     { label: "Wypłata kierowcy", value: wynagrodzenie, icon: <IconUsers size={16} /> },
+    { label: "Obciążenia pracownika", value: obciazeniaPracownika.obciazeniaPracownika, icon: <IconUsers size={16} /> },
     { label: "Paliwo", value: sumaFuel, icon: <IconGasStation size={16} /> },
     { label: "Auto i działalność", value: sumaInne, icon: <IconPackage size={16} /> },
     { label: "Leasing", value: leasing, icon: <IconCar size={16} /> },
@@ -2018,7 +2022,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
             {formatZl(sumaKosztow)}
           </p>
           <p className="mt-1 text-[11px] text-dim">
-            wypłata + paliwo + auto/działalność + leasing
+            wypłata + obciążenia pracownika + paliwo + auto/działalność + leasing
           </p>
         </div>
 
@@ -2711,9 +2715,32 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
             </div>
           )}
           <div className="flex justify-between font-bold pt-2 border-t border-line">
-            <span className="text-white">Łącznie</span>
+            <span className="text-white">Wypłata dla kierowcy</span>
             <span className="tabular-nums text-white text-lg">{formatZlCaly(wynagrodzenie)}</span>
           </div>
+          {obciazeniaPracownika.obciazeniaPracownika > 0 && (
+            <div className="mt-3 space-y-1.5 border-t border-line pt-3">
+              <p className="text-[10px] font-extrabold uppercase tracking-wider text-amber-brand">
+                Obciążenia firmy za pracownika
+              </p>
+              <div className="flex justify-between text-sm">
+                <span className="text-dim">Podatek dochodowy pracownika</span>
+                <span className="tabular-nums text-ink">{formatZl(obciazeniaPracownika.podatekDochodowyPracownika)}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-dim">Składka zdrowotna pracownika</span>
+                <span className="tabular-nums text-ink">{formatZl(obciazeniaPracownika.skladkaZdrowotnaPracownika)}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-dim">Pozostałe składki ZUS</span>
+                <span className="tabular-nums text-ink">{formatZl(obciazeniaPracownika.pozostaleSkladkiZusPracownika)}</span>
+              </div>
+              <div className="flex justify-between border-t border-line pt-2 font-bold">
+                <span className="text-white">Łączny koszt firmy</span>
+                <span className="tabular-nums text-lg text-amber-brand">{formatZl(sumaKosztowPracownika)}</span>
+              </div>
+            </div>
+          )}
         </div>
       </Card>}
 

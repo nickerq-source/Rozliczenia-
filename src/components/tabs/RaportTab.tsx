@@ -94,6 +94,10 @@ export function RaportTab({ data }: Props) {
       kosztyPodatkowe: aktywne.reduce((s, p) => s + p.kosztyPodatkowe, 0),
       pit: aktywne.reduce((s, p) => s + p.pitMiesiac, 0),
       zdrowotna: aktywne.reduce((s, p) => s + p.zdrowotna, 0),
+      podatekPracownika: aktywne.reduce((s, p) => s + p.podatekDochodowyPracownika, 0),
+      zdrowotnaPracownika: aktywne.reduce((s, p) => s + p.skladkaZdrowotnaPracownika, 0),
+      zusPracownika: aktywne.reduce((s, p) => s + p.pozostaleSkladkiZusPracownika, 0),
+      obciazeniaPracownika: aktywne.reduce((s, p) => s + p.obciazeniaPracownika, 0),
       zyskPo: aktywne.reduce((s, p) => s + p.zyskPoPodatkach, 0),
       cashflow: aktywne.reduce((s, p) => s + p.cashflowPoPodatkach, 0),
       dochodYtd: podatki[podatki.length - 1]?.dochodYtd ?? 0,
@@ -104,7 +108,8 @@ export function RaportTab({ data }: Props) {
 
   const raport = useMemo(() => {
     const u = getUstawienia(data);
-    let przychod = 0, wynagrodzenie = 0, paliwo = 0, inne = 0, leasing = 0, zusPrac = 0;
+    let przychod = 0, wynagrodzenie = 0, paliwo = 0, inne = 0, leasing = 0;
+    let podatekPrac = 0, zdrowotnaPrac = 0, zusPrac = 0, obciazeniaPrac = 0;
     let oficjalnyBrutto = 0, nieoficjalne = 0;
     let aktywne = 0, kmTotal = 0, kolkaTotal = 0;
     const miesieczne: {
@@ -131,7 +136,10 @@ export function RaportTab({ data }: Props) {
         aktywne++;
         przychod += wynik.przychod;
         wynagrodzenie += wynik.wynagrodzeniePracownika;
-        zusPrac += wynik.zusPracodawcy;
+        podatekPrac += wynik.podatekDochodowyPracownika;
+        zdrowotnaPrac += wynik.skladkaZdrowotnaPracownika;
+        zusPrac += wynik.pozostaleSkladkiZusPracownika;
+        obciazeniaPrac += wynik.obciazeniaPracownika;
         // Rozbicie pensji na oficjalną (do podatku) i nieoficjalną (gotówka)
         if (u.pracownikOficjalnyEnabled && wynik.wynagrodzeniePracownika > 0) {
           const brutto = Math.min(u.pracownikBruttoMies, wynik.wynagrodzeniePracownika);
@@ -146,7 +154,7 @@ export function RaportTab({ data }: Props) {
       miesieczne.push({
         m,
         przychod: wynik.przychod,
-        koszty: wynik.wynagrodzeniePracownika + wynik.zusPracodawcy + wynik.paliwo + wynik.inne + wynik.leasing,
+        koszty: wynik.wynagrodzeniePracownika + wynik.obciazeniaPracownika + wynik.paliwo + wynik.inne + wynik.leasing,
         paliwo: wynik.paliwo,
         wynagrodzenie: wynik.wynagrodzeniePracownika,
         zysk: wynik.zysk,
@@ -178,10 +186,10 @@ export function RaportTab({ data }: Props) {
 
     // Rangi liczone zawsze od najlepszej (1 = najwyższa kwota)
     const sortedDesc = [...ranking].sort((a, b) => b.kwota - a.kwota);
-    const zysk = przychod - wynagrodzenie - zusPrac - paliwo - inne - leasing;
+    const zysk = przychod - wynagrodzenie - obciazeniaPrac - paliwo - inne - leasing;
 
     return {
-      przychod, wynagrodzenie, zusPrac, oficjalnyBrutto, nieoficjalne,
+      przychod, wynagrodzenie, podatekPrac, zdrowotnaPrac, zusPrac, obciazeniaPrac, oficjalnyBrutto, nieoficjalne,
       oficjalneOn: u.pracownikOficjalnyEnabled,
       paliwo, inne, leasing, zysk,
       aktywne, kmTotal, kolkaTotal, miesieczne, sortedDesc,
@@ -339,13 +347,16 @@ export function RaportTab({ data }: Props) {
           value={Math.abs(podatkiSuma.vatDoZaplaty)}
         />
 
-        {raport.oficjalneOn && (
+        {(raport.oficjalneOn || raport.obciazeniaPrac > 0) && (
           <>
             <p className="text-xs font-bold uppercase tracking-wider text-amber-brand mb-1 mt-4">Koszty pracownika</p>
-            <Row label="Oficjalne — brutto wg umowy" value={raport.oficjalnyBrutto} />
-            {raport.zusPrac > 0 && <Row label="Oficjalne — ZUS pracodawcy" value={raport.zusPrac} />}
-            <Row label="Razem oficjalne (do podatku)" value={raport.oficjalnyBrutto + raport.zusPrac} valueClass="text-green-300" />
-            <Row label="Nieoficjalne (poza podatkiem)" value={raport.nieoficjalne} valueClass="text-red-300" />
+            {raport.oficjalneOn && <Row label="Oficjalne — brutto wg umowy" value={raport.oficjalnyBrutto} />}
+            {raport.podatekPrac > 0 && <Row label="Podatek dochodowy pracownika" value={raport.podatekPrac} />}
+            {raport.zdrowotnaPrac > 0 && <Row label="Składka zdrowotna pracownika" value={raport.zdrowotnaPrac} />}
+            {raport.zusPrac > 0 && <Row label="Pozostałe składki ZUS pracownika" value={raport.zusPrac} />}
+            <Row label="Razem obciążenia pracownika" value={raport.obciazeniaPrac} valueClass="text-amber-brand" />
+            {raport.oficjalneOn && <Row label="Razem oficjalne (do podatku)" value={raport.oficjalnyBrutto + raport.obciazeniaPrac} valueClass="text-green-300" />}
+            {raport.oficjalneOn && <Row label="Nieoficjalne (poza podatkiem)" value={raport.nieoficjalne} valueClass="text-red-300" />}
           </>
         )}
 
@@ -359,8 +370,8 @@ export function RaportTab({ data }: Props) {
         <Row label="PIT wyliczony od początku roku" value={podatkiSuma.pitYtd} />
         <Row label="Suma PIT do zapłaty (miesięczne)" value={podatkiSuma.pit} />
 
-        <p className="text-xs font-bold uppercase tracking-wider text-amber-brand mb-1 mt-4">Zdrowotna</p>
-        <Row label="Suma składek zdrowotnych" value={podatkiSuma.zdrowotna} />
+        <p className="text-xs font-bold uppercase tracking-wider text-amber-brand mb-1 mt-4">Zdrowotna właściciela</p>
+        <Row label="Suma składek zdrowotnych właściciela" value={podatkiSuma.zdrowotna} />
 
         <p className="text-xs font-bold uppercase tracking-wider text-amber-brand mb-1 mt-4">Ile zostaje</p>
         <Row label="Zysk przed podatkami" value={raport.zysk} />
@@ -370,7 +381,7 @@ export function RaportTab({ data }: Props) {
         {/* Łączne podatki i składki za okres (VAT do zapłaty nigdy ujemny) */}
         {(() => {
           const vatOkres = podatkiSuma.aktywneMiesiace.reduce((s, p) => s + Math.max(0, p.vatDoZaplaty), 0);
-          const total = Math.round((vatOkres + podatkiSuma.pit + podatkiSuma.zdrowotna) * 100) / 100;
+          const total = Math.round((vatOkres + podatkiSuma.pit + podatkiSuma.zdrowotna + podatkiSuma.obciazeniaPracownika) * 100) / 100;
           return (
             <div className="mt-4 rounded-2xl border border-amber-brand/40 bg-amber-brand/10 p-3">
               <p className="mb-1 text-xs font-bold uppercase tracking-wider text-amber-brand">
@@ -378,7 +389,10 @@ export function RaportTab({ data }: Props) {
               </p>
               <Row label="VAT do zapłaty łącznie" value={vatOkres} />
               <Row label="PIT do zapłaty łącznie" value={podatkiSuma.pit} />
-              <Row label="Składki zdrowotne łącznie" value={podatkiSuma.zdrowotna} />
+              <Row label="Składki zdrowotne właściciela łącznie" value={podatkiSuma.zdrowotna} />
+              <Row label="Podatek dochodowy pracownika łącznie" value={podatkiSuma.podatekPracownika} />
+              <Row label="Zdrowotna pracownika łącznie" value={podatkiSuma.zdrowotnaPracownika} />
+              <Row label="Pozostałe składki ZUS pracownika łącznie" value={podatkiSuma.zusPracownika} />
               <Row label="ŁĄCZNIE POWINNO WYJŚĆ ZA OKRES" value={total} valueClass="text-amber-brand" />
               <p className="mt-2 text-[11px] text-dim/70">
                 Wyliczenie obejmuje okres Czerwiec–Grudzień 2026. Wyliczenia są szacunkowe — ostateczne rozliczenie potwierdza księgowa.

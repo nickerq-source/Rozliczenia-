@@ -58,13 +58,13 @@ export function PodatkiCard({
   const strata = p.dochod < 0;
   const vatDoZaplatyDodatni = Math.max(0, p.vatDoZaplaty);
   const nadwyzkaVat = Math.max(0, -p.vatDoZaplaty);
-  // „Łącznie powinno wyjść" = VAT do zapłaty (nigdy ujemny) + PIT za miesiąc + zdrowotna.
-  const laczniePowinnoWyjsc = vatDoZaplatyDodatni + p.pitMiesiac + p.zdrowotna;
+  // Łączne zobowiązania: podatki właściciela i firmy oraz stałe obciążenia pracownika.
+  const laczniePowinnoWyjsc = vatDoZaplatyDodatni + p.pitMiesiac + p.zdrowotna + p.obciazeniaPracownika;
 
   const kosztyOperacyjne =
-    wynik.wynagrodzeniePracownika + wynik.zusPracodawcy + wynik.paliwo + wynik.inne + wynik.leasing;
-  const oficjalneAktywne = p.wynagrodzeniePodatkowe !== wynik.wynagrodzeniePracownika || p.zusPracodawcy > 0;
-  const oficjalnyBrutto = Math.max(0, p.wynagrodzeniePodatkowe - p.zusPracodawcy);
+    wynik.wynagrodzeniePracownika + wynik.obciazeniaPracownika + wynik.paliwo + wynik.inne + wynik.leasing;
+  const oficjalneAktywne = p.wynagrodzeniePodatkowe !== wynik.wynagrodzeniePracownika || p.obciazeniaPracownika > 0;
+  const oficjalnyBrutto = Math.max(0, p.wynagrodzeniePodatkowe - p.obciazeniaPracownika);
   const nieoficjalne = Math.max(0, wynik.wynagrodzeniePracownika - oficjalnyBrutto);
 
   return (
@@ -107,11 +107,14 @@ export function PodatkiCard({
         </div>
         <Wiersz label="VAT do zapłaty" value={vatDoZaplatyDodatni} klasa="text-ink" term="vat_do_zaplaty" />
         <Wiersz label="Podatek dochodowy do zapłaty" value={p.pitMiesiac} klasa="text-ink" term="pit_miesiac" />
-        <Wiersz label="Składka zdrowotna" value={p.zdrowotna} klasa="text-ink" term="zdrowotna" />
+        <Wiersz label="Składka zdrowotna właściciela" value={p.zdrowotna} klasa="text-ink" term="zdrowotna" />
+        {p.podatekDochodowyPracownika > 0 && <Wiersz label="Podatek dochodowy pracownika" value={p.podatekDochodowyPracownika} klasa="text-ink" />}
+        {p.skladkaZdrowotnaPracownika > 0 && <Wiersz label="Składka zdrowotna pracownika" value={p.skladkaZdrowotnaPracownika} klasa="text-ink" />}
+        {p.pozostaleSkladkiZusPracownika > 0 && <Wiersz label="Pozostałe składki ZUS pracownika" value={p.pozostaleSkladkiZusPracownika} klasa="text-ink" />}
         <Wiersz label="ŁĄCZNIE POWINNO WYJŚĆ" value={laczniePowinnoWyjsc} klasa="text-amber-brand" bold />
-        {vatDoZaplatyDodatni === 0 && p.pitMiesiac === 0 && (
+        {vatDoZaplatyDodatni === 0 && p.pitMiesiac === 0 && p.obciazeniaPracownika === 0 && (
           <p className="mt-2 text-[11px] text-dim">
-            W tym miesiącu nie wychodzi VAT ani PIT do zapłaty. Zostaje składka zdrowotna: {formatZl(p.zdrowotna)}.
+            W tym miesiącu nie wychodzi VAT ani podatek dochodowy do zapłaty. Zostaje składka zdrowotna właściciela: {formatZl(p.zdrowotna)}.
           </p>
         )}
         {nadwyzka && (
@@ -157,9 +160,10 @@ export function PodatkiCard({
             value={wynik.wynagrodzeniePracownika}
             note={oficjalneAktywne ? "realna wypłata (do podatku tylko część oficjalna)" : undefined}
           />
-          {wynik.zusPracodawcy > 0 && (
-            <Wiersz label="ZUS pracodawcy" value={wynik.zusPracodawcy} note="składki społeczne po stronie firmy" />
-          )}
+          {wynik.podatekDochodowyPracownika > 0 && <Wiersz label="Podatek dochodowy pracownika" value={wynik.podatekDochodowyPracownika} />}
+          {wynik.skladkaZdrowotnaPracownika > 0 && <Wiersz label="Składka zdrowotna pracownika" value={wynik.skladkaZdrowotnaPracownika} />}
+          {wynik.pozostaleSkladkiZusPracownika > 0 && <Wiersz label="Pozostałe składki ZUS pracownika" value={wynik.pozostaleSkladkiZusPracownika} />}
+          {wynik.obciazeniaPracownika > 0 && <Wiersz label="Razem obciążenia pracownika" value={wynik.obciazeniaPracownika} bold />}
           <Wiersz label="Paliwo" value={wynik.paliwo} />
           <Wiersz label="Inne koszty" value={wynik.inne} />
           <Wiersz label="Leasing" value={wynik.leasing} />
@@ -180,8 +184,11 @@ export function PodatkiCard({
           {oficjalneAktywne && (
             <>
               <p className="mb-1 mt-4 text-xs font-bold uppercase tracking-wider text-amber-brand">Koszty pracownika</p>
-              <Wiersz label="Oficjalny brutto (umowa)" value={oficjalnyBrutto} />
-              {p.zusPracodawcy > 0 && <Wiersz label="ZUS pracodawcy" value={p.zusPracodawcy} />}
+              <Wiersz label="Wynagrodzenie przyjęte do podatku (bez obciążeń)" value={oficjalnyBrutto} />
+              {p.podatekDochodowyPracownika > 0 && <Wiersz label="Podatek dochodowy pracownika" value={p.podatekDochodowyPracownika} />}
+              {p.skladkaZdrowotnaPracownika > 0 && <Wiersz label="Składka zdrowotna pracownika" value={p.skladkaZdrowotnaPracownika} />}
+              {p.pozostaleSkladkiZusPracownika > 0 && <Wiersz label="Pozostałe składki ZUS pracownika" value={p.pozostaleSkladkiZusPracownika} />}
+              <Wiersz label="Razem obciążenia pracownika" value={p.obciazeniaPracownika} bold />
               <Wiersz label="Razem oficjalne (do podatku)" value={p.wynagrodzeniePodatkowe} klasa="text-green-300" bold />
               <Wiersz
                 label="Pozostała wypłata niewliczana do kosztów podatkowych"
@@ -208,7 +215,7 @@ export function PodatkiCard({
           <Wiersz label="Podatek dochodowy do zapłaty za ten miesiąc" value={p.pitMiesiac} klasa="text-red-300" bold term="pit_miesiac" />
 
           {/* Zdrowotna */}
-          <p className="mb-1 mt-4 text-xs font-bold uppercase tracking-wider text-amber-brand">Zdrowotna</p>
+          <p className="mb-1 mt-4 text-xs font-bold uppercase tracking-wider text-amber-brand">Zdrowotna właściciela</p>
           <Wiersz
             label="Składka za miesiąc"
             value={p.zdrowotna}

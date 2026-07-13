@@ -86,16 +86,16 @@ export const TAX_GLOSSARY: Record<TaxTermId, TaxTerm> = {
     przyklad: "Narastająco 2 400, wcześniej 2 050 → 350 zł za ten miesiąc.",
   },
   zdrowotna: {
-    nazwa: "Składka zdrowotna",
-    opis: "9% podstawy (skala), nie mniej niż minimum ustawione w aplikacji.",
+    nazwa: "Składka zdrowotna właściciela",
+    opis: "Składka zdrowotna właściciela firmy: 9% podstawy (skala), nie mniej niż minimum ustawione w aplikacji. Nie jest to składka zdrowotna pracownika.",
     wzor: "max(9% × dochód, minimum)",
     przyklad: "Dochód niski/ujemny → minimum 432,54 zł.",
   },
   lacznie: {
     nazwa: "Łącznie powinno wyjść",
-    opis: "Suma VAT do zapłaty, podatku dochodowego i składki zdrowotnej za wybrany miesiąc. To kwota obciążeń do zapłaty, a nie kwota, która zostaje firmie.",
-    wzor: "VAT do zapłaty + podatek dochodowy za miesiąc + zdrowotna",
-    przyklad: "VAT 847,23 + podatek dochodowy 0 + zdrowotna 432,54 = 1 279,77 zł do zapłaty.",
+    opis: "Suma VAT do zapłaty, podatku dochodowego firmy, składki zdrowotnej właściciela oraz trzech zobowiązań za pracownika. To kwota obciążeń do zapłaty, a nie kwota, która zostaje firmie.",
+    wzor: "VAT + podatek firmy + zdrowotna właściciela + podatek pracownika + zdrowotna pracownika + pozostały ZUS pracownika",
+    przyklad: "Obciążenia pracownika: 107 + 120,30 + 165 = 392,30 zł. Ta suma jest doliczana do pozostałych zobowiązań miesiąca.",
   },
   wynik_po_podatkach: {
     nazwa: "Po podatku dochodowym i zdrowotnej — przed VAT",

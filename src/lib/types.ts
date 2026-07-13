@@ -411,9 +411,12 @@ export interface UstawieniaPodatkowe {
   healthMinMonthly: number; // 0
   healthMinEnabled: boolean; // true
   // Wynagrodzenie pracownika (oficjalne, na umowie)
-  pracownikOficjalnyEnabled: boolean; // do podatków liczy oficjalny brutto + ZUS zamiast realnej wypłaty
+  pracownikOficjalnyEnabled: boolean; // do podatków liczy oficjalny brutto + obciążenia zamiast realnej wypłaty
   pracownikBruttoMies: number; // oficjalny brutto/mies. wg umowy (np. 1255)
-  pracownikZusPracodawcyMies: number; // składki ZUS po stronie pracodawcy/mies. (kwota od księgowej)
+  pracownikZusPracodawcyMies: number; // pole historyczne; zachowane dla zgodności starych danych
+  pracownikPodatekDochodowyMies: number; // zaliczka na podatek dochodowy pracownika
+  pracownikSkladkaZdrowotnaMies: number; // składka zdrowotna pracownika
+  pracownikPozostaleSkladkiZusMies: number; // pozostałe składki ZUS za pracownika
 }
 
 export interface WorkspaceData {
@@ -433,7 +436,11 @@ export interface WorkspaceState {
 export interface WynikMiesiaca {
   przychod: number;
   wynagrodzeniePracownika: number; // realna wypłata kierowcy (dniówki + premia)
-  zusPracodawcy: number; // składki ZUS pracodawcy (gdy włączone oficjalne wynagrodzenie)
+  zusPracodawcy: number; // alias zgodności: pozostałe składki ZUS za pracownika
+  podatekDochodowyPracownika: number;
+  skladkaZdrowotnaPracownika: number;
+  pozostaleSkladkiZusPracownika: number;
+  obciazeniaPracownika: number; // suma trzech powyższych pozycji
   paliwo: number;
   inne: number;
   leasing: number;
