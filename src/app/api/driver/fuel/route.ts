@@ -6,7 +6,10 @@ import { getUstawienia } from "@/lib/tax";
 import { uploadParagon, removeParagon } from "@/lib/storage";
 import { formatZlCaly, parseNum } from "@/lib/business-logic";
 import { MIESIACE_ZAKRESU, POLSKIE_MIESIACE, ROK } from "@/lib/dates";
-import { computeFuelMetrics } from "@/lib/fuel-calculations";
+import {
+  getFuelVehicles,
+  recalculateWorkspaceFuelChains,
+} from "@/lib/recalculate-fuel-chain";
 import {
   DaneMiesiaca,
   KosztZalacznik,
@@ -69,36 +72,6 @@ function normalizeAccountingMonth(raw: unknown, iso: string): MiesiącId {
     return value as MiesiącId;
   }
   return monthFromIso(iso);
-}
-
-function sameFuelScope(a: WpisTankowania, profile: Profile, vehicleId?: string): boolean {
-  if (vehicleId || a.vehicleId) return !!vehicleId && a.vehicleId === vehicleId;
-  return (a.dodaneBy ?? "").trim() === profile.name;
-}
-
-function findPreviousFuel(
-  wsData: WorkspaceData,
-  profile: Profile,
-  currentIso: string,
-  currentOdometerKm?: number,
-  vehicleId?: string,
-  excludeId?: string
-): WpisTankowania | null {
-  if (!currentOdometerKm) return null;
-  const candidates: WpisTankowania[] = [];
-  for (const m of MIESIACE_ZAKRESU) {
-    const entries = wsData.miesiace?.[m as MiesiącId]?.tankowanie ?? [];
-    for (const entry of entries) {
-      if (entry.id === excludeId) continue;
-      const odometer = parseNum(entry.odometerKm);
-      if (odometer <= 0 || odometer >= currentOdometerKm) continue;
-      if (!sameFuelScope(entry, profile, vehicleId)) continue;
-      if (entry.data > currentIso) continue;
-      candidates.push(entry);
-    }
-  }
-  candidates.sort((a, b) => parseNum(b.odometerKm) - parseNum(a.odometerKm));
-  return candidates[0] ?? null;
 }
 
 function findFuelEntry(
@@ -271,6 +244,7 @@ export async function POST(req: NextRequest) {
     accountingMonth?: number;
     includeInReports?: boolean;
     vehicleId?: string;
+    isFullTank?: boolean;
     confirmDuplicate?: boolean;
     zalacznik?: string;
     receiptImage?: string;
@@ -316,7 +290,7 @@ export async function POST(req: NextRequest) {
   const netAmount = validPositiveNumber(body.netAmount);
   const vatAmount = validPositiveNumber(body.vatAmount);
   const odometerKm = validMileage(body.odometerKm);
-  const vehicleId = typeof body.vehicleId === "string" ? body.vehicleId.trim() || undefined : undefined;
+  const requestedVehicleId = typeof body.vehicleId === "string" ? body.vehicleId.trim() : "";
 
   const admin = getAdminSupabase();
   const { data: ws, error } = await admin
@@ -329,6 +303,11 @@ export async function POST(req: NextRequest) {
   }
 
   const wsData = (ws.data ?? {}) as WorkspaceData;
+  const vehicles = getFuelVehicles(wsData);
+  const vehicleId = requestedVehicleId || (vehicles.length === 1 ? vehicles[0].id : "");
+  if (!vehicleId || !vehicles.some((vehicle) => vehicle.id === vehicleId)) {
+    return NextResponse.json({ error: "Wybierz pojazd dla tankowania." }, { status: 400 });
+  }
   const dane = (wsData.miesiace?.[miesiac] ?? pustyMiesiac()) as DaneMiesiaca;
 
   // Tankowanie od kierowcy zapisuje się jako pending i nie wpływa na raporty,
@@ -370,22 +349,8 @@ export async function POST(req: NextRequest) {
   ]);
   const zalaczniki = [receiptAttachment, odometerAttachment, tachographAttachment].filter(Boolean) as KosztZalacznik[];
   const hasReceiptPhoto = !!receiptAttachment;
-  const hasOdometerPhoto = !!odometerAttachment || !!tachographAttachment;
   const vatRate = body.vatRate && DOZWOLONE_VAT.includes(body.vatRate) ? body.vatRate : undefined;
   const vatNeedsReview = body.vatNeedsReview || !vatRate;
-  const previous = findPreviousFuel(wsData, profile, iso, odometerKm, vehicleId);
-  const metrics = computeFuelMetrics({
-    litersFilled: litry,
-    grossAmount: koszt,
-    netAmount,
-    currentOdometerKm: odometerKm,
-    previousOdometerKm: previous?.odometerKm,
-    hasReceiptPhoto,
-    hasOdometerPhoto,
-    aiNeedsReview: body.aiNeedsReview,
-    vatNeedsReview,
-  });
-
   const wpis: WpisTankowania = {
     id: crypto.randomUUID(),
     createdAt: new Date().toISOString(),
@@ -428,16 +393,18 @@ export async function POST(req: NextRequest) {
     speed: typeof body.speed === "number" && isFinite(body.speed) ? body.speed : undefined,
     note: body.note?.trim() || undefined,
     vehicleId,
-    ...metrics,
+    isFullTank: body.isFullTank ?? true,
   };
 
-  const nowaData: WorkspaceData = {
+  const rawData: WorkspaceData = {
     ...wsData,
     miesiace: {
       ...wsData.miesiace,
       [miesiac]: { ...dane, tankowanie: [...(dane.tankowanie ?? []), wpis] },
     },
   };
+  const nowaData = recalculateWorkspaceFuelChains(rawData).data;
+  const zapisanyWpis = nowaData.miesiace?.[miesiac]?.tankowanie.find((entry) => entry.id === wpis.id) ?? wpis;
 
   const { error: saveErr } = await admin
     .from("workspaces")
@@ -462,7 +429,7 @@ export async function POST(req: NextRequest) {
     url,
   });
 
-  return NextResponse.json({ ok: true, wpis });
+  return NextResponse.json({ ok: true, wpis: zapisanyWpis });
 }
 
 /**
@@ -497,6 +464,8 @@ export async function PATCH(req: NextRequest) {
     odometerConfidence?: number;
     tachographConfidence?: number;
     aiNeedsReview?: boolean;
+    isFullTank?: boolean;
+    vehicleId?: string;
   };
   try {
     body = await req.json();
@@ -514,6 +483,7 @@ export async function PATCH(req: NextRequest) {
   if (error || !ws) return NextResponse.json({ error: "Workspace nie znaleziony" }, { status: 404 });
 
   const wsData = (ws.data ?? {}) as WorkspaceData;
+  const vehicles = getFuelVehicles(wsData);
   const found = findFuelEntry(wsData, body.id);
   if (!found) return NextResponse.json({ error: "Nie znaleziono tankowania." }, { status: 404 });
   const { miesiac: sourceMonth, dane: sourceDane, wpis } = found;
@@ -546,6 +516,11 @@ export async function PATCH(req: NextRequest) {
       : wpis.litry;
   const pricePerLiter = validPositiveNumber(body.cenaZaLitr) ?? wpis.pricePerLiter;
   const odometerKm = validMileage(body.odometerKm) ?? wpis.odometerKm;
+  const requestedVehicleId = typeof body.vehicleId === "string" ? body.vehicleId.trim() : "";
+  const vehicleId = requestedVehicleId || wpis.vehicleId || (vehicles.length === 1 ? vehicles[0].id : "");
+  if (!vehicleId || !vehicles.some((vehicle) => vehicle.id === vehicleId)) {
+    return NextResponse.json({ error: "Wybierz pojazd dla tankowania." }, { status: 400 });
+  }
 
   const [receiptAttachment, odometerAttachment, tachographAttachment] = await Promise.all([
     uploadFuelAttachment(profile.workspace_id, body.receiptImage, "dokument", "paragon.jpg", {
@@ -570,19 +545,6 @@ export async function PATCH(req: NextRequest) {
   const addedAttachments = [receiptAttachment, odometerAttachment, tachographAttachment].filter(Boolean) as KosztZalacznik[];
   const zalaczniki = [...(wpis.zalaczniki ?? []), ...addedAttachments];
   const hasReceiptPhoto = zalaczniki.some((z) => z.attachmentKind === "receipt" || z.typ === "dokument");
-  const hasOdometerPhoto = zalaczniki.some((z) => z.attachmentKind === "odometer" || z.attachmentKind === "tachograph" || z.typ === "licznik");
-  const previous = findPreviousFuel(wsData, profile, iso, odometerKm, wpis.vehicleId, wpis.id);
-  const metrics = computeFuelMetrics({
-    litersFilled: litry,
-    grossAmount: koszt,
-    netAmount: wpis.netAmount,
-    currentOdometerKm: odometerKm,
-    previousOdometerKm: previous?.odometerKm,
-    hasReceiptPhoto,
-    hasOdometerPhoto,
-    aiNeedsReview: body.aiNeedsReview ?? wpis.needsReview,
-    vatNeedsReview: wpis.vatRate ? false : true,
-  });
 
   const updated: WpisTankowania = {
     ...wpis,
@@ -611,12 +573,13 @@ export async function PATCH(req: NextRequest) {
     hasInvoice: hasReceiptPhoto ? wpis.hasInvoice : false,
     zalaczniki: zalaczniki.length ? zalaczniki : undefined,
     updatedAt: new Date().toISOString(),
-    ...metrics,
+    vehicleId,
+    isFullTank: body.isFullTank ?? wpis.isFullTank ?? true,
   };
 
   const targetMonth = accountingMonth as MiesiącId;
   const targetDane = (wsData.miesiace?.[targetMonth] ?? pustyMiesiac()) as DaneMiesiaca;
-  const nowaData: WorkspaceData = {
+  const rawData: WorkspaceData = {
     ...wsData,
     miesiace: {
       ...wsData.miesiace,
@@ -629,6 +592,8 @@ export async function PATCH(req: NextRequest) {
         : { [targetMonth]: { ...targetDane, tankowanie: [...(targetDane.tankowanie ?? []), updated] } }),
     },
   };
+  const nowaData = recalculateWorkspaceFuelChains(rawData).data;
+  const zapisanyWpis = nowaData.miesiace?.[targetMonth]?.tankowanie.find((entry) => entry.id === wpis.id) ?? updated;
 
   const { error: saveErr } = await admin
     .from("workspaces")
@@ -651,7 +616,7 @@ export async function PATCH(req: NextRequest) {
     url: `/admin?miesiac=${targetMonth}&zakladka=koszty`,
   });
 
-  return NextResponse.json({ ok: true, wpis: updated, miesiac: targetMonth });
+  return NextResponse.json({ ok: true, wpis: zapisanyWpis, miesiac: targetMonth });
 }
 
 /**
@@ -675,7 +640,7 @@ export async function GET() {
     return NextResponse.json({ error: "Workspace nie znaleziony" }, { status: 404 });
   }
 
-  const wsData = (ws.data ?? {}) as WorkspaceData;
+  const wsData = recalculateWorkspaceFuelChains((ws.data ?? {}) as WorkspaceData, { includePending: true }).data;
   const tankowania: {
     id: string;
     data: string;
@@ -703,6 +668,8 @@ export async function GET() {
     speed?: number;
     note?: string;
     rejectionReason?: string;
+    vehicleId?: string;
+    isFullTank?: boolean;
     miesiac: number;
     nazwaMiesiaca: string;
     zamkniety: boolean;
@@ -741,6 +708,8 @@ export async function GET() {
         speed: t.speed,
         note: t.note,
         rejectionReason: t.rejectionReason,
+        vehicleId: t.vehicleId,
+        isFullTank: t.isFullTank ?? true,
         miesiac: m,
         nazwaMiesiaca: POLSKIE_MIESIACE[m],
         zamkniety,
@@ -750,7 +719,7 @@ export async function GET() {
   // Najnowsze na górze
   tankowania.sort((a, b) => (a.data < b.data ? 1 : a.data > b.data ? -1 : 0));
 
-  return NextResponse.json({ tankowania });
+  return NextResponse.json({ tankowania, vehicles: getFuelVehicles(wsData) });
 }
 
 /**
@@ -801,13 +770,14 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: "Możesz usuwać tylko tankowania oczekujące." }, { status: 403 });
   }
 
-  const nowaData: WorkspaceData = {
+  const rawData: WorkspaceData = {
     ...wsData,
     miesiace: {
       ...wsData.miesiace,
       [miesiac]: { ...dane, tankowanie: dane.tankowanie.filter((t) => t.id !== id) },
     },
   };
+  const nowaData = recalculateWorkspaceFuelChains(rawData).data;
 
   const { error: saveErr } = await admin
     .from("workspaces")

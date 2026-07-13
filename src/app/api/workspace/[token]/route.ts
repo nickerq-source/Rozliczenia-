@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSupabase } from "@/lib/supabase-server";
+import { recalculateWorkspaceFuelChains } from "@/lib/recalculate-fuel-chain";
+import type { WorkspaceData } from "@/lib/types";
 
 export const runtime = "nodejs";
 
@@ -29,17 +31,18 @@ export async function GET(_req: NextRequest, { params }: Params) {
 
 export async function PUT(req: NextRequest, { params }: Params) {
   const { token } = await params;
-  const body = await req.json();
+  const body = (await req.json()) as WorkspaceData;
+  const recalculated = recalculateWorkspaceFuelChains(body).data;
   const supabase = await getServerSupabase();
 
   const { error } = await supabase
     .from("workspaces")
-    .update({ data: body, updated_at: new Date().toISOString() })
+    .update({ data: recalculated, updated_at: new Date().toISOString() })
     .eq("id", token);
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, data: recalculated });
 }

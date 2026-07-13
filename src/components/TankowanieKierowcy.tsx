@@ -8,7 +8,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Card } from "./ui/Card";
 import { imageToCompressedDataUrl } from "@/lib/image";
 import { ReceiptScanResult, scanReceiptDataUrl } from "@/lib/receipt-scan-client";
-import type { KosztZalacznik, VatRate, WpisTankowania } from "@/lib/types";
+import type { FuelVehicleConfig, KosztZalacznik, VatRate, WpisTankowania } from "@/lib/types";
+import { DEFAULT_FUEL_VEHICLE } from "@/lib/recalculate-fuel-chain";
 import { formatZlCaly } from "@/lib/business-logic";
 import { fuelStatusLabel } from "@/lib/fuel-calculations";
 import { ZalacznikPreview } from "./ZalacznikPreview";
@@ -70,6 +71,8 @@ interface WpisListy {
   speed?: number;
   note?: string;
   rejectionReason?: string;
+  vehicleId?: string;
+  isFullTank?: boolean;
   miesiac: number;
   nazwaMiesiaca: string;
   zamkniety: boolean;
@@ -148,6 +151,7 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
   const [delBusyId, setDelBusyId] = useState<string | null>(null);
   const [updateBusyId, setUpdateBusyId] = useState<string | null>(null);
   const [ostatniWynik, setOstatniWynik] = useState<WpisTankowania | null>(null);
+  const [vehicles, setVehicles] = useState<FuelVehicleConfig[]>([DEFAULT_FUEL_VEHICLE]);
 
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [fData, setFData] = useState(todayISO());
@@ -164,6 +168,8 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
   const [fTachoStatus, setFTachoStatus] = useState("");
   const [fSpeed, setFSpeed] = useState("");
   const [fNotatka, setFNotatka] = useState("");
+  const [fIsFullTank, setFIsFullTank] = useState(true);
+  const [fVehicleId, setFVehicleId] = useState(DEFAULT_FUEL_VEHICLE.id);
   const [mileageSuggestion, setMileageSuggestion] = useState<string | null>(null);
   const [rokSuggestion, setRokSuggestion] = useState<{ original: string; corrected: string } | null>(null);
 
@@ -191,9 +197,11 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
       !!fPrzebieg.trim() ||
       !!fTachoStatus.trim() ||
       !!fSpeed.trim() ||
-      !!fNotatka.trim()
+      !!fNotatka.trim() ||
+      fVehicleId !== (vehicles[0]?.id ?? DEFAULT_FUEL_VEHICLE.id) ||
+      !fIsFullTank
     );
-  }, [fCena, fData, fDokument, fKwota, fKwotaNetto, fLitry, fNip, fNotatka, fPrzebieg, fSpeed, fSprzedawca, fTachoStatus, fVat, fVatKwota, open, photos.length]);
+  }, [fCena, fData, fDokument, fIsFullTank, fKwota, fKwotaNetto, fLitry, fNip, fNotatka, fPrzebieg, fSpeed, fSprzedawca, fTachoStatus, fVat, fVatKwota, fVehicleId, open, photos.length, vehicles]);
 
   const wczytaj = useCallback(async () => {
     try {
@@ -201,6 +209,9 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
       if (!r.ok) return;
       const j = await r.json();
       setLista(j.tankowania ?? []);
+      const available = (j.vehicles?.length ? j.vehicles : [DEFAULT_FUEL_VEHICLE]) as FuelVehicleConfig[];
+      setVehicles(available);
+      setFVehicleId((current) => available.some((vehicle) => vehicle.id === current) ? current : available[0].id);
     } catch {
       /* lista nieobowiązkowa */
     }
@@ -225,6 +236,8 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
     setFTachoStatus("");
     setFSpeed("");
     setFNotatka("");
+    setFIsFullTank(true);
+    setFVehicleId(vehicles[0]?.id ?? DEFAULT_FUEL_VEHICLE.id);
     setMileageSuggestion(null);
     setRokSuggestion(null);
     setPhotos([]);
@@ -233,7 +246,7 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
     setDuplicateWarning(null);
     setStep("photos");
     setConfirmDiscard(false);
-  }, []);
+  }, [vehicles]);
 
   const forceClose = useCallback(() => {
     reset();
@@ -441,6 +454,8 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
           tachoStatus: fTachoStatus || undefined,
           speed: isFinite(speed) ? speed : undefined,
           note: fNotatka || undefined,
+          vehicleId: fVehicleId,
+          isFullTank: fIsFullTank,
           receiptImage: receiptPhoto?.dataUrl,
           odometerImage: odometerPhoto?.dataUrl,
           tachographImage: tachographPhoto?.dataUrl,
@@ -868,6 +883,28 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
                     Przebieg pojazdu (km)
                     <input inputMode="decimal" value={fPrzebieg} onChange={(e) => setFPrzebieg(e.target.value)} placeholder="np. 245320,8" className={`${inputCls} tabular-nums`} />
                   </label>
+                  <label className="text-dim col-span-2">
+                    Pojazd
+                    <select value={fVehicleId} onChange={(event) => setFVehicleId(event.target.value)} className={inputCls}>
+                      {vehicles.map((vehicle) => (
+                        <option key={vehicle.id} value={vehicle.id}>
+                          {vehicle.name}{vehicle.registration ? ` · ${vehicle.registration}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="col-span-2 flex min-h-[44px] cursor-pointer items-center justify-between gap-3 rounded-xl border border-line bg-input px-3 py-2 text-sm text-ink">
+                    <span>
+                      Tankowanie do pełna
+                      <span className="block text-[10px] text-dim">Wyłącz tylko przy tankowaniu częściowym.</span>
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={fIsFullTank}
+                      onChange={(event) => setFIsFullTank(event.target.checked)}
+                      className="h-5 w-5 accent-amber-brand"
+                    />
+                  </label>
                   {mileageSuggestion && (
                     <p className="col-span-2 rounded-xl border border-amber-brand/35 bg-amber-brand/10 px-3 py-2 text-[11px] text-amber-brand">
                       {mileageSuggestion}
@@ -1034,6 +1071,9 @@ export function TankowanieKierowcy({ lang }: { lang: DriverLanguage }) {
                     </p>
                     <div className="mt-1 flex flex-wrap gap-1 text-[10px]">
                       {w.odometerKm ? <span className="rounded-full border border-line px-2 py-0.5 text-dim">{w.odometerKm} km</span> : null}
+                      <span className="rounded-full border border-line px-2 py-0.5 text-dim">
+                        {w.isFullTank ?? true ? "do pełna" : "częściowe"}
+                      </span>
                       {w.tachoStatus ? <span className="rounded-full border border-line px-2 py-0.5 text-dim">Tacho {w.tachoStatus}</span> : null}
                       {w.isHistorical ? <span className="rounded-full border border-amber-brand/40 px-2 py-0.5 text-amber-brand">historyczne</span> : null}
                       <span className={`rounded-full border px-2 py-0.5 ${hasReceiptAttachment(w) ? "border-green-500/35 text-green-300" : "border-red-500/35 text-red-300"}`}>

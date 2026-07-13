@@ -1,7 +1,5 @@
 import { parseNum } from "./business-logic";
 
-export const TANK_CAPACITY_LITERS = 91;
-
 export type FuelReviewStatus =
   | "ok"
   | "needs_review"
@@ -23,6 +21,8 @@ export interface FuelMetricsInput {
   hasOdometerPhoto?: boolean;
   aiNeedsReview?: boolean;
   vatNeedsReview?: boolean;
+  tankCapacityLiters?: number | null;
+  isFullTank?: boolean;
 }
 
 export interface FuelMetricsResult {
@@ -92,16 +92,18 @@ export function computeFuelMetrics(input: FuelMetricsInput): FuelMetricsResult {
   const reviewReasons: string[] = [];
 
   let fuelBeforeRefuelLiters: number | undefined;
-  if (liters != null) {
-    fuelBeforeRefuelLiters = round2(TANK_CAPACITY_LITERS - liters);
-    if (liters > TANK_CAPACITY_LITERS || fuelBeforeRefuelLiters < 0) {
+  const tankCapacity = positive(input.tankCapacityLiters);
+  if (liters != null && (input.isFullTank ?? true) && tankCapacity != null) {
+    fuelBeforeRefuelLiters = round2(tankCapacity - liters);
+    if (liters > tankCapacity || fuelBeforeRefuelLiters < 0) {
       statuses.push("suspicious_liters");
-      reviewReasons.push(`Zatankowana ilość litrów przekracza pojemność baku i układu paliwowego ${TANK_CAPACITY_LITERS} L.`);
+      reviewReasons.push(`Zatankowana ilość litrów przekracza pojemność zbiornika ${tankCapacity} l.`);
+      fuelBeforeRefuelLiters = undefined;
     } else if (fuelBeforeRefuelLiters < 5) {
       statuses.push("needs_review");
       reviewReasons.push("Przed tankowaniem w baku było bardzo mało paliwa.");
     }
-  } else {
+  } else if (liters == null) {
     statuses.push("suspicious_liters");
     reviewReasons.push("Brak poprawnej liczby litrów.");
   }

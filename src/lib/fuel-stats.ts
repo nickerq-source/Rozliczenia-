@@ -1,19 +1,28 @@
 import {
   DaneMiesiaca,
+  FuelVehicleConfig,
   KategoriaKosztu,
   KosztZalacznik,
+  MiesiącId,
   UstawieniaPodatkowe,
   VatRate,
   WpisTankowania,
 } from "./types";
-import { czyTankowanieWliczane, parseNum } from "./business-logic";
+import { parseNum } from "./business-logic";
 import { FuelReviewStatus } from "./fuel-calculations";
+import {
+  DEFAULT_FUEL_VEHICLE,
+  FuelChainSegment,
+  recalculateFuelChain,
+} from "./recalculate-fuel-chain";
 import { rozbijWpis } from "./tax";
 
 export interface FuelStatsRow {
   id: string;
   data: string;
   kierowca: string | null;
+  vehicleId: string | null;
+  vehicleName: string | null;
   stacja: string | null;
   litry: number | null;
   cenaNettoZaLitr: number | null;
@@ -32,6 +41,7 @@ export interface FuelStatsRow {
   fuelStatus: FuelReviewStatus | null;
   needsReview: boolean;
   reviewReasons: string[];
+  isFullTank: boolean;
   zalaczniki: KosztZalacznik[];
   pomijanyPowod?: string;
 }
@@ -57,6 +67,7 @@ export interface FuelStatsSummary {
 
 export interface FuelStatsResult {
   rows: FuelStatsRow[];
+  segments: FuelChainSegment[];
   summary: FuelStatsSummary;
   filters: {
     kierowcy: string[];
@@ -68,28 +79,56 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
-function isFuelEntry(t: WpisTankowania): boolean {
-  return (t.kategoria ?? "paliwo_adblue") === "paliwo_adblue" && czyTankowanieWliczane(t);
+function isFuelEntry(t: WpisTankowania, includePending: boolean): boolean {
+  const status = t.status ?? "approved";
+  return (
+    (t.kategoria ?? "paliwo_adblue") === "paliwo_adblue" &&
+    status !== "rejected" &&
+    (status === "approved" || includePending) &&
+    (t.includeInReports ?? true)
+  );
+}
+
+export interface FuelStatsOptions {
+  kierowca?: string;
+  stacja?: string;
+  includePending?: boolean;
+  allMonths?: Partial<Record<MiesiącId, DaneMiesiaca>>;
+  targetMonth?: MiesiącId;
+  vehicles?: FuelVehicleConfig[];
 }
 
 export function buildFuelStats(
   dane: DaneMiesiaca,
   ustawienia: UstawieniaPodatkowe,
-  filters?: { kierowca?: string; stacja?: string }
+  options: FuelStatsOptions = {}
 ): FuelStatsResult {
   const dev = process.env.NODE_ENV !== "production";
-  const wpisy = (dane.tankowanie ?? []).filter(isFuelEntry);
+  const includePending = options.includePending ?? false;
+  const targetSource = (dane.tankowanie ?? []).filter((entry) => isFuelEntry(entry, includePending));
+  const allEntries = options.allMonths
+    ? Object.values(options.allMonths).flatMap((month) => month?.tankowanie ?? [])
+    : dane.tankowanie ?? [];
+  const vehicles = options.vehicles?.length ? options.vehicles : [DEFAULT_FUEL_VEHICLE];
+  const recalculated = recalculateFuelChain(allEntries, {
+    vehicles,
+    defaultVehicleId: vehicles.length === 1 ? vehicles[0].id : undefined,
+    includePending,
+  });
+  const recalculatedById = new Map(recalculated.entries.map((entry) => [entry.id, entry]));
+  const wpisy = targetSource.map((entry) => recalculatedById.get(entry.id) ?? entry);
+  const vehicleById = new Map(vehicles.map((vehicle) => [vehicle.id, vehicle]));
   const rows: FuelStatsRow[] = [];
 
   if (dev) {
-    console.log("[fuel-stats] entries:", wpisy.length, "filters:", filters ?? {});
+    console.log("[fuel-stats] entries:", wpisy.length, "options:", options);
   }
 
   for (const t of wpisy) {
     const kierowca = t.dodaneBy?.trim() || null;
     const stacja = t.supplierName?.trim() || null;
-    if (filters?.kierowca && kierowca !== filters.kierowca) continue;
-    if (filters?.stacja && stacja !== filters.stacja) continue;
+    if (options.kierowca && kierowca !== options.kierowca) continue;
+    if (options.stacja && stacja !== options.stacja) continue;
 
     const litry = parseNum(t.litry);
     const r = rozbijWpis(
@@ -113,6 +152,8 @@ export function buildFuelStats(
       id: t.id,
       data: t.data,
       kierowca,
+      vehicleId: t.vehicleId ?? null,
+      vehicleName: t.vehicleId ? vehicleById.get(t.vehicleId)?.name ?? t.vehicleId : null,
       stacja,
       litry: litry > 0 ? round2(litry) : null,
       cenaNettoZaLitr: litry > 0 && netto > 0 ? round2(netto / litry) : null,
@@ -131,6 +172,7 @@ export function buildFuelStats(
       fuelStatus: t.fuelStatus ?? null,
       needsReview: !!t.needsReview,
       reviewReasons: t.reviewReasons ?? [],
+      isFullTank: t.isFullTank ?? true,
       zalaczniki: t.zalaczniki ?? [],
       pomijanyPowod: valid ? undefined : "brak litrów lub kwoty",
     };
@@ -156,12 +198,13 @@ export function buildFuelStats(
   const netto = counted.reduce((s, r) => s + r.netto, 0);
   const brutto = counted.reduce((s, r) => s + r.brutto, 0);
   const vat = counted.reduce((s, r) => s + r.vat, 0);
-  const countedKm = counted.filter((r) => (r.kmSinceLastFuel ?? 0) > 0);
-  const sumaKm = countedKm.reduce((s, r) => s + (r.kmSinceLastFuel ?? 0), 0);
-  const litryZeStatystyk = countedKm.reduce((s, r) => s + (r.litry ?? 0), 0);
-  const bruttoZeStatystyk = countedKm.reduce((s, r) => s + r.brutto, 0);
-  const nettoZeStatystyk = countedKm.reduce((s, r) => s + r.netto, 0);
-  const fuelBeforeRows = rows.filter((r) => (r.fuelBeforeRefuelLiters ?? 0) > 0);
+  const visibleIds = new Set(counted.map((row) => row.id));
+  const segments = recalculated.segments.filter((segment) => visibleIds.has(segment.endEntryId));
+  const sumaKm = segments.reduce((sum, segment) => sum + segment.distanceKm, 0);
+  const litryZeStatystyk = segments.reduce((sum, segment) => sum + segment.liters, 0);
+  const bruttoZeStatystyk = segments.reduce((sum, segment) => sum + segment.grossAmount, 0);
+  const nettoZeStatystyk = segments.reduce((sum, segment) => sum + segment.netAmount, 0);
+  const fuelBeforeRows = rows.filter((row) => row.fuelBeforeRefuelLiters != null);
   const ok = rows.filter((r) => r.fuelStatus === "ok").length;
   const doSprawdzenia = rows.filter((r) => r.needsReview || r.fuelStatus !== "ok").length;
 
@@ -193,6 +236,7 @@ export function buildFuelStats(
 
   return {
     rows,
+    segments,
     summary,
     filters: {
       kierowcy: [...new Set(wpisy.map((t) => t.dodaneBy?.trim()).filter(Boolean) as string[])].sort(),

@@ -300,8 +300,18 @@ export interface WpisTankowania extends KosztVatInfo {
     | "vat_review";
   reviewReasons?: string[];
   vehicleId?: string;
+  isFullTank?: boolean; // domyślnie true; false nie zamyka cyklu tankowania
   note?: string;
   rejectionReason?: string;
+}
+
+/** Pojazd używany do budowania niezależnego łańcucha tankowań. */
+export interface FuelVehicleConfig {
+  id: string;
+  name: string;
+  registration?: string;
+  tankCapacityLiters: number;
+  active?: boolean;
 }
 
 export interface WpisInnegoKosztu extends KosztVatInfo {
@@ -408,6 +418,7 @@ export interface WorkspaceData {
   miesiace: Partial<Record<MiesiącId, DaneMiesiaca>>;
   notatki?: Notatka[];
   ustawienia?: Partial<UstawieniaPodatkowe>;
+  vehicles?: FuelVehicleConfig[];
 }
 
 export interface WorkspaceState {

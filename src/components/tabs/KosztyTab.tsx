@@ -10,6 +10,7 @@ import {
   DayType,
   DocumentStatus,
   DzienKierowcy,
+  FuelVehicleConfig,
   KategoriaKosztu,
   KosztPayer,
   KosztVatInfo,
@@ -44,6 +45,7 @@ import {
 } from "@/lib/business-logic";
 import { buildFuelStats, FuelStatsRow } from "@/lib/fuel-stats";
 import { fuelStatusLabel } from "@/lib/fuel-calculations";
+import { DEFAULT_FUEL_VEHICLE } from "@/lib/recalculate-fuel-chain";
 import { scanReceiptDataUrl } from "@/lib/receipt-scan-client";
 import {
   getDniMiesiaca,
@@ -86,6 +88,8 @@ interface Props {
   ustawienia: UstawieniaPodatkowe;
   // Wszystkie miesiące — potrzebne do rozliczenia 50/50 narastająco
   wszystkieMiesiace?: Partial<Record<MiesiącId, DaneMiesiaca>>;
+  vehicles?: FuelVehicleConfig[];
+  saveStatus?: "idle" | "saving" | "saved" | "error";
   // Id zgłoszenia z deep-linku powiadomienia — podświetlamy dzień
   focusZgloszenieId?: string | null;
   onMoveTankowanie?: (id: string, targetMonth: MiesiącId, patch: Partial<WpisTankowania>) => boolean;
@@ -645,7 +649,7 @@ function FuelStatsRowView({ row }: { row: FuelStatsRow }) {
     <tr className={cn("border-t border-line/60", row.pomijanyPowod && "opacity-60")}>
       <td className="px-2 py-2 tabular-nums text-ink">{row.data}</td>
       <td className="px-2 py-2 text-dim">{row.kierowca ?? "—"}</td>
-      <td className="px-2 py-2 text-dim">—</td>
+      <td className="px-2 py-2 text-dim">{row.vehicleName ?? "—"}</td>
       <td className="px-2 py-2 text-dim">{row.stacja ?? "—"}</td>
       <td className="px-2 py-2 text-right tabular-nums text-ink">{formatLitry(row.litry)}</td>
       <td className="px-2 py-2 text-right tabular-nums font-bold text-white">{formatZl(row.brutto)}</td>
@@ -680,7 +684,7 @@ function FuelStatsMobileCard({ row }: { row: FuelStatsRow }) {
         <div className="min-w-0">
           <p className="text-sm font-bold text-white">{row.stacja ?? "Tankowanie"}</p>
           <p className="text-[11px] text-dim">
-            {row.data} · {row.kierowca ?? "bez kierowcy"}
+            {row.data} · {row.vehicleName ?? "bez pojazdu"} · {row.kierowca ?? "bez kierowcy"}
           </p>
         </div>
         <span className="shrink-0 rounded-full border border-amber-brand/35 bg-amber-brand/10 px-2 py-0.5 text-[11px] font-bold text-amber-brand">
@@ -739,20 +743,31 @@ function FuelStatsPanel({
   dane,
   ustawienia,
   miesiac,
+  wszystkieMiesiace,
+  vehicles,
+  saveStatus,
 }: {
   dane: DaneMiesiaca;
   ustawienia: UstawieniaPodatkowe;
   miesiac: MiesiącId;
+  wszystkieMiesiace?: Partial<Record<MiesiącId, DaneMiesiaca>>;
+  vehicles?: FuelVehicleConfig[];
+  saveStatus?: "idle" | "saving" | "saved" | "error";
 }) {
   const [kierowca, setKierowca] = useState("");
   const [stacja, setStacja] = useState("");
+  const [includePending, setIncludePending] = useState(false);
   const stats = useMemo(
     () =>
       buildFuelStats(dane, ustawienia, {
         kierowca: kierowca || undefined,
         stacja: stacja || undefined,
+        includePending,
+        allMonths: wszystkieMiesiace,
+        targetMonth: miesiac,
+        vehicles,
       }),
-    [dane, ustawienia, kierowca, stacja]
+    [dane, ustawienia, kierowca, stacja, includePending, wszystkieMiesiace, miesiac, vehicles]
   );
   const s = stats.summary;
 
@@ -768,6 +783,21 @@ function FuelStatsPanel({
             {POLSKIE_MIESIACE[miesiac]} 2026 · spalanie liczone ważone: suma litrów / suma km × 100
           </p>
         </div>
+        {saveStatus === "saving" && (
+          <span className="shrink-0 rounded-full border border-amber-brand/40 bg-amber-brand/10 px-2 py-1 text-[10px] font-bold text-amber-brand">
+            przeliczanie…
+          </span>
+        )}
+        {saveStatus === "saved" && (
+          <span className="shrink-0 rounded-full border border-green-500/40 bg-green-500/10 px-2 py-1 text-[10px] font-bold text-green-300">
+            statystyki zaktualizowane
+          </span>
+        )}
+        {saveStatus === "error" && (
+          <span className="shrink-0 rounded-full border border-red-500/40 bg-red-soft px-2 py-1 text-[10px] font-bold text-red-300">
+            błąd zapisu
+          </span>
+        )}
       </div>
 
       <div className="mb-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -798,6 +828,19 @@ function FuelStatsPanel({
           </select>
         </label>
       </div>
+
+      <label className="mb-3 flex min-h-[44px] cursor-pointer items-center justify-between gap-3 rounded-xl border border-line bg-surface2 px-3 py-2 text-xs font-semibold text-dim">
+        <span>
+          Uwzględnij wpisy oczekujące
+          <span className="mt-0.5 block text-[10px] font-normal text-dim/70">Litry, koszt i dystans zawsze korzystają wtedy z tego samego zestawu.</span>
+        </span>
+        <input
+          type="checkbox"
+          checked={includePending}
+          onChange={(event) => setIncludePending(event.target.checked)}
+          className="h-5 w-5 accent-amber-brand"
+        />
+      </label>
 
       <div className="grid grid-cols-2 gap-2">
         <FuelStatsValue label="Łącznie litrów" value={formatLitry(s.sumaLitrow)} tone="amber" />
@@ -861,13 +904,46 @@ function FuelStatsPanel({
           </tbody>
         </table>
       </div>
+
+      <details className="mt-4 rounded-xl border border-line bg-surface2/60 p-3">
+        <summary className="cursor-pointer text-sm font-bold text-amber-brand">Jak policzono spalanie?</summary>
+        {stats.segments.length === 0 ? (
+          <p className="mt-3 text-xs text-dim">Brak zamkniętych cykli tankowania dla wybranego zestawu danych.</p>
+        ) : (
+          <div className="mt-3 space-y-2">
+            {stats.segments.map((segment) => (
+              <div key={`${segment.vehicleId}:${segment.endEntryId}`} className="rounded-lg border border-line/70 bg-input/60 p-2.5 text-xs">
+                <p className="font-bold text-white">
+                  {segment.vehicleName}: {segment.startDate} → {segment.endDate}
+                </p>
+                <p className="mt-1 text-dim">
+                  {formatKm(segment.startOdometerKm)} → {formatKm(segment.endOdometerKm)} · dystans {formatKm(segment.distanceKm)}
+                </p>
+                <p className="text-dim">
+                  {formatLitry(segment.liters)} · {formatL100(segment.consumptionLPer100Km)} · {formatZlKm(segment.costPerKmGross)} brutto
+                </p>
+                {segment.entryIds.length > 1 && (
+                  <p className="mt-1 text-[10px] text-amber-brand">Cykl zawiera {segment.entryIds.length} tankowania, w tym częściowe.</p>
+                )}
+              </div>
+            ))}
+            <div className="border-t border-line pt-2 text-xs font-bold text-white">
+              Razem: {formatKm(s.sumaKm)} · {formatLitry(stats.segments.reduce((sum, segment) => sum + segment.liters, 0))} · {formatL100(s.srednieSpalanieLPer100Km)}
+            </div>
+          </div>
+        )}
+      </details>
     </Card>
   );
 }
 
 
 
-export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia, wszystkieMiesiace, focusZgloszenieId, onMoveTankowanie }: Props) {
+export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia, wszystkieMiesiace, vehicles, saveStatus, focusZgloszenieId, onMoveTankowanie }: Props) {
+  const fuelVehicles = useMemo(
+    () => (vehicles?.length ? vehicles : [DEFAULT_FUEL_VEHICLE]),
+    [vehicles]
+  );
   // Rozwinięte panele szczegółów VAT (klucz: id wpisu)
   const [rozwiniete, setRozwiniete] = useState<Record<string, boolean>>({});
   const [autoBusyId, setAutoBusyId] = useState<string | null>(null);
@@ -1517,7 +1593,18 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
       ...prev,
       tankowanie: [
         ...prev.tankowanie,
-        { id: uuidv4(), data: "", koszt: 0, paidBy: ustawienia.defaultPayer ?? "Firma", status: "approved", includeInReports: true, isHistorical: false },
+        {
+          id: uuidv4(),
+          data: "",
+          koszt: 0,
+          paidBy: ustawienia.defaultPayer ?? "Firma",
+          status: "approved",
+          includeInReports: true,
+          isHistorical: false,
+          vehicleId: fuelVehicles.length === 1 ? fuelVehicles[0].id : undefined,
+          isFullTank: true,
+          createdAt: new Date().toISOString(),
+        },
       ],
     }));
     setStronaTank(Math.ceil((dane.tankowanie.length + 1) / KOSZTY_NA_STRONE));
@@ -1528,7 +1615,16 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
     const wpisZPlatnikiem = {
       ...wpis,
       paidBy: normalizePayer(wpis.paidBy),
-      ...(typ === "tankowanie" ? { status: "approved" as const, includeInReports: true, isHistorical: false } : {}),
+      ...(typ === "tankowanie"
+        ? {
+            status: "approved" as const,
+            includeInReports: true,
+            isHistorical: false,
+            vehicleId: (wpis as WpisTankowania).vehicleId ?? (fuelVehicles.length === 1 ? fuelVehicles[0].id : undefined),
+            isFullTank: (wpis as WpisTankowania).isFullTank ?? true,
+            createdAt: (wpis as WpisTankowania).createdAt ?? new Date().toISOString(),
+          }
+        : {}),
     };
     onUpdate((prev) =>
       typ === "tankowanie"
@@ -1814,8 +1910,8 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
     );
   }, [dane.tankowanie, dane.inneKoszty, ustawienia]);
   const fuelSummary = useMemo(
-    () => buildFuelStats(dane, ustawienia).summary,
-    [dane, ustawienia]
+    () => buildFuelStats(dane, ustawienia, { allMonths: wszystkieMiesiace, targetMonth: miesiac, vehicles: fuelVehicles }).summary,
+    [dane, ustawienia, wszystkieMiesiace, miesiac, fuelVehicles]
   );
   const platnicyKosztow = useMemo(() => {
     const sums: Record<KosztPayer, number> = { Artur: 0, Damian: 0, Firma: 0 };
@@ -2070,10 +2166,15 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
                   </span>
                 </div>
                 <div className="mt-3 grid grid-cols-2 gap-2 text-[11px]">
-                  <div className="rounded-xl border border-line bg-input px-2 py-1.5">
-                    <p className="text-dim">Litry</p>
-                    <p className="tabular-nums font-bold text-ink">{t.litry ? `${t.litry} l` : "brak"}</p>
-                  </div>
+                  <label className="rounded-xl border border-line bg-input px-2 py-1.5 text-dim">
+                    Litry
+                    <NumInput
+                      value={t.litry ?? 0}
+                      onChange={(value) => updateTankowanie(t.id, { litry: value > 0 ? value : undefined })}
+                      placeholder="brak"
+                      className="mt-1 !py-1.5"
+                    />
+                  </label>
                   <div className="rounded-xl border border-line bg-input px-2 py-1.5">
                     <p className="text-dim">Raporty</p>
                     <p className="font-bold text-ink">{t.includeInReports ? "wliczane" : "archiwum"}</p>
@@ -2089,6 +2190,30 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
                     placeholder="np. 252320"
                   />
                 </div>
+                <label className="mt-2 flex min-h-[40px] cursor-pointer items-center justify-between rounded-xl border border-line bg-input px-3 py-2 text-xs font-semibold text-dim">
+                  Tankowanie do pełna
+                  <input
+                    type="checkbox"
+                    checked={t.isFullTank ?? true}
+                    onChange={(event) => updateTankowanie(t.id, { isFullTank: event.target.checked })}
+                    className="h-5 w-5 accent-amber-brand"
+                  />
+                </label>
+                <label className="mt-2 block text-[10px] font-bold uppercase tracking-wider text-dim">
+                  Pojazd
+                  <select
+                    value={t.vehicleId ?? (fuelVehicles.length === 1 ? fuelVehicles[0].id : "")}
+                    onChange={(event) => updateTankowanie(t.id, { vehicleId: event.target.value || undefined })}
+                    className="mt-1 w-full rounded-lg border border-line bg-input px-2.5 py-2 text-sm font-semibold normal-case tracking-normal text-ink"
+                  >
+                    <option value="">wybierz pojazd</option>
+                    {fuelVehicles.map((vehicle) => (
+                      <option key={vehicle.id} value={vehicle.id}>
+                        {vehicle.name}{vehicle.registration ? ` · ${vehicle.registration}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                </label>
                 <div className="mt-3 grid grid-cols-2 gap-2">
                   <div>
                     <p className="mb-0.5 text-[10px] font-bold uppercase tracking-wider text-dim">Kto zapłacił</p>
@@ -2604,7 +2729,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-[auto_minmax(0,1fr)_auto_auto_auto] sm:items-center">
                 <DatePill
                   value={t.data}
-                  onChange={(v) => updateTankowanie(t.id, { data: v })}
+                  onChange={(v) => updateTankowanie(t.id, { data: v, expenseDate: v })}
                 />
                 <div className="min-w-0">
                   <NumInput
@@ -2678,6 +2803,41 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
                   className="!text-left max-w-[160px]"
                 />
               </label>
+              <div className="mt-1.5 grid grid-cols-2 gap-2">
+                <label className="text-[11px] font-semibold text-dim">
+                  Litry
+                  <NumInput
+                    value={t.litry ?? 0}
+                    onChange={(value) => updateTankowanie(t.id, { litry: value > 0 ? value : undefined })}
+                    placeholder="brak"
+                    className="mt-1 !text-left"
+                  />
+                </label>
+                <label className="flex min-h-[44px] cursor-pointer items-center justify-between gap-2 rounded-xl border border-line bg-input px-2.5 py-2 text-[11px] font-semibold text-dim">
+                  Do pełna
+                  <input
+                    type="checkbox"
+                    checked={t.isFullTank ?? true}
+                    onChange={(event) => updateTankowanie(t.id, { isFullTank: event.target.checked })}
+                    className="h-5 w-5 accent-amber-brand"
+                  />
+                </label>
+              </div>
+              <label className="mt-1.5 block text-[11px] font-semibold text-dim">
+                Pojazd
+                <select
+                  value={t.vehicleId ?? (fuelVehicles.length === 1 ? fuelVehicles[0].id : "")}
+                  onChange={(event) => updateTankowanie(t.id, { vehicleId: event.target.value || undefined })}
+                  className="mt-1 w-full rounded-lg border border-line bg-input px-2.5 py-2 text-sm text-ink"
+                >
+                  <option value="">wybierz pojazd</option>
+                  {fuelVehicles.map((vehicle) => (
+                    <option key={vehicle.id} value={vehicle.id}>
+                      {vehicle.name}{vehicle.registration ? ` · ${vehicle.registration}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <VatMiniInfo
                 wpis={{ ...t, kategoria: t.kategoria ?? "paliwo_adblue" }}
                 ustawienia={ustawienia}
@@ -2742,7 +2902,14 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
       </Card>}
 
       {showStatystyki && (
-        <FuelStatsPanel dane={dane} ustawienia={ustawienia} miesiac={miesiac} />
+        <FuelStatsPanel
+          dane={dane}
+          ustawienia={ustawienia}
+          miesiac={miesiac}
+          wszystkieMiesiace={wszystkieMiesiace}
+          vehicles={fuelVehicles}
+          saveStatus={saveStatus}
+        />
       )}
 
       {showRozliczenie && (

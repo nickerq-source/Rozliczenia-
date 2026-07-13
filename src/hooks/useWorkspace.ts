@@ -7,6 +7,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { WorkspaceData, DaneMiesiaca, MiesiącId, Notatka, UstawieniaPodatkowe } from "@/lib/types";
 import { domyslneDaneMiesiaca } from "@/lib/business-logic";
 import { MIESIACE_ZAKRESU } from "@/lib/dates";
+import { DEFAULT_FUEL_VEHICLE, recalculateWorkspaceFuelChains } from "@/lib/recalculate-fuel-chain";
 
 const DEBOUNCE_MS = 500;
 
@@ -37,7 +38,7 @@ function initWorkspaceData(): WorkspaceData {
   for (const m of MIESIACE_ZAKRESU) {
     miesiace[m] = domyslneDaneMiesiaca(m);
   }
-  return { miesiace };
+  return { miesiace, vehicles: [DEFAULT_FUEL_VEHICLE] };
 }
 
 function mergeWithDefaults(remote: WorkspaceData): WorkspaceData {
@@ -52,7 +53,8 @@ function mergeWithDefaults(remote: WorkspaceData): WorkspaceData {
   }
   merged.notatki = remote.notatki ?? [];
   merged.ustawienia = remote.ustawienia ?? {};
-  return merged;
+  merged.vehicles = remote.vehicles?.length ? remote.vehicles : [DEFAULT_FUEL_VEHICLE];
+  return recalculateWorkspaceFuelChains(merged).data;
 }
 
 export type SaveStatus = "idle" | "saving" | "saved" | "error";
@@ -107,9 +109,9 @@ export function useWorkspace(token: string) {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(data),
         });
-        setSaveStatus(res.ok ? "saved" : "saved"); // lokalnie zawsze zapisane
+        setSaveStatus(res.ok ? "saved" : "error");
       } catch {
-        setSaveStatus("saved"); // localStorage zadziałał
+        setSaveStatus("error");
       }
     }, DEBOUNCE_MS);
 
@@ -121,20 +123,22 @@ export function useWorkspace(token: string) {
   /** Aktualizuj dowolne pole w danych miesiąca */
   const updateMiesiac = useCallback(
     (miesiac: MiesiącId, updater: (prev: DaneMiesiaca) => DaneMiesiaca) => {
-      setData((prev) => ({
-        ...prev,
-        miesiace: {
-          ...prev.miesiace,
-          [miesiac]: updater(prev.miesiace[miesiac] ?? domyslneDaneMiesiaca(miesiac)),
-        },
-      }));
+      setData((prev) =>
+        recalculateWorkspaceFuelChains({
+          ...prev,
+          miesiace: {
+            ...prev.miesiace,
+            [miesiac]: updater(prev.miesiace[miesiac] ?? domyslneDaneMiesiaca(miesiac)),
+          },
+        }).data
+      );
     },
     []
   );
 
   /** Aktualizuj całe dane workspace, gdy operacja dotyczy więcej niż jednego miesiąca. */
   const updateWorkspace = useCallback((updater: (prev: WorkspaceData) => WorkspaceData) => {
-    setData((prev) => updater(prev));
+    setData((prev) => recalculateWorkspaceFuelChains(updater(prev)).data);
   }, []);
 
   /** Aktualizuj listę notatek workspace */
