@@ -72,7 +72,7 @@ export function PodatkiCard({
       <div className="mb-1 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <IconMoneybag size={18} className="text-amber-brand" />
-          <h3 className="text-sm font-bold uppercase tracking-wider text-dim">Na czysto — podatki i koszty</h3>
+          <h3 className="text-sm font-bold uppercase tracking-wider text-dim">Podatki i wynik końcowy</h3>
         </div>
         <JakCzytacPodatki />
       </div>
@@ -106,7 +106,7 @@ export function PodatkiCard({
           <InfoHint term="lacznie" />
         </div>
         <Wiersz label="VAT do zapłaty" value={vatDoZaplatyDodatni} klasa="text-ink" term="vat_do_zaplaty" />
-        <Wiersz label="PIT do zapłaty za ten miesiąc" value={p.pitMiesiac} klasa="text-ink" term="pit_miesiac" />
+        <Wiersz label="Podatek dochodowy do zapłaty" value={p.pitMiesiac} klasa="text-ink" term="pit_miesiac" />
         <Wiersz label="Składka zdrowotna" value={p.zdrowotna} klasa="text-ink" term="zdrowotna" />
         <Wiersz label="ŁĄCZNIE POWINNO WYJŚĆ" value={laczniePowinnoWyjsc} klasa="text-amber-brand" bold />
         {vatDoZaplatyDodatni === 0 && p.pitMiesiac === 0 && (
@@ -122,12 +122,22 @@ export function PodatkiCard({
       </div>
 
       <Wiersz
-        label="Na czysto po PIT i zdrowotnej"
+        label="Po dochodowym i zdrowotnej — przed VAT"
         value={p.zyskPoPodatkach}
-        klasa={p.zyskPoPodatkach >= 0 ? "text-green-300" : "text-red-300"}
-        bold
+        klasa={p.zyskPoPodatkach >= 0 ? "text-ink" : "text-red-300"}
+        note="to nie jest jeszcze wynik na czysto, jeśli masz VAT do zapłaty"
         term="wynik_po_podatkach"
       />
+      <div className="mt-2 rounded-xl border border-green-500/35 bg-green-soft px-3 py-1.5">
+        <Wiersz
+          label="NA CZYSTO PO WSZYSTKICH PODATKACH"
+          value={p.cashflowPoPodatkach}
+          klasa={p.cashflowPoPodatkach >= 0 ? "text-green-300" : "text-red-300"}
+          note="po odjęciu VAT, podatku dochodowego i zdrowotnej"
+          bold
+          term="wynik_na_czysto"
+        />
+      </div>
 
       {/* ── PRZEŁĄCZNIK SZCZEGÓŁÓW ───────────────────────────────────── */}
       <button
@@ -195,7 +205,7 @@ export function PodatkiCard({
           )}
           <Wiersz label="Łączny wynik podatkowy od początku roku" value={p.dochodYtd} term="wynik_ytd" />
           <Wiersz label="PIT wyliczony od początku roku" value={p.pitYtd} term="pit_ytd" />
-          <Wiersz label="PIT do zapłaty za ten miesiąc" value={p.pitMiesiac} klasa="text-red-300" bold term="pit_miesiac" />
+          <Wiersz label="Podatek dochodowy do zapłaty za ten miesiąc" value={p.pitMiesiac} klasa="text-red-300" bold term="pit_miesiac" />
 
           {/* Zdrowotna */}
           <p className="mb-1 mt-4 text-xs font-bold uppercase tracking-wider text-amber-brand">Zdrowotna</p>
@@ -211,18 +221,22 @@ export function PodatkiCard({
           <p className="mb-1 mt-4 text-xs font-bold uppercase tracking-wider text-amber-brand">Ile zostaje</p>
           <Wiersz label="Zysk operacyjny przed podatkami" value={p.zyskPrzedPodatkami} />
           <Wiersz
-            label="Na czysto po dochodowym i zdrowotnej"
+            label="Po dochodowym i zdrowotnej — przed VAT"
             value={p.zyskPoPodatkach}
-            klasa={p.zyskPoPodatkach >= 0 ? "text-green-300" : "text-red-300"}
-            bold
+            klasa={p.zyskPoPodatkach >= 0 ? "text-ink" : "text-red-300"}
+            note="kwota przed rozliczeniem VAT"
             term="wynik_po_podatkach"
           />
-          <Wiersz
-            label="Gotówka po podatkach i VAT"
-            value={p.cashflowPoPodatkach}
-            klasa={p.cashflowPoPodatkach >= 0 ? "text-green-300" : "text-red-300"}
-            note="odejmuje też VAT do zapłaty; nadwyżka VAT nie jest doliczana jako gotówka"
-          />
+          <div className="mt-2 rounded-xl border border-green-500/35 bg-green-soft px-3 py-1.5">
+            <Wiersz
+              label="NA CZYSTO PO WSZYSTKICH PODATKACH"
+              value={p.cashflowPoPodatkach}
+              klasa={p.cashflowPoPodatkach >= 0 ? "text-green-300" : "text-red-300"}
+              note="po odjęciu VAT, podatku dochodowego i zdrowotnej"
+              bold
+              term="wynik_na_czysto"
+            />
+          </div>
         </div>
       )}
     </Card>

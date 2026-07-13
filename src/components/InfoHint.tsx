@@ -78,7 +78,7 @@ const GRUPY: { tytul: string; terms: TaxTermId[] }[] = [
   { tytul: "VAT", terms: ["vat_nalezny", "vat_naliczony", "vat_do_zaplaty", "nadwyzka_vat"] },
   { tytul: "PIT (podatek dochodowy)", terms: ["koszty_pit", "dochod_pit", "koszty_ponad_przychod", "wynik_ytd", "pit_ytd", "pit_miesiac"] },
   { tytul: "Zdrowotna", terms: ["zdrowotna"] },
-  { tytul: "Wynik i łącznie", terms: ["wynik_po_podatkach", "lacznie"] },
+  { tytul: "Wynik i łącznie", terms: ["wynik_po_podatkach", "wynik_na_czysto", "lacznie"] },
 ];
 
 export function JakCzytacPodatki() {

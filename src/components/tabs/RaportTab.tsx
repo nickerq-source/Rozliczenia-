@@ -364,8 +364,8 @@ export function RaportTab({ data }: Props) {
 
         <p className="text-xs font-bold uppercase tracking-wider text-amber-brand mb-1 mt-4">Ile zostaje</p>
         <Row label="Zysk przed podatkami" value={raport.zysk} />
-        <Row label="Na czysto po PIT i zdrowotnej" value={podatkiSuma.zyskPo} />
-        <Row label="Gotówka po podatkach i VAT" value={podatkiSuma.cashflow} />
+        <Row label="Po dochodowym i zdrowotnej — przed VAT" value={podatkiSuma.zyskPo} />
+        <Row label="NA CZYSTO PO WSZYSTKICH PODATKACH" value={podatkiSuma.cashflow} valueClass={podatkiSuma.cashflow >= 0 ? "text-green-300" : "text-red-300"} />
 
         {/* Łączne podatki i składki za okres (VAT do zapłaty nigdy ujemny) */}
         {(() => {

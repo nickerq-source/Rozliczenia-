@@ -21,7 +21,8 @@ export type TaxTermId =
   | "pit_miesiac"
   | "zdrowotna"
   | "lacznie"
-  | "wynik_po_podatkach";
+  | "wynik_po_podatkach"
+  | "wynik_na_czysto";
 
 export const TAX_GLOSSARY: Record<TaxTermId, TaxTerm> = {
   vat_nalezny: {
@@ -92,14 +93,20 @@ export const TAX_GLOSSARY: Record<TaxTermId, TaxTerm> = {
   },
   lacznie: {
     nazwa: "Łącznie powinno wyjść",
-    opis: "Suma VAT do zapłaty, PIT do zapłaty i składki zdrowotnej za wybrany miesiąc. Tyle orientacyjnie zejdzie na podatki i składkę.",
-    wzor: "VAT do zapłaty + PIT za miesiąc + zdrowotna",
-    przyklad: "VAT 0 + PIT 0 + zdrowotna 432,54 = 432,54 zł.",
+    opis: "Suma VAT do zapłaty, podatku dochodowego i składki zdrowotnej za wybrany miesiąc. To kwota obciążeń do zapłaty, a nie kwota, która zostaje firmie.",
+    wzor: "VAT do zapłaty + podatek dochodowy za miesiąc + zdrowotna",
+    przyklad: "VAT 847,23 + podatek dochodowy 0 + zdrowotna 432,54 = 1 279,77 zł do zapłaty.",
   },
   wynik_po_podatkach: {
-    nazwa: "Na czysto po PIT i zdrowotnej",
-    opis: "Wynik operacyjny (przychód − realne wydatki brutto) pomniejszony o PIT i składkę zdrowotną.",
-    wzor: "zysk operacyjny − PIT − zdrowotna",
-    przyklad: "Zysk 3 000 − PIT 350 − zdrowotna 432,54 = 2 217,46 zł.",
+    nazwa: "Po podatku dochodowym i zdrowotnej — przed VAT",
+    opis: "Wynik operacyjny pomniejszony o podatek dochodowy i składkę zdrowotną. To jeszcze nie jest końcowa kwota na czysto, jeżeli pozostaje VAT do zapłaty.",
+    wzor: "zysk operacyjny − podatek dochodowy − zdrowotna",
+    przyklad: "Zysk 1 680,85 − podatek dochodowy 0 − zdrowotna 432,54 = 1 248,31 zł przed zapłatą VAT.",
+  },
+  wynik_na_czysto: {
+    nazwa: "Na czysto po wszystkich podatkach",
+    opis: "Końcowa gotówka, która zostaje po odjęciu podatku dochodowego, składki zdrowotnej oraz VAT do zapłaty. To jest właściwy wynik na czysto.",
+    wzor: "zysk operacyjny − podatek dochodowy − zdrowotna − VAT do zapłaty",
+    przyklad: "1 680,85 − 0 − 432,54 − 847,23 = 401,08 zł na czysto.",
   },
 };

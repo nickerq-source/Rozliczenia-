@@ -470,7 +470,7 @@ export function PodsumowanieTab({
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div className="rounded-xl bg-surface2 border border-line p-3">
-              <p className="text-[11px] text-dim">Realnie zostaje</p>
+              <p className="text-[11px] text-dim">Na czysto po VAT i podatkach</p>
               <p className={cn("tabular-nums text-lg font-extrabold", podatki.cashflowPoPodatkach >= 0 ? "text-green-300" : "text-red-300")}>
                 {formatZl(podatki.cashflowPoPodatkach)}
               </p>
