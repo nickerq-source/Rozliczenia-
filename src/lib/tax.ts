@@ -1,5 +1,5 @@
 // Moduł podatkowy: rozbicie VAT kosztów, VAT należny ze sprzedaży,
-// PIT (skala / liniowy, narastająco YTD) i składka zdrowotna.
+// Podatek dochodowy (skala / liniowy, narastająco YTD) i składka zdrowotna.
 // UWAGA: wyniki są szacunkiem pomocniczym — ostateczne rozliczenie potwierdza księgowa.
 
 import {
@@ -235,9 +235,9 @@ export function vatFaktury(f: FakturaWeek, ustawienia: UstawieniaPodatkowe): Vat
   return { netto: round2(kwota), vat, brutto: round2(kwota + vat) };
 }
 
-// ─── PIT ─────────────────────────────────────────────────────────────────────
+// ─── PODATEK DOCHODOWY ───────────────────────────────────────────────────────
 
-/** PIT narastająco (YTD) wg skali: kwota wolna → 12% − kwota zmniejszająca → 32% powyżej progu */
+/** Podatek narastająco (YTD) wg skali: kwota wolna → 12% − kwota zmniejszająca → 32% powyżej progu */
 export function pitSkalaYtd(incomeYtd: number, u: UstawieniaPodatkowe): number {
   if (incomeYtd <= u.taxFreeAmount) return 0;
   if (incomeYtd <= u.firstTaxThreshold) {
@@ -247,7 +247,7 @@ export function pitSkalaYtd(incomeYtd: number, u: UstawieniaPodatkowe): number {
   return Math.max(0, round2(pitDoProgu + (incomeYtd - u.firstTaxThreshold) * u.secondTaxRate));
 }
 
-/** PIT narastająco (YTD) liniowy: 19%, bez kwoty wolnej i progów */
+/** Podatek narastająco (YTD) liniowy: 19%, bez kwoty wolnej i progów */
 export function pitLiniowyYtd(incomeYtd: number, u: UstawieniaPodatkowe): number {
   return Math.max(0, round2(incomeYtd * u.linearTaxRate));
 }
@@ -276,7 +276,7 @@ export interface PodatkiMiesiaca {
   kosztyNetto: number;
   vatNaliczony: number; // do odliczenia
   vatDoZaplaty: number; // ujemny = nadwyżka
-  // PIT
+  // Podatek dochodowy
   przychodNetto: number;
   kosztyPodatkowe: number;
   wynagrodzeniePodatkowe: number; // wynagrodzenie i obciążenia pracownika wliczone do kosztów podatkowych
@@ -385,7 +385,7 @@ function podstawyMiesiaca(m: MiesiącId, dane: DaneMiesiaca, u: UstawieniaPodatk
 }
 
 /**
- * Liczy podatki wszystkich miesięcy narastająco (PIT YTD).
+ * Liczy podatek dochodowy wszystkich miesięcy narastająco (YTD).
  * pitMiesiac = max(0, pitYtd − pit zapłacony za poprzednie miesiące).
  */
 export function podatkiRoku(data: WorkspaceData): PodatkiMiesiaca[] {

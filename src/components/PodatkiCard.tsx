@@ -2,7 +2,7 @@
 
 // Karta „Na czysto" — podatki i koszty aktywnego miesiąca.
 // Widok prosty (domyślny) odpowiada po ludzku: ile do zapłaty i ile zostaje.
-// Szczegóły podatkowe (rozwijane) pokazują pełne rozbicie VAT/PIT/zdrowotnej.
+// Szczegóły podatkowe pokazują pełne rozbicie VAT, podatku dochodowego i zdrowotnej.
 
 import { useState } from "react";
 import { PodatkiMiesiaca } from "@/lib/tax";
@@ -58,6 +58,7 @@ export function PodatkiCard({
   const strata = p.dochod < 0;
   const vatDoZaplatyDodatni = Math.max(0, p.vatDoZaplaty);
   const nadwyzkaVat = Math.max(0, -p.vatDoZaplaty);
+  const sprzedazBrutto = p.sprzedazNetto + p.vatNalezny;
   // Łączne zobowiązania: podatki właściciela i firmy oraz stałe obciążenia pracownika.
   const laczniePowinnoWyjsc = vatDoZaplatyDodatni + p.pitMiesiac + p.zdrowotna + p.obciazeniaPracownika;
 
@@ -84,21 +85,90 @@ export function PodatkiCard({
       </p>
 
       {/* ── WIDOK PROSTY ─────────────────────────────────────────────── */}
-      <p className="mb-1 text-xs font-bold uppercase tracking-wider text-amber-brand">Po ludzku</p>
-      <Wiersz label="Przychód netto (sprzedaż)" value={p.przychodNetto} />
-      <Wiersz label="Koszty uznane do PIT" value={p.kosztyPodatkowe} term="koszty_pit" />
-      {strata ? (
-        <Wiersz
-          label="Koszty przewyższają przychód o"
-          value={-p.dochod}
-          klasa="text-ink"
-          bold
-          term="koszty_ponad_przychod"
-          note="to nie jest kwota do zapłaty — dlatego PIT za ten miesiąc = 0 zł"
-        />
-      ) : (
-        <Wiersz label="Dochód do PIT" value={p.dochod} bold term="dochod_pit" />
-      )}
+      <p className="mb-2 text-xs font-bold uppercase tracking-wider text-amber-brand">
+        Kolejność obliczeń
+      </p>
+      <div className="overflow-hidden rounded-2xl border border-line">
+        <div className="border-b border-line bg-surface2/70 p-3">
+          <p className="mb-1 text-xs font-bold text-white">1. Oddziel VAT od sprzedaży</p>
+          <Wiersz label="Sprzedaż brutto" value={sprzedazBrutto} />
+          <Wiersz label="− VAT zawarty w sprzedaży" value={p.vatNalezny} />
+          <Wiersz label="= Przychód netto" value={p.przychodNetto} bold />
+          <p className="mb-0.5 mt-2 text-[10px] font-bold uppercase tracking-wider text-dim">
+            Osobne rozliczenie VAT
+          </p>
+          <Wiersz label="VAT należny ze sprzedaży" value={p.vatNalezny} />
+          <Wiersz label="− VAT z zakupów do odliczenia" value={p.vatNaliczony} />
+          <Wiersz
+            label={nadwyzka ? "Nadwyżka VAT na kolejny okres" : "VAT do zapłaty"}
+            value={nadwyzka ? nadwyzkaVat : vatDoZaplatyDodatni}
+            klasa={nadwyzka ? "text-green-300" : "text-red-300"}
+            bold
+            term={nadwyzka ? "nadwyzka_vat" : "vat_do_zaplaty"}
+          />
+        </div>
+
+        <div className="border-b border-line p-3">
+          <p className="mb-1 text-xs font-bold text-white">2. Policz dochód podatkowy</p>
+          <Wiersz label="Przychód netto" value={p.przychodNetto} />
+          <Wiersz label="− Koszty uznane do podatku dochodowego" value={p.kosztyPodatkowe} term="koszty_pit" />
+          {strata ? (
+            <Wiersz
+              label="Strata podatkowa"
+              value={-p.dochod}
+              klasa="text-red-300"
+              bold
+              term="koszty_ponad_przychod"
+              note="podatek dochodowy za ten miesiąc wynosi 0 zł"
+            />
+          ) : (
+            <Wiersz label="Dochód podatkowy" value={p.dochod} bold term="dochod_pit" />
+          )}
+        </div>
+
+        <div className="border-b border-line bg-surface2/35 p-3">
+          <p className="mb-1 text-xs font-bold text-white">
+            3. Policz podatek dochodowy i zdrowotną
+          </p>
+          <div className="flex items-center justify-between gap-3 py-1 text-sm">
+            <span className="text-dim">Forma opodatkowania</span>
+            <span className="text-right font-bold text-ink">
+              {taxForm === "skala" ? "Skala 12% / 32%" : "Liniowy 19%"}
+            </span>
+          </div>
+          <Wiersz
+            label="Podatek dochodowy do zapłaty"
+            value={p.pitMiesiac}
+            term="pit_miesiac"
+          />
+          <Wiersz
+            label="Składka zdrowotna właściciela"
+            value={p.zdrowotna}
+            term="zdrowotna"
+          />
+          <p className="mt-2 text-[11px] leading-relaxed text-dim">
+            {taxForm === "skala"
+              ? "Na skali podatkowej podatek dochodowy i składka zdrowotna są liczone od dochodu. Składki zdrowotnej nie odejmuje się przed obliczeniem podatku dochodowego."
+              : "Przy podatku liniowym podatek dochodowy i składka zdrowotna są liczone osobno według stawek zapisanych w ustawieniach."}{" "}
+            VAT jest rozliczany osobno i nie jest podstawą podatku dochodowego.
+          </p>
+        </div>
+
+        <div className="bg-green-soft/70 p-3">
+          <p className="mb-1 text-xs font-bold text-green-300">4. Ile realnie zostaje</p>
+          <Wiersz label="Wynik gotówkowy przed podatkami firmy" value={p.zyskPrzedPodatkami} />
+          <Wiersz label="− Podatek dochodowy" value={p.pitMiesiac} />
+          <Wiersz label="− Składka zdrowotna właściciela" value={p.zdrowotna} />
+          <Wiersz label="− VAT do zapłaty" value={vatDoZaplatyDodatni} />
+          <Wiersz
+            label="= NA CZYSTO PO WSZYSTKICH PODATKACH"
+            value={p.cashflowPoPodatkach}
+            klasa={p.cashflowPoPodatkach >= 0 ? "text-green-300" : "text-red-300"}
+            bold
+            term="wynik_na_czysto"
+          />
+        </div>
+      </div>
 
       {/* Łącznie powinno wyjść */}
       <div className="mt-3 rounded-2xl border border-amber-brand/40 bg-amber-brand/10 p-3">
@@ -125,24 +195,6 @@ export function PodatkiCard({
             VAT do wykorzystania w kolejnym okresie: {formatZl(nadwyzkaVat)}.
           </p>
         )}
-      </div>
-
-      <Wiersz
-        label="Po dochodowym i zdrowotnej — przed VAT"
-        value={p.zyskPoPodatkach}
-        klasa={p.zyskPoPodatkach >= 0 ? "text-ink" : "text-red-300"}
-        note="to nie jest jeszcze wynik na czysto, jeśli masz VAT do zapłaty"
-        term="wynik_po_podatkach"
-      />
-      <div className="mt-2 rounded-xl border border-green-500/35 bg-green-soft px-3 py-1.5">
-        <Wiersz
-          label="NA CZYSTO PO WSZYSTKICH PODATKACH"
-          value={p.cashflowPoPodatkach}
-          klasa={p.cashflowPoPodatkach >= 0 ? "text-green-300" : "text-red-300"}
-          note="po odjęciu VAT, podatku dochodowego i zdrowotnej"
-          bold
-          term="wynik_na_czysto"
-        />
       </div>
 
       {/* ── PRZEŁĄCZNIK SZCZEGÓŁÓW ───────────────────────────────────── */}
@@ -207,7 +259,7 @@ export function PodatkiCard({
                 label="Pozostała wypłata niewliczana do kosztów podatkowych"
                 value={nieoficjalne}
                 klasa="text-red-300"
-                note="zmniejsza gotówkę firmy, ale nie zmniejsza podstawy PIT"
+                note="zmniejsza gotówkę firmy, ale nie zmniejsza podstawy podatku dochodowego"
               />
             </>
           )}
@@ -223,10 +275,10 @@ export function PodatkiCard({
           {strata ? (
             <Wiersz label="Koszty przewyższają przychód o" value={-p.dochod} klasa="text-ink" bold term="koszty_ponad_przychod" />
           ) : (
-            <Wiersz label="Dochód do PIT" value={p.dochod} bold term="dochod_pit" />
+            <Wiersz label="Dochód podatkowy" value={p.dochod} bold term="dochod_pit" />
           )}
           <Wiersz label="Łączny wynik podatkowy od początku roku" value={p.dochodYtd} term="wynik_ytd" />
-          <Wiersz label="PIT wyliczony od początku roku" value={p.pitYtd} term="pit_ytd" />
+          <Wiersz label="Podatek dochodowy wyliczony od początku roku" value={p.pitYtd} term="pit_ytd" />
           <Wiersz label="Podatek dochodowy do zapłaty za ten miesiąc" value={p.pitMiesiac} klasa="text-red-300" bold term="pit_miesiac" />
 
           {/* Zdrowotna */}

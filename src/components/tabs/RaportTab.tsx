@@ -374,13 +374,13 @@ export function RaportTab({ data }: Props) {
 
         <p className="text-xs font-bold uppercase tracking-wider text-amber-brand mb-1 mt-4">Podatek dochodowy</p>
         <Row label="Przychód netto (sprzedaż)" value={podatkiSuma.sprzedazNetto} />
-        <Row label="Koszty uznane do PIT" value={podatkiSuma.kosztyPodatkowe} />
+        <Row label="Koszty uznane do podatku dochodowego" value={podatkiSuma.kosztyPodatkowe} />
         <Row
           label={podatkiSuma.dochodYtd >= 0 ? "Łączny wynik podatkowy od początku roku" : "Niewykorzystana strata od początku roku"}
           value={Math.abs(podatkiSuma.dochodYtd)}
         />
-        <Row label="PIT wyliczony od początku roku" value={podatkiSuma.pitYtd} />
-        <Row label="Suma PIT do zapłaty (miesięczne)" value={podatkiSuma.pit} />
+        <Row label="Podatek dochodowy wyliczony od początku roku" value={podatkiSuma.pitYtd} />
+        <Row label="Podatek dochodowy do zapłaty łącznie" value={podatkiSuma.pit} />
 
         <p className="text-xs font-bold uppercase tracking-wider text-amber-brand mb-1 mt-4">Zdrowotna właściciela</p>
         <Row label="Suma składek zdrowotnych właściciela" value={podatkiSuma.zdrowotna} />
@@ -400,7 +400,7 @@ export function RaportTab({ data }: Props) {
                 Łączne podatki i składki — Czerwiec–Grudzień 2026
               </p>
               <Row label="VAT do zapłaty łącznie" value={vatOkres} />
-              <Row label="PIT do zapłaty łącznie" value={podatkiSuma.pit} />
+              <Row label="Podatek dochodowy do zapłaty łącznie" value={podatkiSuma.pit} />
               <Row label="Składki zdrowotne właściciela łącznie" value={podatkiSuma.zdrowotna} />
               <Row label="Podatek dochodowy pracownika łącznie" value={podatkiSuma.podatekPracownika} />
               <Row label="Zdrowotna pracownika łącznie" value={podatkiSuma.zdrowotnaPracownika} />
@@ -422,7 +422,7 @@ export function RaportTab({ data }: Props) {
                   <th className="py-1 pr-2 font-medium">Mies.</th>
                   <th className="py-1 pr-2 font-medium text-right">Dochód</th>
                   <th className="py-1 pr-2 font-medium text-right">VAT</th>
-                  <th className="py-1 pr-2 font-medium text-right">Doch.</th>
+                  <th className="py-1 pr-2 font-medium text-right">Podatek</th>
                   <th className="py-1 font-medium text-right">Zdrow.</th>
                 </tr>
               </thead>
