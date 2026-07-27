@@ -17,7 +17,12 @@ import { POLSKIE_MIESIACE } from "@/lib/dates";
 import { Card } from "../ui/Card";
 import { PodatkiCard } from "../PodatkiCard";
 import { ObciazeniaSekcja } from "../ObciazeniaSekcja";
-import { kategoriaLabel, PodatkiMiesiaca, rozbijWpis } from "@/lib/tax";
+import {
+  efektywnaKwotaWolna,
+  kategoriaLabel,
+  PodatkiMiesiaca,
+  rozbijWpis,
+} from "@/lib/tax";
 import { wyjasnijPodatekMiesiaca } from "@/lib/income-tax-explanation";
 import { logChange } from "@/lib/audit";
 import {
@@ -117,10 +122,13 @@ export function PodsumowanieTab({
 }: PodsumowanieProps) {
   const wynik = useMemo(() => obliczWynikMiesiaca(miesiac, dane, ustawienia), [miesiac, dane, ustawienia]);
   const zyskDodatni = wynik.zysk >= 0;
+  const taxFreeAmountForModule = ustawienia
+    ? efektywnaKwotaWolna(ustawienia)
+    : 0;
   const wyjasnieniePodatku = podatki
     ? wyjasnijPodatekMiesiaca(podatki, {
         taxForm,
-        taxFreeAmount: ustawienia?.taxFreeAmount ?? 30000,
+        taxFreeAmount: taxFreeAmountForModule,
       })
     : null;
 
@@ -687,7 +695,9 @@ export function PodsumowanieTab({
         <PodatkiCard
           p={podatki}
           taxForm={taxForm}
-          taxFreeAmount={ustawienia?.taxFreeAmount}
+          taxFreeAmount={taxFreeAmountForModule}
+          incomeTaxScope={ustawienia?.incomeTaxScope}
+          companyDivisionTaxRate={ustawienia?.companyDivisionTaxRate}
           wynik={wynik}
         />
       )}

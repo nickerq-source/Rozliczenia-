@@ -17,6 +17,7 @@ import {
 import { czyTankowanieWliczane, obliczWynagrodzenie, parseNum } from "./business-logic";
 import { MIESIACE_ZAKRESU } from "./dates";
 import { obliczObciazeniaPracownika } from "./employee-costs";
+import { calculateScaleTaxYtd } from "./income-tax-calculation";
 
 // ─── USTAWIENIA DOMYŚLNE ─────────────────────────────────────────────────────
 
@@ -30,6 +31,10 @@ export const DOMYSLNE_USTAWIENIA: UstawieniaPodatkowe = {
   invoiceAmountMode: "netto",
   defaultSalesVatRate: 0.23,
   taxForm: "skala",
+  // PapiTrans jest częścią tej samej działalności, dlatego nie może ponownie
+  // korzystać z kwoty wolnej wykorzystanej przez pozostałą część firmy.
+  incomeTaxScope: "company_division",
+  companyDivisionTaxRate: 0.12,
   taxFreeAmount: 30000,
   firstTaxThreshold: 120000,
   firstTaxRate: 0.12,
@@ -237,14 +242,13 @@ export function vatFaktury(f: FakturaWeek, ustawienia: UstawieniaPodatkowe): Vat
 
 // ─── PODATEK DOCHODOWY ───────────────────────────────────────────────────────
 
-/** Podatek narastająco (YTD) wg skali: kwota wolna → 12% − kwota zmniejszająca → 32% powyżej progu */
+/**
+ * Podatek narastająco (YTD) wg skali.
+ * Dla modułu będącego częścią tej samej firmy liczymy rezerwę podatkową
+ * stawką krańcową całej firmy, bez ponownej kwoty wolnej i kwoty zmniejszającej.
+ */
 export function pitSkalaYtd(incomeYtd: number, u: UstawieniaPodatkowe): number {
-  if (incomeYtd <= u.taxFreeAmount) return 0;
-  if (incomeYtd <= u.firstTaxThreshold) {
-    return Math.max(0, round2(incomeYtd * u.firstTaxRate - u.taxReducingAmount));
-  }
-  const pitDoProgu = u.firstTaxThreshold * u.firstTaxRate - u.taxReducingAmount; // 10 800 przy domyślnych
-  return Math.max(0, round2(pitDoProgu + (incomeYtd - u.firstTaxThreshold) * u.secondTaxRate));
+  return calculateScaleTaxYtd(incomeYtd, u);
 }
 
 /** Podatek narastająco (YTD) liniowy: 19%, bez kwoty wolnej i progów */
@@ -254,6 +258,13 @@ export function pitLiniowyYtd(incomeYtd: number, u: UstawieniaPodatkowe): number
 
 export function pitYtd(incomeYtd: number, u: UstawieniaPodatkowe): number {
   return u.taxForm === "liniowy" ? pitLiniowyYtd(incomeYtd, u) : pitSkalaYtd(incomeYtd, u);
+}
+
+/** Kwota wolna faktycznie stosowana w tym module i w jego objaśnieniach. */
+export function efektywnaKwotaWolna(u: UstawieniaPodatkowe): number {
+  return u.taxForm === "skala" && u.incomeTaxScope === "standalone"
+    ? Math.max(0, u.taxFreeAmount)
+    : 0;
 }
 
 // ─── ZDROWOTNA ───────────────────────────────────────────────────────────────

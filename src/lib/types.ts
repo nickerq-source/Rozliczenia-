@@ -399,6 +399,8 @@ export interface UstawieniaPodatkowe {
   defaultSalesVatRate: number; // 0.23
   // Podatek dochodowy
   taxForm: "skala" | "liniowy";
+  incomeTaxScope: "company_division" | "standalone"; // PapiTrans jako część firmy albo osobne rozliczenie
+  companyDivisionTaxRate: 0.12 | 0.32; // stawka krańcowa wynikająca z łącznego dochodu całej firmy
   taxFreeAmount: number; // 30000
   firstTaxThreshold: number; // 120000
   firstTaxRate: number; // 0.12

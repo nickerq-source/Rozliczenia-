@@ -178,42 +178,121 @@ export function UstawieniaTab({ ustawienia: u, onUpdate, token, userName }: Prop
 
         {u.taxForm === "skala" ? (
           <>
-            <div className={rowCls}>
-              <span className={labelCls}>Kwota wolna (rocznie)</span>
-              <div className="w-32">
-                <NumInput
-                  value={u.taxFreeAmount}
-                  onChange={(v) => zmien({ taxFreeAmount: v }, `zmienił kwotę wolną na ${v} zł`)}
-                  className="!py-1.5 !text-sm"
-                />
+            <div className="py-3 border-b border-line">
+              <span className="mb-2 block text-sm text-dim">Zakres rozliczenia</span>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => zmien(
+                    { incomeTaxScope: "company_division" },
+                    "ustawił PapiTrans jako część tej samej firmy"
+                  )}
+                  className={cn(
+                    "min-h-11 rounded-lg border px-2 py-2 text-xs font-bold transition-colors",
+                    u.incomeTaxScope === "company_division"
+                      ? "border-amber-brand bg-amber-brand text-amber-ink"
+                      : "border-line text-dim hover:text-ink"
+                  )}
+                >
+                  Część tej samej firmy
+                </button>
+                <button
+                  type="button"
+                  onClick={() => zmien(
+                    { incomeTaxScope: "standalone" },
+                    "ustawił PapiTrans jako samodzielne rozliczenie podatkowe"
+                  )}
+                  className={cn(
+                    "min-h-11 rounded-lg border px-2 py-2 text-xs font-bold transition-colors",
+                    u.incomeTaxScope === "standalone"
+                      ? "border-amber-brand bg-amber-brand text-amber-ink"
+                      : "border-line text-dim hover:text-ink"
+                  )}
+                >
+                  Samodzielne rozliczenie
+                </button>
               </div>
             </div>
-            <div className={rowCls}>
-              <span className={labelCls}>Próg podatkowy</span>
-              <div className="w-32">
-                <NumInput
-                  value={u.firstTaxThreshold}
-                  onChange={(v) => zmien({ firstTaxThreshold: v }, `zmienił próg podatkowy na ${v} zł`)}
-                  className="!py-1.5 !text-sm"
-                />
-              </div>
-            </div>
-            <div className={rowCls}>
-              <span className={labelCls}>Stawki (do progu / powyżej)</span>
-              <span className="text-sm text-ink tabular-nums">
-                {u.firstTaxRate * 100}% / {u.secondTaxRate * 100}%
-              </span>
-            </div>
-            <div className={rowCls}>
-              <span className={labelCls}>Kwota zmniejszająca podatek</span>
-              <div className="w-32">
-                <NumInput
-                  value={u.taxReducingAmount}
-                  onChange={(v) => zmien({ taxReducingAmount: v }, `zmienił kwotę zmniejszającą na ${v} zł`)}
-                  className="!py-1.5 !text-sm"
-                />
-              </div>
-            </div>
+
+            {u.incomeTaxScope === "company_division" ? (
+              <>
+                <div className="my-3 rounded-xl border border-amber-brand/35 bg-amber-brand/10 p-3">
+                  <p className="text-xs font-bold text-amber-brand">Bez ponownej kwoty wolnej</p>
+                  <p className="mt-1 text-[11px] leading-relaxed text-dim">
+                    PapiTrans jest częścią tej samej firmy. Kalkulator nie stosuje
+                    ponownie 30 000 zł kwoty wolnej ani 3 600 zł kwoty
+                    zmniejszającej. Stawkę wybierz według łącznego dochodu całej firmy.
+                  </p>
+                </div>
+                <div className={rowCls}>
+                  <span className={labelCls}>
+                    Stawka dla dochodu PapiTrans
+                    <span className="block text-[10px] text-dim/60">
+                      12% do progu całej firmy, 32% po jego przekroczeniu
+                    </span>
+                  </span>
+                  <div className="flex gap-1">
+                    {([0.12, 0.32] as const).map((rate) => (
+                      <button
+                        key={rate}
+                        type="button"
+                        onClick={() => zmien(
+                          { companyDivisionTaxRate: rate },
+                          `zmienił stawkę podatku działu transportu na ${rate * 100}%`
+                        )}
+                        className={cn(
+                          "min-h-10 rounded-lg border px-3 py-1.5 text-sm font-bold transition-colors",
+                          u.companyDivisionTaxRate === rate
+                            ? "border-amber-brand bg-amber-brand text-amber-ink"
+                            : "border-line text-dim hover:text-ink"
+                        )}
+                      >
+                        {rate * 100}%
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className={rowCls}>
+                  <span className={labelCls}>Kwota wolna (rocznie)</span>
+                  <div className="w-32">
+                    <NumInput
+                      value={u.taxFreeAmount}
+                      onChange={(v) => zmien({ taxFreeAmount: v }, `zmienił kwotę wolną na ${v} zł`)}
+                      className="!py-1.5 !text-sm"
+                    />
+                  </div>
+                </div>
+                <div className={rowCls}>
+                  <span className={labelCls}>Próg podatkowy</span>
+                  <div className="w-32">
+                    <NumInput
+                      value={u.firstTaxThreshold}
+                      onChange={(v) => zmien({ firstTaxThreshold: v }, `zmienił próg podatkowy na ${v} zł`)}
+                      className="!py-1.5 !text-sm"
+                    />
+                  </div>
+                </div>
+                <div className={rowCls}>
+                  <span className={labelCls}>Stawki (do progu / powyżej)</span>
+                  <span className="text-sm text-ink tabular-nums">
+                    {u.firstTaxRate * 100}% / {u.secondTaxRate * 100}%
+                  </span>
+                </div>
+                <div className={rowCls}>
+                  <span className={labelCls}>Kwota zmniejszająca podatek</span>
+                  <div className="w-32">
+                    <NumInput
+                      value={u.taxReducingAmount}
+                      onChange={(v) => zmien({ taxReducingAmount: v }, `zmienił kwotę zmniejszającą na ${v} zł`)}
+                      className="!py-1.5 !text-sm"
+                    />
+                  </div>
+                </div>
+              </>
+            )}
           </>
         ) : (
           <div className={rowCls}>

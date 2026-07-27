@@ -218,11 +218,15 @@ export function PodatkiCard({
   p,
   taxForm,
   taxFreeAmount = 30000,
+  incomeTaxScope = "company_division",
+  companyDivisionTaxRate = 0.12,
   wynik,
 }: {
   p: PodatkiMiesiaca;
   taxForm: "skala" | "liniowy";
   taxFreeAmount?: number;
+  incomeTaxScope?: "company_division" | "standalone";
+  companyDivisionTaxRate?: 0.12 | 0.32;
   wynik: WynikMiesiaca;
 }) {
   const [szczegoly, setSzczegoly] = useState(false);
@@ -391,7 +395,11 @@ export function PodatkiCard({
           <div className="flex items-center justify-between gap-3 py-1 text-sm">
             <span className="text-dim">Forma opodatkowania</span>
             <span className="text-right font-bold text-ink">
-              {taxForm === "skala" ? "Skala 12% / 32%" : "Liniowy 19%"}
+              {taxForm === "skala"
+                ? incomeTaxScope === "company_division"
+                  ? `Skala — część firmy (${companyDivisionTaxRate * 100}%)`
+                  : "Skala 12% / 32%"
+                : "Liniowy 19%"}
             </span>
           </div>
           <Wiersz
@@ -408,7 +416,9 @@ export function PodatkiCard({
           />
           <p className="mt-2 text-[11px] leading-relaxed text-dim">
             {taxForm === "skala"
-              ? "Na skali podatkowej podatek dochodowy i składka zdrowotna są liczone od dochodu. Składki zdrowotnej nie odejmuje się przed obliczeniem podatku dochodowego."
+              ? incomeTaxScope === "company_division"
+                ? `PapiTrans jest częścią tej samej firmy, dlatego kalkulator nie stosuje ponownie kwoty wolnej. Dochód transportu jest liczony stawką ${companyDivisionTaxRate * 100}% wybraną według łącznego dochodu firmy.`
+                : "Na skali podatkowej podatek dochodowy i składka zdrowotna są liczone od dochodu. Składki zdrowotnej nie odejmuje się przed obliczeniem podatku dochodowego."
               : "Przy podatku liniowym podatek dochodowy i składka zdrowotna są liczone osobno według stawek zapisanych w ustawieniach."}{" "}
             VAT jest rozliczany osobno i nie jest podstawą podatku dochodowego.
           </p>
