@@ -18,6 +18,7 @@ import { Card } from "../ui/Card";
 import { PodatkiCard } from "../PodatkiCard";
 import { ObciazeniaSekcja } from "../ObciazeniaSekcja";
 import { kategoriaLabel, PodatkiMiesiaca, rozbijWpis } from "@/lib/tax";
+import { wyjasnijPodatekMiesiaca } from "@/lib/income-tax-explanation";
 import { logChange } from "@/lib/audit";
 import {
   IconTrendingUp,
@@ -116,6 +117,12 @@ export function PodsumowanieTab({
 }: PodsumowanieProps) {
   const wynik = useMemo(() => obliczWynikMiesiaca(miesiac, dane, ustawienia), [miesiac, dane, ustawienia]);
   const zyskDodatni = wynik.zysk >= 0;
+  const wyjasnieniePodatku = podatki
+    ? wyjasnijPodatekMiesiaca(podatki, {
+        taxForm,
+        taxFreeAmount: ustawienia?.taxFreeAmount ?? 30000,
+      })
+    : null;
 
   const wyplata = dane.wyplata ?? { status: "niewypłacone" as const };
   const wyplacone = wyplata.status === "wypłacone";
@@ -521,6 +528,17 @@ export function PodsumowanieTab({
               <span className="text-dim">Odłożyć na podatek dochodowy</span>
               <span className="tabular-nums text-red-300">{formatZl(podatki.pitMiesiac)}</span>
             </div>
+            {podatki.pitMiesiac === 0 && wyjasnieniePodatku && (
+              <p className="rounded-lg border border-line bg-surface2 px-2.5 py-2 text-[10px] leading-relaxed text-dim">
+                {wyjasnieniePodatku.powod === "strata"
+                  ? `0 zł — nadal pozostaje ${formatZl(wyjasnieniePodatku.pozostalaStrata)} straty podatkowej do rozliczenia.`
+                  : wyjasnieniePodatku.powod === "kwota_wolna"
+                    ? `0 zł — dochód mieści się w kwocie wolnej; pozostało ${formatZl(wyjasnieniePodatku.pozostalaKwotaWolna)} kwoty wolnej.`
+                    : wyjasnieniePodatku.powod === "wczesniejsze_zaliczki"
+                      ? "0 zł — wcześniejsze zaliczki pokrywają podatek wyliczony narastająco."
+                      : "0 zł — narastająco nie ma dodatniego dochodu do opodatkowania."}
+              </p>
+            )}
             <div className="flex justify-between">
               <span className="text-dim">Odłożyć na zdrowotną właściciela</span>
               <span className="tabular-nums text-red-300">{formatZl(podatki.zdrowotna)}</span>
@@ -655,7 +673,14 @@ export function PodsumowanieTab({
       )}
 
       {/* Podatki — szacunek (tylko admin) */}
-      {isAdmin && podatki && <PodatkiCard p={podatki} taxForm={taxForm} wynik={wynik} />}
+      {isAdmin && podatki && (
+        <PodatkiCard
+          p={podatki}
+          taxForm={taxForm}
+          taxFreeAmount={ustawienia?.taxFreeAmount}
+          wynik={wynik}
+        />
+      )}
 
       {/* Statystyki — pille */}
       <Card>

@@ -7,12 +7,26 @@
 import { useState } from "react";
 import { PodatkiMiesiaca } from "@/lib/tax";
 import { formatZl } from "@/lib/business-logic";
-import { WynikMiesiaca } from "@/lib/types";
+import { MiesiącId, WynikMiesiaca } from "@/lib/types";
 import { Card } from "./ui/Card";
 import { IconMoneybag } from "./ui/icons";
 import { cn } from "@/lib/utils";
 import { InfoHint, JakCzytacPodatki } from "./InfoHint";
 import { TaxTermId } from "@/lib/taxGlossary";
+import {
+  WyjasnieniePodatkuMiesiaca,
+  wyjasnijPodatekMiesiaca,
+} from "@/lib/income-tax-explanation";
+
+const MIESIACE_DOPELNIACZ: Record<MiesiącId, string> = {
+  6: "czerwca",
+  7: "lipca",
+  8: "sierpnia",
+  9: "września",
+  10: "października",
+  11: "listopada",
+  12: "grudnia",
+};
 
 function Wiersz({
   label,
@@ -43,13 +57,166 @@ function Wiersz({
   );
 }
 
+function WierszWyjasnienia({
+  label,
+  value,
+  strong = false,
+  valueClass,
+}: {
+  label: string;
+  value: number;
+  strong?: boolean;
+  valueClass?: string;
+}) {
+  return (
+    <div className={cn("flex items-start justify-between gap-3 py-1 text-xs", strong && "border-t border-current/15 pt-2 font-bold")}>
+      <span className={strong ? "text-white" : "text-dim"}>{label}</span>
+      <span className={cn("shrink-0 tabular-nums", valueClass ?? (strong ? "text-white" : "text-ink"))}>
+        {formatZl(value)}
+      </span>
+    </div>
+  );
+}
+
+function WyjasnienieZerowegoPodatku({
+  wyjasnienie,
+  miesiac,
+}: {
+  wyjasnienie: WyjasnieniePodatkuMiesiaca;
+  miesiac: MiesiącId;
+}) {
+  if (wyjasnienie.podatekMiesiaca > 0) return null;
+
+  if (wyjasnienie.powod === "strata") {
+    return (
+      <div className="mt-2 rounded-xl border border-amber-brand/45 bg-amber-brand/10 p-3">
+        <p className="mb-2 text-[11px] font-extrabold uppercase tracking-wide text-amber-brand">
+          Dlaczego podatek dochodowy = 0 zł?
+        </p>
+        {wyjasnienie.strataPrzedMiesiacem > 0 && (
+          <WierszWyjasnienia
+            label={
+              miesiac > 6
+                ? `Strata narastająco do końca ${MIESIACE_DOPELNIACZ[(miesiac - 1) as MiesiącId]}`
+                : "Strata z poprzednich miesięcy"
+            }
+            value={wyjasnienie.strataPrzedMiesiacem}
+          />
+        )}
+        {wyjasnienie.dochodMiesiaca > 0 && (
+          <WierszWyjasnienia
+            label="− Dochód podatkowy tego miesiąca"
+            value={wyjasnienie.dochodMiesiaca}
+          />
+        )}
+        {wyjasnienie.strataMiesiaca > 0 && (
+          <WierszWyjasnienia
+            label="+ Strata podatkowa tego miesiąca"
+            value={wyjasnienie.strataMiesiaca}
+          />
+        )}
+        {wyjasnienie.wykorzystanaStrata > 0 && (
+          <WierszWyjasnienia
+            label="Wykorzystano wcześniejszej straty"
+            value={wyjasnienie.wykorzystanaStrata}
+            valueClass="text-green-300"
+          />
+        )}
+        <WierszWyjasnienia
+          label="Pozostała strata podatkowa do rozliczenia"
+          value={wyjasnienie.pozostalaStrata}
+          valueClass={wyjasnienie.pozostalaStrata > 0 ? "text-red-300" : "text-green-300"}
+          strong
+        />
+        <p className="mt-2 text-[11px] leading-relaxed text-amber-100/80">
+          {wyjasnienie.pozostalaStrata > 0
+            ? `Bieżący wynik najpierw rozlicza wcześniejszą stratę. Nadal pozostaje ${formatZl(wyjasnienie.pozostalaStrata)} straty, dlatego zaliczka na podatek dochodowy wynosi 0 zł.`
+            : "Wcześniejsza strata została rozliczona, ale narastająco nie powstał jeszcze dodatni dochód do opodatkowania, dlatego zaliczka wynosi 0 zł."}
+        </p>
+        <p className="mt-1 text-[10px] font-semibold text-dim">
+          {wyjasnienie.pozostalaStrata > 0
+            ? "To nie jest nadpłata ani gotówka do zwrotu. To strata podatkowa pozostała do rozliczenia."
+            : "To nie jest nadpłata ani gotówka do zwrotu."}
+        </p>
+      </div>
+    );
+  }
+
+  if (wyjasnienie.powod === "kwota_wolna") {
+    return (
+      <div className="mt-2 rounded-xl border border-green-500/35 bg-green-soft/60 p-3">
+        <p className="mb-2 text-[11px] font-extrabold uppercase tracking-wide text-green-300">
+          Dlaczego podatek dochodowy = 0 zł?
+        </p>
+        {wyjasnienie.wykorzystanaStrata > 0 && (
+          <WierszWyjasnienia
+            label="Wykorzystano wcześniejszej straty"
+            value={wyjasnienie.wykorzystanaStrata}
+          />
+        )}
+        <WierszWyjasnienia
+          label="Dochód podatkowy narastająco"
+          value={wyjasnienie.dochodNarastajaco}
+        />
+        <WierszWyjasnienia label="Kwota wolna" value={wyjasnienie.kwotaWolna} />
+        <WierszWyjasnienia
+          label="Pozostało kwoty wolnej"
+          value={wyjasnienie.pozostalaKwotaWolna}
+          valueClass="text-green-300"
+          strong
+        />
+        <p className="mt-2 text-[11px] leading-relaxed text-green-100/80">
+          Dochód narastająco mieści się jeszcze w kwocie wolnej, dlatego zaliczka na podatek dochodowy wynosi 0 zł.
+        </p>
+      </div>
+    );
+  }
+
+  if (wyjasnienie.powod === "wczesniejsze_zaliczki") {
+    return (
+      <div className="mt-2 rounded-xl border border-line bg-surface2 p-3">
+        <p className="mb-2 text-[11px] font-extrabold uppercase tracking-wide text-ink">
+          Dlaczego podatek dochodowy = 0 zł?
+        </p>
+        <WierszWyjasnienia
+          label="Podatek wyliczony narastająco"
+          value={wyjasnienie.podatekNarastajaco}
+        />
+        <WierszWyjasnienia
+          label="Zaliczki naliczone wcześniej"
+          value={wyjasnienie.zaliczkiPoprzednie}
+        />
+        <WierszWyjasnienia
+          label="Do dopłaty w tym miesiącu"
+          value={0}
+          valueClass="text-green-300"
+          strong
+        />
+        <p className="mt-2 text-[11px] leading-relaxed text-dim">
+          Wcześniejsze zaliczki pokrywają podatek wyliczony narastająco, więc w tym miesiącu nie powstaje dopłata.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2 rounded-xl border border-line bg-surface2 p-3">
+      <p className="text-[11px] leading-relaxed text-dim">
+        Podatek dochodowy wynosi 0 zł, ponieważ narastająco nie ma dodatniego dochodu do opodatkowania.
+      </p>
+    </div>
+  );
+}
+
 export function PodatkiCard({
   p,
   taxForm,
+  taxFreeAmount = 30000,
   wynik,
 }: {
   p: PodatkiMiesiaca;
   taxForm: "skala" | "liniowy";
+  taxFreeAmount?: number;
   wynik: WynikMiesiaca;
 }) {
   const [szczegoly, setSzczegoly] = useState(false);
@@ -70,6 +237,7 @@ export function PodatkiCard({
   const oficjalneAktywne = p.wynagrodzeniePodatkowe !== wynik.wynagrodzeniePracownika || p.obciazeniaPracownika > 0;
   const oficjalnyBrutto = Math.max(0, p.wynagrodzeniePodatkowe - p.obciazeniaPracownika);
   const nieoficjalne = Math.max(0, wynik.wynagrodzeniePracownika - oficjalnyBrutto);
+  const wyjasnieniePodatku = wyjasnijPodatekMiesiaca(p, { taxForm, taxFreeAmount });
 
   return (
     <Card>
@@ -139,8 +307,10 @@ export function PodatkiCard({
           <Wiersz
             label="Podatek dochodowy do zapłaty"
             value={p.pitMiesiac}
+            klasa={p.pitMiesiac > 0 ? "text-red-300" : "text-green-300"}
             term="pit_miesiac"
           />
+          <WyjasnienieZerowegoPodatku wyjasnienie={wyjasnieniePodatku} miesiac={p.miesiac} />
           <Wiersz
             label="Składka zdrowotna właściciela"
             value={p.zdrowotna}
@@ -284,7 +454,12 @@ export function PodatkiCard({
           ) : (
             <Wiersz label="Dochód podatkowy" value={p.dochod} bold term="dochod_pit" />
           )}
-          <Wiersz label="Łączny wynik podatkowy od początku roku" value={p.dochodYtd} term="wynik_ytd" />
+          <Wiersz
+            label={p.dochodYtd < 0 ? "Pozostała strata podatkowa do rozliczenia" : "Łączny wynik podatkowy od początku roku"}
+            value={Math.abs(p.dochodYtd)}
+            klasa={p.dochodYtd < 0 ? "text-red-300" : "text-ink"}
+            term="wynik_ytd"
+          />
           <Wiersz label="Podatek dochodowy wyliczony od początku roku" value={p.pitYtd} term="pit_ytd" />
           <Wiersz label="Podatek dochodowy do zapłaty za ten miesiąc" value={p.pitMiesiac} klasa="text-red-300" bold term="pit_miesiac" />
 

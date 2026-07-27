@@ -286,8 +286,10 @@ export interface PodatkiMiesiaca {
   pozostaleSkladkiZusPracownika: number;
   obciazeniaPracownika: number;
   dochod: number; // może być ujemny (strata)
+  dochodYtdPrzed: number;
   dochodYtd: number;
   pitYtd: number;
+  pitZaplaconyPrzed: number;
   pitMiesiac: number;
   // Zdrowotna
   zdrowotna: number;
@@ -398,6 +400,8 @@ export function podatkiRoku(data: WorkspaceData): PodatkiMiesiaca[] {
     const dane = (data.miesiace?.[m as MiesiącId] ?? { faktury: [], dni: {}, tankowanie: [], inneKoszty: [], leasing: 0 }) as DaneMiesiaca;
     const p = podstawyMiesiaca(m as MiesiącId, dane, u);
 
+    const dochodYtdPrzed = dochodYtd;
+    const pitZaplaconyPrzed = pitZaplaconyYtd;
     dochodYtd = round2(dochodYtd + p.dochod);
     const pitNarastajaco = pitYtd(Math.max(0, dochodYtd), u);
     const pitMiesiac = Math.max(0, round2(pitNarastajaco - pitZaplaconyYtd));
@@ -422,8 +426,10 @@ export function podatkiRoku(data: WorkspaceData): PodatkiMiesiaca[] {
       pozostaleSkladkiZusPracownika: p.pozostaleSkladkiZusPracownika,
       obciazeniaPracownika: p.obciazeniaPracownika,
       dochod: p.dochod,
+      dochodYtdPrzed,
       dochodYtd,
       pitYtd: pitNarastajaco,
+      pitZaplaconyPrzed,
       pitMiesiac,
       zdrowotna,
       zyskPrzedPodatkami: p.zyskPrzedPodatkami,

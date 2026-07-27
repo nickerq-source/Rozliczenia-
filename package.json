@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "test:fuel": "node --experimental-strip-types --test tests/fuel-chain.test.mjs",
-    "test:employee-costs": "node --experimental-strip-types --test tests/employee-costs.test.mjs"
+    "test:employee-costs": "node --experimental-strip-types --test tests/employee-costs.test.mjs",
+    "test:tax-explanation": "node --experimental-strip-types --test tests/income-tax-explanation.test.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.1",

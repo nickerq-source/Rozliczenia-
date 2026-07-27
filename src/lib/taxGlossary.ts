@@ -69,7 +69,7 @@ export const TAX_GLOSSARY: Record<TaxTermId, TaxTerm> = {
   },
   wynik_ytd: {
     nazwa: "Łączny wynik podatkowy od początku roku",
-    opis: "Suma dochodów i strat od początku roku (albo od wartości startowej z ustawień). Dodatni = był dochód, ujemny = przewaga kosztów.",
+    opis: "Suma dochodów i strat od początku roku (albo od wartości startowej z ustawień). Wartość ujemna oznacza pozostałą stratę podatkową do rozliczenia. Nie jest to nadpłata ani gotówka do zwrotu.",
     wzor: "suma miesięcznych (przychód − koszty)",
     przyklad: "Cze −4 000, Lip +6 000 → łącznie +2 000 zł.",
   },
@@ -81,7 +81,7 @@ export const TAX_GLOSSARY: Record<TaxTermId, TaxTerm> = {
   },
   pit_miesiac: {
     nazwa: "Podatek dochodowy do zapłaty za ten miesiąc",
-    opis: "Różnica między podatkiem dochodowym wyliczonym narastająco teraz a podatkiem naliczonym za wcześniejsze miesiące.",
+    opis: "Różnica między podatkiem dochodowym wyliczonym narastająco teraz a podatkiem naliczonym za wcześniejsze miesiące. Kwota 0 zł może wynikać z nierozliczonej straty, kwoty wolnej albo wcześniejszych zaliczek.",
     wzor: "max(0, podatek narastająco teraz − podatek za poprzednie miesiące)",
     przyklad: "Narastająco 2 400, wcześniej 2 050 → 350 zł za ten miesiąc.",
   },
