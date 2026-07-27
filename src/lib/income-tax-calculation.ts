@@ -1,6 +1,5 @@
 export interface ScaleTaxContext {
   incomeTaxScope: "company_division" | "standalone";
-  companyDivisionTaxRate: 0.12 | 0.32;
   taxFreeAmount: number;
   firstTaxThreshold: number;
   firstTaxRate: number;
@@ -21,7 +20,16 @@ export function calculateScaleTaxYtd(
   context: ScaleTaxContext
 ): number {
   if (context.incomeTaxScope === "company_division") {
-    return Math.max(0, round2(incomeYtd * context.companyDivisionTaxRate));
+    if (incomeYtd <= 0) return 0;
+    if (incomeYtd <= context.firstTaxThreshold) {
+      return round2(incomeYtd * context.firstTaxRate);
+    }
+    const taxToThreshold =
+      context.firstTaxThreshold * context.firstTaxRate;
+    return round2(
+      taxToThreshold
+      + (incomeYtd - context.firstTaxThreshold) * context.secondTaxRate
+    );
   }
   if (incomeYtd <= context.taxFreeAmount) return 0;
   if (incomeYtd <= context.firstTaxThreshold) {

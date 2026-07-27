@@ -697,7 +697,6 @@ export function PodsumowanieTab({
           taxForm={taxForm}
           taxFreeAmount={taxFreeAmountForModule}
           incomeTaxScope={ustawienia?.incomeTaxScope}
-          companyDivisionTaxRate={ustawienia?.companyDivisionTaxRate}
           wynik={wynik}
         />
       )}

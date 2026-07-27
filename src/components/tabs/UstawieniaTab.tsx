@@ -215,44 +215,16 @@ export function UstawieniaTab({ ustawienia: u, onUpdate, token, userName }: Prop
             </div>
 
             {u.incomeTaxScope === "company_division" ? (
-              <>
-                <div className="my-3 rounded-xl border border-amber-brand/35 bg-amber-brand/10 p-3">
-                  <p className="text-xs font-bold text-amber-brand">Bez ponownej kwoty wolnej</p>
-                  <p className="mt-1 text-[11px] leading-relaxed text-dim">
-                    PapiTrans jest częścią tej samej firmy. Kalkulator nie stosuje
-                    ponownie 30 000 zł kwoty wolnej ani 3 600 zł kwoty
-                    zmniejszającej. Stawkę wybierz według łącznego dochodu całej firmy.
-                  </p>
-                </div>
-                <div className={rowCls}>
-                  <span className={labelCls}>
-                    Stawka dla dochodu PapiTrans
-                    <span className="block text-[10px] text-dim/60">
-                      12% do progu całej firmy, 32% po jego przekroczeniu
-                    </span>
-                  </span>
-                  <div className="flex gap-1">
-                    {([0.12, 0.32] as const).map((rate) => (
-                      <button
-                        key={rate}
-                        type="button"
-                        onClick={() => zmien(
-                          { companyDivisionTaxRate: rate },
-                          `zmienił stawkę podatku działu transportu na ${rate * 100}%`
-                        )}
-                        className={cn(
-                          "min-h-10 rounded-lg border px-3 py-1.5 text-sm font-bold transition-colors",
-                          u.companyDivisionTaxRate === rate
-                            ? "border-amber-brand bg-amber-brand text-amber-ink"
-                            : "border-line text-dim hover:text-ink"
-                        )}
-                      >
-                        {rate * 100}%
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </>
+              <div className="my-3 rounded-xl border border-amber-brand/35 bg-amber-brand/10 p-3">
+                <p className="text-xs font-bold text-amber-brand">
+                  Podatek liczony od pierwszej złotówki
+                </p>
+                <p className="mt-1 text-[11px] leading-relaxed text-dim">
+                  Bez kwoty wolnej i bez kwoty zmniejszającej: 12% dochodu do
+                  120 000 zł, a 32% wyłącznie od nadwyżki ponad 120 000 zł.
+                  Kalkulator zmienia stawkę automatycznie.
+                </p>
+              </div>
             ) : (
               <>
                 <div className={rowCls}>

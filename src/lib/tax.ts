@@ -34,7 +34,6 @@ export const DOMYSLNE_USTAWIENIA: UstawieniaPodatkowe = {
   // PapiTrans jest częścią tej samej działalności, dlatego nie może ponownie
   // korzystać z kwoty wolnej wykorzystanej przez pozostałą część firmy.
   incomeTaxScope: "company_division",
-  companyDivisionTaxRate: 0.12,
   taxFreeAmount: 30000,
   firstTaxThreshold: 120000,
   firstTaxRate: 0.12,
