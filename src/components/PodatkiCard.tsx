@@ -237,9 +237,8 @@ export function PodatkiCard({
   // Łączne zobowiązania: podatki właściciela i firmy oraz stałe obciążenia pracownika.
   const laczniePowinnoWyjsc = vatDoZaplatyDodatni + p.pitMiesiac + p.zdrowotna + p.obciazeniaPracownika;
 
-  const kosztyOperacyjne =
-    wynik.wynagrodzeniePracownika + wynik.obciazeniaPracownika + wynik.paliwo + wynik.inne + wynik.leasing;
-  const kosztPracownika = wynik.wynagrodzeniePracownika + wynik.obciazeniaPracownika;
+  const kosztyOperacyjne = wynik.kosztyOperacyjne;
+  const kosztPracownika = wynik.wynagrodzenieDoWyplaty + wynik.obciazeniaPracownika;
   const kosztyZakupowe = wynik.paliwo + wynik.inne + wynik.leasing;
   const kosztyZakupowePodatkowe = Math.max(0, p.kosztyPodatkowe - p.wynagrodzeniePodatkowe);
   const oficjalneAktywne = p.wynagrodzeniePodatkowe !== wynik.wynagrodzeniePracownika || p.obciazeniaPracownika > 0;
@@ -259,11 +258,11 @@ export function PodatkiCard({
     },
     vat_do_zaplaty: {
       label: aktualneDaneLabel,
-      text: `${formatZl(p.vatNalezny)} VAT należnego − ${formatZl(p.vatNaliczony)} VAT do odliczenia = ${formatZl(vatDoZaplatyDodatni)} VAT do zapłaty.`,
+      text: `${formatZl(p.vatNalezny)} VAT należnego − ${formatZl(p.vatNaliczony)} VAT do odliczenia − ${formatZl(p.vatNadwyzkaZPoprzednich)} nadwyżki z poprzednich miesięcy = ${formatZl(vatDoZaplatyDodatni)} VAT do zapłaty.`,
     },
     nadwyzka_vat: {
       label: aktualneDaneLabel,
-      text: `${formatZl(p.vatNaliczony)} VAT do odliczenia − ${formatZl(p.vatNalezny)} VAT należnego = ${formatZl(nadwyzkaVat)} nadwyżki VAT.`,
+      text: `${formatZl(p.vatNaliczony)} VAT do odliczenia + ${formatZl(p.vatNadwyzkaZPoprzednich)} nadwyżki z poprzednich miesięcy − ${formatZl(p.vatNalezny)} VAT należnego = ${formatZl(nadwyzkaVat)} nadwyżki VAT do przeniesienia.`,
     },
     koszty_pit: {
       label: aktualneDaneLabel,
@@ -280,8 +279,8 @@ export function PodatkiCard({
     wynik_ytd: {
       label: aktualneDaneLabel,
       text: p.dochodYtd < 0
-        ? `Od początku rozliczanego okresu pozostaje ${formatZl(-p.dochodYtd)} straty podatkowej.`
-        : `Łączny dochód podatkowy od początku rozliczanego okresu wynosi ${formatZl(p.dochodYtd)}.`,
+        ? `Od czerwca do końca tego miesiąca pozostaje ${formatZl(-p.dochodYtd)} straty podatkowej.`
+        : `Łączny dochód podatkowy od czerwca do końca tego miesiąca wynosi ${formatZl(p.dochodYtd)}.`,
     },
     pit_ytd: {
       label: aktualneDaneLabel,
@@ -301,11 +300,11 @@ export function PodatkiCard({
     },
     wynik_po_podatkach: {
       label: aktualneDaneLabel,
-      text: `${formatZl(p.zyskPrzedPodatkami)} zysku przed podatkami − ${formatZl(p.pitMiesiac)} podatku dochodowego − ${formatZl(p.zdrowotna)} zdrowotnej = ${formatZl(p.zyskPoPodatkach)} przed rozliczeniem VAT.`,
+      text: `${formatZl(p.zyskPrzedPodatkami)} wyniku gotówkowego przed podatkami − ${formatZl(p.pitMiesiac)} podatku dochodowego − ${formatZl(p.zdrowotna)} zdrowotnej = ${formatZl(p.zyskPoPodatkach)} przed rozliczeniem VAT.`,
     },
     wynik_na_czysto: {
       label: aktualneDaneLabel,
-      text: `${formatZl(sprzedazBrutto)} przychodu brutto − ${formatZl(wynik.wynagrodzeniePracownika)} wypłaty kierowcy − ${formatZl(wynik.paliwo)} paliwa − ${formatZl(wynik.inne)} innych kosztów − ${formatZl(wynik.leasing)} leasingu − ${formatZl(laczniePowinnoWyjsc)} podatków i składek = ${formatZl(p.cashflowPoPodatkach)} realnie zostaje.`,
+      text: `${formatZl(sprzedazBrutto)} przychodu brutto − ${formatZl(wynik.wynagrodzenieDoWyplaty)} wypłaty kierowcy po potrąceniach − ${formatZl(wynik.paliwo)} paliwa − ${formatZl(wynik.inne)} innych kosztów − ${formatZl(wynik.leasing)} leasingu − ${formatZl(laczniePowinnoWyjsc)} podatków i składek = ${formatZl(p.cashflowPoPodatkach)} realnie zostaje.`,
     },
   };
   const taxSummary: TaxExampleData = {
@@ -342,6 +341,13 @@ export function PodatkiCard({
           </p>
           <Wiersz label="VAT należny ze sprzedaży" value={p.vatNalezny} />
           <Wiersz label="− VAT z zakupów do odliczenia" value={p.vatNaliczony} />
+          {p.vatNadwyzkaZPoprzednich > 0 && (
+            <Wiersz
+              label="− Nadwyżka VAT z poprzednich miesięcy"
+              value={p.vatNadwyzkaZPoprzednich}
+              klasa="text-green-300"
+            />
+          )}
           <Wiersz
             label={nadwyzka ? "Nadwyżka VAT na kolejny okres" : "VAT do zapłaty"}
             value={nadwyzka ? nadwyzkaVat : vatDoZaplatyDodatni}
@@ -425,7 +431,7 @@ export function PodatkiCard({
         <div className="bg-green-soft/70 p-3">
           <p className="mb-1 text-xs font-bold text-green-300">4. Podsumowanie końcowe</p>
           <Wiersz label="Przychód brutto" value={sprzedazBrutto} />
-          <Wiersz label="− Cała wypłata kierowcy" value={wynik.wynagrodzeniePracownika} />
+          <Wiersz label="− Wypłata kierowcy po potrąceniach" value={wynik.wynagrodzenieDoWyplaty} />
           <Wiersz label="− Paliwo" value={wynik.paliwo} />
           <Wiersz label="− Inne koszty" value={wynik.inne} />
           <Wiersz label="− Leasing" value={wynik.leasing} />
@@ -488,9 +494,21 @@ export function PodatkiCard({
             Koszty pracownika — bez VAT
           </p>
           <Wiersz
-            label="Wynagrodzenie kierowcy"
+            label="Wynagrodzenie naliczone kierowcy"
             value={wynik.wynagrodzeniePracownika}
-            note={oficjalneAktywne ? "kwota wypłacana kierowcy; do podatku tylko część oficjalna" : "kwota wypłacana kierowcy; bez VAT"}
+            note={oficjalneAktywne ? "kwota przed potrąceniami; do podatku tylko część oficjalna" : "kwota przed potrąceniami; bez VAT"}
+          />
+          {wynik.potraceniaKierowcy > 0 && (
+            <Wiersz
+              label="− Potrącenia z wypłaty kierowcy"
+              value={wynik.potraceniaKierowcy}
+              klasa="text-green-300"
+            />
+          )}
+          <Wiersz
+            label="Wypłata kierowcy po potrąceniach"
+            value={wynik.wynagrodzenieDoWyplaty}
+            bold
           />
           {wynik.podatekDochodowyPracownika > 0 && <Wiersz label="Podatek dochodowy pracownika" value={wynik.podatekDochodowyPracownika} />}
           {wynik.skladkaZdrowotnaPracownika > 0 && <Wiersz label="Składka zdrowotna pracownika" value={wynik.skladkaZdrowotnaPracownika} />}
@@ -512,6 +530,13 @@ export function PodatkiCard({
           <Wiersz label="VAT należny (sprzedaż)" value={p.vatNalezny} term="vat_nalezny" />
           <Wiersz label="Netto kosztów zakupowych z dokumentów" value={p.kosztyNetto} />
           <Wiersz label="VAT naliczony (do odliczenia)" value={p.vatNaliczony} klasa="text-green-300" term="vat_naliczony" />
+          {p.vatNadwyzkaZPoprzednich > 0 && (
+            <Wiersz
+              label="Nadwyżka VAT z poprzednich miesięcy"
+              value={p.vatNadwyzkaZPoprzednich}
+              klasa="text-green-300"
+            />
+          )}
           {nadwyzka ? (
             <Wiersz label="Nadwyżka VAT na kolejny miesiąc" value={nadwyzkaVat} klasa="text-green-300" bold term="nadwyzka_vat" />
           ) : (
@@ -553,12 +578,12 @@ export function PodatkiCard({
             <Wiersz label="Dochód podatkowy" value={p.dochod} bold term="dochod_pit" />
           )}
           <Wiersz
-            label={p.dochodYtd < 0 ? "Pozostała strata podatkowa do rozliczenia" : "Łączny wynik podatkowy od początku roku"}
+            label={p.dochodYtd < 0 ? "Pozostała strata podatkowa od czerwca" : "Łączny wynik podatkowy od czerwca"}
             value={Math.abs(p.dochodYtd)}
             klasa={p.dochodYtd < 0 ? "text-red-300" : "text-ink"}
             term="wynik_ytd"
           />
-          <Wiersz label="Podatek dochodowy wyliczony od początku roku" value={p.pitYtd} term="pit_ytd" />
+          <Wiersz label="Podatek dochodowy wyliczony od czerwca" value={p.pitYtd} term="pit_ytd" />
           <Wiersz label="Podatek dochodowy do zapłaty za ten miesiąc" value={p.pitMiesiac} klasa="text-red-300" bold term="pit_miesiac" />
 
           {/* Zdrowotna */}
@@ -573,7 +598,7 @@ export function PodatkiCard({
 
           {/* Ile zostaje */}
           <p className="mb-1 mt-4 text-xs font-bold uppercase tracking-wider text-amber-brand">Ile zostaje</p>
-          <Wiersz label="Zysk operacyjny przed podatkami" value={p.zyskPrzedPodatkami} />
+          <Wiersz label="Wynik gotówkowy przed podatkami" value={p.zyskPrzedPodatkami} />
           <Wiersz
             label="Po dochodowym i zdrowotnej — przed VAT"
             value={p.zyskPoPodatkach}

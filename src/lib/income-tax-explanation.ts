@@ -75,9 +75,16 @@ export function wyjasnijPodatekMiesiaca(
     || (dochodNarastajaco === 0 && (strataPrzedMiesiacem > 0 || strataMiesiaca > 0))
   ) {
     powod = "strata";
-  } else if (ustawienia.taxForm === "skala" && dochodNarastajaco <= kwotaWolna) {
+  } else if (
+    ustawienia.taxForm === "skala"
+    && kwotaWolna > 0
+    && dochodNarastajaco <= kwotaWolna
+  ) {
     powod = "kwota_wolna";
-  } else if (podatekNarastajaco <= zaliczkiPoprzednie) {
+  } else if (
+    zaliczkiPoprzednie > 0
+    && podatekNarastajaco <= zaliczkiPoprzednie
+  ) {
     powod = "wczesniejsze_zaliczki";
   }
 

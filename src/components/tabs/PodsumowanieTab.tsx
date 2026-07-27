@@ -12,7 +12,7 @@ import {
   WpisInnegoKosztu,
   WpisTankowania,
 } from "@/lib/types";
-import { czyKosztLeasingu, czyTankowanieWliczane, obliczWynikMiesiaca, formatZl, formatZlCaly, sumaObciazen } from "@/lib/business-logic";
+import { czyKosztLeasingu, czyTankowanieWliczane, obliczWynikMiesiaca, formatZl, formatZlCaly } from "@/lib/business-logic";
 import { POLSKIE_MIESIACE } from "@/lib/dates";
 import { Card } from "../ui/Card";
 import { PodatkiCard } from "../PodatkiCard";
@@ -135,9 +135,9 @@ export function PodsumowanieTab({
   const wyplata = dane.wyplata ?? { status: "niewypłacone" as const };
   const wyplacone = wyplata.status === "wypłacone";
 
-  // Wypłata do ręki = wynagrodzenie (dniówki + premia) − obciążenia
-  const obciazeniaSuma = sumaObciazen(dane.obciazenia);
-  const doWyplaty = wynik.wynagrodzeniePracownika - obciazeniaSuma;
+  // Wypłata do ręki = wynagrodzenie (dniówki + premia) − potrącenia kierowcy.
+  const obciazeniaSuma = wynik.potraceniaKierowcy;
+  const doWyplaty = wynik.wynagrodzenieDoWyplaty;
   const kosztyEksport = useMemo(() => {
     if (!ustawienia) return [];
     type EksportRow = {
@@ -304,7 +304,8 @@ export function PodsumowanieTab({
       ),
       "",
       csvCell("PODSUMOWANIE"),
-      `${csvCell("VAT do zapłaty")};${csvCell(podatki?.vatDoZaplaty ?? 0)}`,
+      `${csvCell("VAT do zapłaty")};${csvCell(Math.max(0, podatki?.vatDoZaplaty ?? 0))}`,
+      `${csvCell("Nadwyżka VAT do przeniesienia")};${csvCell(podatki?.vatNadwyzkaDoPrzeniesienia ?? 0)}`,
       `${csvCell("Podatek dochodowy")};${csvCell(podatki?.pitMiesiac ?? 0)}`,
       `${csvCell("Zdrowotna właściciela")};${csvCell(podatki?.zdrowotna ?? 0)}`,
       `${csvCell("Realnie zostaje po wszystkich kosztach i podatkach")};${csvCell(podatki?.cashflowPoPodatkach ?? wynik.zysk)}`,
@@ -337,7 +338,8 @@ export function PodsumowanieTab({
       <br />
       <table>
         <tr><th>Pozycja</th><th>Kwota</th></tr>
-        <tr><td>VAT do zapłaty</td><td>${podatki?.vatDoZaplaty ?? 0}</td></tr>
+        <tr><td>VAT do zapłaty</td><td>${Math.max(0, podatki?.vatDoZaplaty ?? 0)}</td></tr>
+        <tr><td>Nadwyżka VAT do przeniesienia</td><td>${podatki?.vatNadwyzkaDoPrzeniesienia ?? 0}</td></tr>
         <tr><td>Podatek dochodowy</td><td>${podatki?.pitMiesiac ?? 0}</td></tr>
         <tr><td>Zdrowotna właściciela</td><td>${podatki?.zdrowotna ?? 0}</td></tr>
         <tr><td>Realnie zostaje po wszystkich kosztach i podatkach</td><td>${podatki?.cashflowPoPodatkach ?? wynik.zysk}</td></tr>
@@ -378,9 +380,10 @@ export function PodsumowanieTab({
       </style></head><body>
       <h1>PapiTrans — ${POLSKIE_MIESIACE[miesiac]} 2026</h1>
       <div class="grid">
-        <div class="box">Przychód: <b>${formatZl(wynik.przychod)}</b></div>
+        <div class="box">Przychód brutto: <b>${formatZl(wynik.przychod)}</b></div>
         <div class="box">Koszty (do księgowości): <b>${formatZl(kosztyEksport.reduce((s, k) => s + k.kwotaBrutto, 0))}</b></div>
-        <div class="box">VAT do zapłaty: <b>${formatZl(podatki?.vatDoZaplaty ?? 0)}</b></div>
+        <div class="box">VAT do zapłaty: <b>${formatZl(Math.max(0, podatki?.vatDoZaplaty ?? 0))}</b></div>
+        <div class="box">Nadwyżka VAT do przeniesienia: <b>${formatZl(podatki?.vatNadwyzkaDoPrzeniesienia ?? 0)}</b></div>
         <div class="box">Podatek dochodowy: <b>${formatZl(podatki?.pitMiesiac ?? 0)}</b></div>
         <div class="box">Zdrowotna właściciela: <b>${formatZl(podatki?.zdrowotna ?? 0)}</b></div>
         <div class="box">Realnie zostaje po wszystkich kosztach i podatkach: <b>${formatZl(podatki?.cashflowPoPodatkach ?? wynik.zysk)}</b></div>
@@ -416,7 +419,7 @@ export function PodsumowanieTab({
     }
     if (
       !window.confirm(
-        `Na pewno oznaczyć wypłatę za ${nazwa} 2026 (${formatZlCaly(wynik.wynagrodzeniePracownika)}) jako wypłaconą?`
+        `Na pewno oznaczyć wypłatę za ${nazwa} 2026 (${formatZlCaly(wynik.wynagrodzenieDoWyplaty)}) jako wypłaconą?`
       )
     ) return;
 
@@ -434,7 +437,7 @@ export function PodsumowanieTab({
       action: "wyplata_oznaczona",
       entity: "payroll",
       entityId: String(miesiac),
-      description: `${userName} oznaczył wypłatę kierowcy ${nazwa} 2026 (${formatZlCaly(wynik.wynagrodzeniePracownika)}) jako wypłaconą`,
+      description: `${userName} oznaczył wypłatę kierowcy ${nazwa} 2026 (${formatZlCaly(wynik.wynagrodzenieDoWyplaty)}) jako wypłaconą`,
       url: `/admin?miesiac=${miesiac}&zakladka=podsumowanie`,
     });
   }
@@ -452,7 +455,7 @@ export function PodsumowanieTab({
           <p className="text-xs font-bold uppercase tracking-wider text-amber-brand mb-1">Przychód</p>
           <Row
             icon={<IconTrendingUp size={18} />}
-            label="Faktury za miesiąc"
+            label="Faktury brutto za miesiąc"
             value={wynik.przychod}
             valueClass="text-green-400"
           />
@@ -463,12 +466,20 @@ export function PodsumowanieTab({
           <p className="mb-1 text-xs font-bold uppercase tracking-wider text-amber-brand">
             Koszty pracownika — bez VAT
           </p>
-          <Row icon={<IconUsers size={18} />} label="Wynagrodzenie kierowcy" value={wynik.wynagrodzeniePracownika} />
+          <Row
+            icon={<IconUsers size={18} />}
+            label="Wypłata kierowcy po potrąceniach"
+            value={wynik.wynagrodzenieDoWyplaty}
+          />
           {wynik.podatekDochodowyPracownika > 0 && <Row icon={<IconUsers size={18} />} label="Podatek dochodowy pracownika" value={wynik.podatekDochodowyPracownika} />}
           {wynik.skladkaZdrowotnaPracownika > 0 && <Row icon={<IconUsers size={18} />} label="Składka zdrowotna pracownika" value={wynik.skladkaZdrowotnaPracownika} />}
           {wynik.pozostaleSkladkiZusPracownika > 0 && <Row icon={<IconUsers size={18} />} label="Pozostałe składki ZUS pracownika" value={wynik.pozostaleSkladkiZusPracownika} />}
           <p className="mt-1 text-[10px] leading-relaxed text-dim/70">
-            Wynagrodzenie oznacza kwotę wypłacaną kierowcy, a obciążenia są doliczane osobno. Nie tworzą VAT i są uwzględniane przy wyliczeniu dochodu.
+            Naliczone wynagrodzenie: {formatZl(wynik.wynagrodzeniePracownika)}
+            {wynik.potraceniaKierowcy > 0
+              ? `, potrącenia: ${formatZl(wynik.potraceniaKierowcy)}.`
+              : "."}{" "}
+            Podatek, zdrowotna i pozostały ZUS pracownika są kosztami firmy bez VAT.
           </p>
         </div>
 
@@ -485,7 +496,7 @@ export function PodsumowanieTab({
           </p>
         </div>
 
-        {/* ZYSK NA CZYSTO */}
+        {/* Wynik gotówkowy przed podatkami */}
         <div
           className="flex items-center gap-3 rounded-2xl px-4 py-4"
           style={{ background: zyskDodatni ? "var(--green-bg)" : "var(--red-bg)" }}
@@ -494,7 +505,7 @@ export function PodsumowanieTab({
             <IconMoneybag size={26} />
           </span>
           <span className="text-sm font-bold text-white uppercase tracking-wide flex-1">
-            Zysk przed podatkami
+            Wynik gotówkowy przed podatkami
           </span>
           <span
             className={cn(
@@ -781,6 +792,12 @@ export function PodsumowanieTab({
             <span className="text-white">Łącznie wynagrodzenie</span>
             <span className="tabular-nums text-white">{formatZlCaly(wynik.wynagrodzeniePracownika)}</span>
           </div>
+          {wynik.potraceniaKierowcy > 0 && (
+            <div className="flex justify-between text-sm pt-1 font-bold">
+              <span className="text-white">Do wypłaty po potrąceniach</span>
+              <span className="tabular-nums text-green-300">{formatZlCaly(wynik.wynagrodzenieDoWyplaty)}</span>
+            </div>
+          )}
         </div>
       </Card>
     </div>

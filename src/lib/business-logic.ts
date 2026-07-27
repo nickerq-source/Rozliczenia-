@@ -19,7 +19,12 @@ import {
   getWeeksOfMonth,
 } from "./dates";
 import { czyWolny, maKolka, maZlecenia } from "./day-type";
-import { obliczObciazeniaPracownika } from "./employee-costs";
+import {
+  obliczObciazeniaPracownika,
+  obliczWyplatePoPotraceniach,
+} from "./employee-costs";
+import { sumInvoiceGross } from "./invoice-amounts";
+import { calculateOperatingResult } from "./operating-result";
 
 /** Bezpieczne parsowanie liczby — puste lub NaN zwraca 0 */
 export function parseNum(val: string | number | undefined | null): number {
@@ -173,9 +178,12 @@ export function czyDodatkiZablokowaneOdLipca(
 
 // ─── PRZYCHÓD ─────────────────────────────────────────────────────────────────
 
-/** Suma faktur = przychód miesiąca */
-export function obliczPrzychod(faktury: FakturaWeek[]): number {
-  return faktury.reduce((sum, f) => sum + parseNum(f.kwota), 0);
+/** Suma faktur brutto = gotówkowy przychód miesiąca. */
+export function obliczPrzychod(
+  faktury: FakturaWeek[],
+  ustawienia?: UstawieniaPodatkowe
+): number {
+  return sumInvoiceGross(faktury, ustawienia);
 }
 
 // ─── KOSZTY ───────────────────────────────────────────────────────────────────
@@ -234,7 +242,7 @@ export function obliczWynikMiesiaca(
   daneM: DaneMiesiaca,
   ustawienia?: UstawieniaPodatkowe
 ): WynikMiesiaca {
-  const przychod = obliczPrzychod(daneM.faktury);
+  const przychod = obliczPrzychod(daneM.faktury, ustawienia);
   const {
     wynagrodzenie,
     premia,
@@ -248,7 +256,19 @@ export function obliczWynikMiesiaca(
   );
   const paliwo = obliczKosztPaliwa(daneM.tankowanie);
   const inne = obliczInneKoszty(daneM.inneKoszty);
-  const leasing = obliczKosztLeasingu(daneM);
+  const maJawnyLeasing = (daneM.inneKoszty ?? []).some(
+    (koszt) => czyKosztLeasingu(koszt) && parseNum(koszt.koszt) > 0
+  );
+  const miesiacAktywny =
+    przychod > 0
+    || wynagrodzenie > 0
+    || paliwo > 0
+    || inne > 0
+    || maJawnyLeasing;
+  // Pole `leasing` jest legacy i ma domyślne 2300 zł również w pustych,
+  // przyszłych miesiącach. Nie traktujemy tej wartości jako poniesionego
+  // kosztu, dopóki miesiąc nie ma realnej aktywności.
+  const leasing = miesiacAktywny ? obliczKosztLeasingu(daneM) : 0;
 
   // Stałe obciążenia pracownika są realnym miesięcznym kosztem firmy na
   // wierzchu wypłaty liczonej z kółek. Naliczamy je tylko w miesiącu z wypłatą.
@@ -259,12 +279,28 @@ export function obliczWynikMiesiaca(
     obciazeniaPracownika,
   } = obliczObciazeniaPracownika(ustawienia, wynagrodzenie > 0);
   const zusPracodawcy = pozostaleSkladkiZusPracownika;
+  const {
+    potraceniaKierowcy,
+    wynagrodzenieDoWyplaty,
+  } = obliczWyplatePoPotraceniach(
+    wynagrodzenie,
+    sumaObciazen(daneM.obciazenia)
+  );
 
-  const zysk = przychod - wynagrodzenie - obciazeniaPracownika - paliwo - inne - leasing;
+  const wynikOperacyjny = calculateOperatingResult({
+    revenueGross: przychod,
+    driverPayout: wynagrodzenieDoWyplaty,
+    employeeCharges: obciazeniaPracownika,
+    fuel: paliwo,
+    otherCosts: inne,
+    leasing,
+  });
 
   return {
     przychod,
     wynagrodzeniePracownika: wynagrodzenie,
+    potraceniaKierowcy,
+    wynagrodzenieDoWyplaty,
     zusPracodawcy,
     podatekDochodowyPracownika,
     skladkaZdrowotnaPracownika,
@@ -273,7 +309,8 @@ export function obliczWynikMiesiaca(
     paliwo,
     inne,
     leasing,
-    zysk,
+    kosztyOperacyjne: wynikOperacyjny.operatingCosts,
+    zysk: wynikOperacyjny.cashBeforeTaxes,
     liczbaSobotPrzepracowanych: liczbaSobot,
     premiaUwzglednioneod4Soboty: liczbaSobot >= 4 && !dodatkiZablokowaneOdLipca,
     wolneBezplatneRobocze,

@@ -16,9 +16,18 @@ import {
 } from "./types";
 import { czyTankowanieWliczane, obliczWynagrodzenie, parseNum } from "./business-logic";
 import { MIESIACE_ZAKRESU } from "./dates";
-import { obliczObciazeniaPracownika } from "./employee-costs";
+import {
+  obliczObciazeniaPracownika,
+  obliczWyplatePoPotraceniach,
+} from "./employee-costs";
 import { calculateScaleTaxYtd } from "./income-tax-calculation";
 import { calculateFinalCash } from "./final-cash-calculation";
+import {
+  calculateInvoiceAmounts,
+  InvoiceAmounts,
+} from "./invoice-amounts";
+import { calculateVatSettlement } from "./vat-settlement";
+import { calculateOperatingResult } from "./operating-result";
 
 // ─── USTAWIENIA DOMYŚLNE ─────────────────────────────────────────────────────
 
@@ -215,29 +224,11 @@ export function rozbijWpis(
 
 // ─── VAT NALEŻNY ZE SPRZEDAŻY ────────────────────────────────────────────────
 
-export interface VatFaktury {
-  netto: number;
-  vat: number;
-  brutto: number;
-}
+export type VatFaktury = InvoiceAmounts;
 
 /** VAT faktury sprzedażowej. Import PDF ma netto+brutto wprost; ręczna kwota wg trybu. */
 export function vatFaktury(f: FakturaWeek, ustawienia: UstawieniaPodatkowe): VatFaktury {
-  if (f.pdfImport && f.pdfImport.netto > 0) {
-    const netto = round2(f.pdfImport.netto);
-    const brutto = round2(f.pdfImport.brutto > 0 ? f.pdfImport.brutto : netto * (1 + ustawienia.defaultSalesVatRate));
-    return { netto, vat: round2(brutto - netto), brutto };
-  }
-  const kwota = parseNum(f.kwota);
-  if (kwota <= 0) return { netto: 0, vat: 0, brutto: 0 };
-  const stawka = f.vatRate ?? ustawienia.defaultSalesVatRate;
-  const mode = f.amountMode ?? ustawienia.invoiceAmountMode;
-  if (mode === "brutto") {
-    const netto = round2(kwota / (1 + stawka));
-    return { netto, vat: round2(kwota - netto), brutto: round2(kwota) };
-  }
-  const vat = round2(kwota * stawka);
-  return { netto: round2(kwota), vat, brutto: round2(kwota + vat) };
+  return calculateInvoiceAmounts(f, ustawienia);
 }
 
 // ─── PODATEK DOCHODOWY ───────────────────────────────────────────────────────
@@ -281,12 +272,16 @@ export function zdrowotnaMiesiaca(dochodMiesiaca: number, u: UstawieniaPodatkowe
 
 export interface PodatkiMiesiaca {
   miesiac: MiesiącId;
+  aktywny: boolean;
   // VAT
   sprzedazNetto: number;
   vatNalezny: number;
   kosztyNetto: number;
   vatNaliczony: number; // do odliczenia
-  vatDoZaplaty: number; // ujemny = nadwyżka
+  vatSaldoMiesiaca: number; // należny − naliczony przed przeniesieniem
+  vatNadwyzkaZPoprzednich: number;
+  vatDoZaplaty: number; // po przeniesieniu; ujemny = nadwyżka
+  vatNadwyzkaDoPrzeniesienia: number;
   // Podatek dochodowy
   przychodNetto: number;
   kosztyPodatkowe: number;
@@ -318,7 +313,7 @@ function podstawyMiesiaca(m: MiesiącId, dane: DaneMiesiaca, u: UstawieniaPodatk
     const v = vatFaktury(f, u);
     sprzedazNetto += v.netto;
     vatNalezny += v.vat;
-    przychodBrutto += parseNum(f.kwota); // tak jak liczy P&L (kwota wpisana)
+    przychodBrutto += v.brutto;
   }
 
   // Koszty z VAT (tankowanie = kategoria paliwo_adblue)
@@ -345,9 +340,13 @@ function podstawyMiesiaca(m: MiesiącId, dane: DaneMiesiaca, u: UstawieniaPodatk
   // Miesiąc nieaktywny (brak sprzedaży, kosztów i pracy) nie wnosi nic do
   // podatków — w szczególności domyślny leasing pustych miesięcy nie jest
   // poniesionym kosztem i nie może zawyżać straty YTD.
-  const aktywny = sprzedazNetto > 0 || kosztyNetto > 0 || wynagrodzenie > 0;
+  const aktywny =
+    przychodBrutto > 0
+    || kosztyBrutto > 0
+    || wynagrodzenie > 0;
   if (!aktywny) {
     return {
+      aktywny: false,
       sprzedazNetto: 0, vatNalezny: 0, kosztyNetto: 0, vatNaliczony: 0,
       kosztyPodatkowe: 0, dochod: 0, zyskPrzedPodatkami: 0,
       wynagrodzeniePodatkowe: 0, zusPracodawcy: 0,
@@ -371,6 +370,13 @@ function podstawyMiesiaca(m: MiesiącId, dane: DaneMiesiaca, u: UstawieniaPodatk
     obciazeniaPracownika,
   } = obliczObciazeniaPracownika(u, maWyplate);
   const zusPracodawcy = pozostaleSkladkiZusPracownika;
+  const { wynagrodzenieDoWyplaty } = obliczWyplatePoPotraceniach(
+    wynagrodzenie,
+    (dane.obciazenia ?? []).reduce(
+      (sum, obciazenie) => sum + parseNum(obciazenie.kwota),
+      0
+    )
+  );
   const wynagrodzeniePodatkowe = oficjalne
     ? round2(parseNum(u.pracownikBruttoMies) + obciazeniaPracownika)
     : round2(wynagrodzenie + obciazeniaPracownika);
@@ -378,9 +384,18 @@ function podstawyMiesiaca(m: MiesiącId, dane: DaneMiesiaca, u: UstawieniaPodatk
   const leasingLegacy = wpisyLeasingu.length > 0 ? 0 : parseNum(dane.leasing);
   const kosztyPodatkowe = round2(kosztyPitFaktury + wynagrodzeniePodatkowe + leasingLegacy);
   const dochod = round2(sprzedazNetto - kosztyPodatkowe);
-  const zyskPrzedPodatkami = round2(przychodBrutto - wynagrodzenie - obciazeniaPracownika - kosztyBrutto - leasingLegacy);
+  const wynikOperacyjny = calculateOperatingResult({
+    revenueGross: przychodBrutto,
+    driverPayout: wynagrodzenieDoWyplaty,
+    employeeCharges: obciazeniaPracownika,
+    fuel: 0,
+    otherCosts: kosztyBrutto,
+    leasing: leasingLegacy,
+  });
+  const zyskPrzedPodatkami = wynikOperacyjny.cashBeforeTaxes;
 
   return {
+    aktywny: true,
     sprzedazNetto: round2(sprzedazNetto),
     vatNalezny: round2(vatNalezny),
     kosztyNetto: round2(kosztyNetto),
@@ -406,6 +421,7 @@ export function podatkiRoku(data: WorkspaceData): PodatkiMiesiaca[] {
   const wyniki: PodatkiMiesiaca[] = [];
   let dochodYtd = 0;
   let pitZaplaconyYtd = 0;
+  let vatNadwyzkaDoPrzeniesienia = 0;
 
   for (const m of MIESIACE_ZAKRESU) {
     const dane = (data.miesiace?.[m as MiesiącId] ?? { faktury: [], dni: {}, tankowanie: [], inneKoszty: [], leasing: 0 }) as DaneMiesiaca;
@@ -418,8 +434,16 @@ export function podatkiRoku(data: WorkspaceData): PodatkiMiesiaca[] {
     const pitMiesiac = Math.max(0, round2(pitNarastajaco - pitZaplaconyYtd));
     pitZaplaconyYtd = round2(pitZaplaconyYtd + pitMiesiac);
 
-    const zdrowotna = zdrowotnaMiesiaca(p.dochod, u);
-    const vatDoZaplaty = round2(p.vatNalezny - p.vatNaliczony);
+    const zdrowotna = p.aktywny ? zdrowotnaMiesiaca(p.dochod, u) : 0;
+    const vatSettlement = calculateVatSettlement({
+      outputVat: p.vatNalezny,
+      deductibleInputVat: p.vatNaliczony,
+      previousCarry: vatNadwyzkaDoPrzeniesienia,
+    });
+    const vatSaldoMiesiaca = vatSettlement.currentBalance;
+    const vatNadwyzkaZPoprzednich = vatSettlement.previousCarry;
+    const vatDoZaplaty = vatSettlement.payableOrCarry;
+    vatNadwyzkaDoPrzeniesienia = vatSettlement.nextCarry;
     const finalCash = calculateFinalCash({
       profitBeforeTaxes: p.zyskPrzedPodatkami,
       incomeTax: pitMiesiac,
@@ -429,11 +453,15 @@ export function podatkiRoku(data: WorkspaceData): PodatkiMiesiaca[] {
 
     wyniki.push({
       miesiac: m as MiesiącId,
+      aktywny: p.aktywny,
       sprzedazNetto: p.sprzedazNetto,
       vatNalezny: p.vatNalezny,
       kosztyNetto: p.kosztyNetto,
       vatNaliczony: p.vatNaliczony,
+      vatSaldoMiesiaca,
+      vatNadwyzkaZPoprzednich,
       vatDoZaplaty,
+      vatNadwyzkaDoPrzeniesienia,
       przychodNetto: p.sprzedazNetto,
       kosztyPodatkowe: p.kosztyPodatkowe,
       wynagrodzeniePodatkowe: p.wynagrodzeniePodatkowe,

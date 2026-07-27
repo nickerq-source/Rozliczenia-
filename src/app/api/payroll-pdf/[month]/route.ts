@@ -6,6 +6,7 @@ import fontkit from "@pdf-lib/fontkit";
 import { getSessionProfile } from "@/lib/supabase-server";
 import { getAdminSupabase } from "@/lib/supabase-admin";
 import { obliczWynagrodzenie, sumaObciazen, liczDniWgTypu, parseNum, formatZl } from "@/lib/business-logic";
+import { obliczWyplatePoPotraceniach } from "@/lib/employee-costs";
 import { getDniMiesiaca, nazwaDnia, nrDnia, POLSKIE_MIESIACE, MIESIACE_ZAKRESU } from "@/lib/dates";
 import { TYP_DNIA_LABEL, czyWolny, maKolka } from "@/lib/day-type";
 import { DaneMiesiaca, MiesiącId, WorkspaceData } from "@/lib/types";
@@ -75,7 +76,8 @@ export async function GET(_req: NextRequest, { params }: Params) {
     kolkaTotal += parseNum(dni[iso]?.kolka);
   }
   const obciazeniaSuma = sumaObciazen(dane.obciazenia);
-  const doWyplaty = wynagrodzenie - obciazeniaSuma;
+  const { wynagrodzenieDoWyplaty: doWyplaty } =
+    obliczWyplatePoPotraceniach(wynagrodzenie, obciazeniaSuma);
   const liczby = liczDniWgTypu(dni);
   const wyplacone = dane.wyplata?.status === "wypłacone";
 

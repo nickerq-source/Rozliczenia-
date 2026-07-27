@@ -458,6 +458,7 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
                       onUpdate={handleUpdateMiesiac}
                       token={token}
                       userName={userName ?? ""}
+                      ustawienia={ustawienia}
                     />
                   )}
                   {aktywnaZakladka === "koszty" && (

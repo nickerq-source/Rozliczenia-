@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSessionProfile } from "@/lib/supabase-server";
 import { getAdminSupabase } from "@/lib/supabase-admin";
 import { obliczWynagrodzenie, parseNum, sumaObciazen, liczDniWgTypu } from "@/lib/business-logic";
+import { obliczWyplatePoPotraceniach } from "@/lib/employee-costs";
 import { MIESIACE_ZAKRESU, POLSKIE_MIESIACE, getDniMiesiaca, nazwaSkrotDnia, isSobota, isNiedziela, nrDnia } from "@/lib/dates";
 import { DaneMiesiaca, MiesiącId, WorkspaceData } from "@/lib/types";
 
@@ -83,6 +84,10 @@ export async function GET() {
       notatka: o.notatka,
     }));
     const obciazeniaSuma = sumaObciazen(dane.obciazenia);
+    const { wynagrodzenieDoWyplaty } = obliczWyplatePoPotraceniach(
+      wynagrodzenie,
+      obciazeniaSuma
+    );
 
     return {
       miesiac: m,
@@ -91,7 +96,7 @@ export async function GET() {
       sumaDniowek: Object.values(dniowki).reduce((s, d) => s + (d?.dniowka ?? 0), 0),
       premia,
       obciazeniaSuma,
-      doWyplaty: wynagrodzenie - obciazeniaSuma,
+      doWyplaty: wynagrodzenieDoWyplaty,
       dniPracy,
       kolka,
       liczbaSobot,

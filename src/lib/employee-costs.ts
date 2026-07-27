@@ -11,9 +11,29 @@ export interface ObciazeniaPracownika {
   obciazeniaPracownika: number;
 }
 
+export interface WyplataPoPotraceniach {
+  wynagrodzenieNaliczone: number;
+  potraceniaKierowcy: number;
+  wynagrodzenieDoWyplaty: number;
+}
+
 function kwota(value: number | undefined): number {
   if (!Number.isFinite(value)) return 0;
   return Math.round(Math.max(0, value ?? 0) * 100) / 100;
+}
+
+/** Realna wypłata gotówkowa po potrąceniach (mandat, szkoda, zaliczka). */
+export function obliczWyplatePoPotraceniach(
+  wynagrodzenieNaliczone: number,
+  sumaPotracen: number
+): WyplataPoPotraceniach {
+  const naliczone = kwota(wynagrodzenieNaliczone);
+  const potracenia = Math.min(naliczone, kwota(sumaPotracen));
+  return {
+    wynagrodzenieNaliczone: naliczone,
+    potraceniaKierowcy: potracenia,
+    wynagrodzenieDoWyplaty: kwota(naliczone - potracenia),
+  };
 }
 
 /** Stałe miesięczne zobowiązania firmy za pracownika, naliczane tylko przy wypłacie. */

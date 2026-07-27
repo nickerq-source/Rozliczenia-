@@ -3,7 +3,14 @@
 // Zakładka Zarobek — faktury tygodniowe + import PDF
 
 import { useRef, useState, useMemo } from "react";
-import { DaneMiesiaca, FakturaWeek, InvoiceStatus, MiesiącId, PDFImportData } from "@/lib/types";
+import {
+  DaneMiesiaca,
+  FakturaWeek,
+  InvoiceStatus,
+  MiesiącId,
+  PDFImportData,
+  UstawieniaPodatkowe,
+} from "@/lib/types";
 import { logChange } from "@/lib/audit";
 import { obliczPrzychod, formatZlCaly, formatZl, parseNum } from "@/lib/business-logic";
 import {
@@ -31,6 +38,7 @@ interface Props {
   onUpdate: (updater: (prev: DaneMiesiaca) => DaneMiesiaca) => void;
   token: string;
   userName: string;
+  ustawienia: UstawieniaPodatkowe;
 }
 
 interface ModalState {
@@ -67,7 +75,14 @@ function terminPlatnosci(issueDate: string): string {
   return `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()}`;
 }
 
-export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) {
+export function ZarobekTab({
+  miesiac,
+  dane,
+  onUpdate,
+  token,
+  userName,
+  ustawienia,
+}: Props) {
   const weeks = useMemo(() => getWeeksOfMonth(miesiac), [miesiac]);
 
   // Każdy tydzień ma co najmniej jeden wiersz, ale może mieć wiele
@@ -489,7 +504,7 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
     });
   }
 
-  const sumaFaktur = obliczPrzychod(faktury);
+  const sumaFaktur = obliczPrzychod(faktury, ustawienia);
   const invoiceCountByWeek = new Map<number, number>();
   const invoicePositionById = new Map<string, number>();
   for (const invoice of faktury) {
@@ -565,6 +580,13 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
                 <div className="min-w-0">
                   <p className="text-[15px] font-bold text-white leading-tight">
                     {faktura.label}
+                  </p>
+                  <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-dim">
+                    {faktura.pdfImport
+                      ? "Kwota brutto z PDF"
+                      : `Kwota ${
+                          faktura.amountMode ?? ustawienia.invoiceAmountMode
+                        }`}
                   </p>
                   {(invoiceCountByWeek.get(faktura.weekIndex ?? 0) ?? 0) > 1 && (
                     <p className="mt-1 text-[11px] font-semibold text-amber-brand">
@@ -711,7 +733,7 @@ export function ZarobekTab({ miesiac, dane, onUpdate, token, userName }: Props) 
 
         {/* Suma */}
         <div className="flex items-center justify-between px-4 py-4 rounded-2xl bg-surface border border-amber-brand/40">
-          <span className="text-sm font-bold text-white">Przychód miesięczny</span>
+          <span className="text-sm font-bold text-white">Przychód brutto miesiąca</span>
           <span className="text-2xl font-extrabold text-amber-brand tabular-nums">
             {formatZlCaly(sumaFaktur)}
           </span>

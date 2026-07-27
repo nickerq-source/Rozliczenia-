@@ -33,9 +33,7 @@ import {
 } from "../KosztSzczegoly";
 import {
   obliczWynagrodzenie,
-  obliczKosztPaliwa,
-  obliczInneKoszty,
-  obliczKosztLeasingu,
+  obliczWynikMiesiaca,
   czyKosztLeasingu,
   czyTankowanieWliczane,
   formatZl,
@@ -46,7 +44,6 @@ import {
 import { buildFuelStats, FuelStatsRow } from "@/lib/fuel-stats";
 import { fuelStatusLabel } from "@/lib/fuel-calculations";
 import { DEFAULT_FUEL_VEHICLE } from "@/lib/recalculate-fuel-chain";
-import { obliczObciazeniaPracownika } from "@/lib/employee-costs";
 import { scanReceiptDataUrl } from "@/lib/receipt-scan-client";
 import {
   getDniMiesiaca,
@@ -1881,9 +1878,13 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
     showToast("Dodano ratę leasingu");
   }
 
-  const sumaFuel = obliczKosztPaliwa(dane.tankowanie);
-  const sumaInne = obliczInneKoszty(dane.inneKoszty);
-  const leasing = obliczKosztLeasingu(dane);
+  const wynikKosztow = useMemo(
+    () => obliczWynikMiesiaca(miesiac, dane, ustawienia),
+    [miesiac, dane, ustawienia]
+  );
+  const sumaFuel = wynikKosztow.paliwo;
+  const sumaInne = wynikKosztow.inne;
+  const leasing = wynikKosztow.leasing;
   const kosztyPodatkowe = useMemo(() => {
     const entries: Array<KosztVatInfo & { koszt: number; domyslna: KategoriaKosztu }> = [
       ...(dane.tankowanie ?? []).filter(czyTankowanieWliczane).map((t) => ({
@@ -1952,12 +1953,16 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
       firmaPolowa: firmaDoRozliczenia / 2,
     };
   }, [dane.tankowanie, dane.inneKoszty]);
-  const obciazeniaPracownika = obliczObciazeniaPracownika(ustawienia, wynagrodzenie > 0);
-  const sumaKosztowPracownika = wynagrodzenie + obciazeniaPracownika.obciazeniaPracownika;
-  const sumaKosztow = sumaKosztowPracownika + sumaFuel + sumaInne + leasing;
+  const obciazeniaPracownika = wynikKosztow;
+  const { potraceniaKierowcy, wynagrodzenieDoWyplaty } = wynikKosztow;
+  const sumaKosztowPracownika =
+    wynagrodzenieDoWyplaty + obciazeniaPracownika.obciazeniaPracownika;
+  const sumaKosztow = wynikKosztow.kosztyOperacyjne;
   const kosztyPracownikaRows = [
-    { label: "Wypłata kierowcy", value: wynagrodzenie, icon: <IconUsers size={16} /> },
-    { label: "Obciążenia pracownika", value: obciazeniaPracownika.obciazeniaPracownika, icon: <IconUsers size={16} /> },
+    { label: "Wypłata kierowcy po potrąceniach", value: wynagrodzenieDoWyplaty, icon: <IconUsers size={16} /> },
+    { label: "Podatek dochodowy pracownika", value: obciazeniaPracownika.podatekDochodowyPracownika, icon: <IconUsers size={16} /> },
+    { label: "Składka zdrowotna pracownika", value: obciazeniaPracownika.skladkaZdrowotnaPracownika, icon: <IconUsers size={16} /> },
+    { label: "Pozostałe składki ZUS pracownika", value: obciazeniaPracownika.pozostaleSkladkiZusPracownika, icon: <IconUsers size={16} /> },
   ];
   const kosztyZakupoweRows = [
     { label: "Paliwo", value: sumaFuel, icon: <IconGasStation size={16} /> },
@@ -2025,7 +2030,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
             {formatZl(sumaKosztow)}
           </p>
           <p className="mt-1 text-[11px] text-dim">
-            wypłata + obciążenia pracownika + paliwo + auto/działalność + leasing
+            wypłata po potrąceniach + obciążenia pracownika + paliwo + auto/działalność + leasing
           </p>
         </div>
 
@@ -2070,7 +2075,8 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
             </div>
           ))}
           <p className="text-[10px] leading-relaxed text-dim/70">
-            Te pozycje nie mają VAT. Pomniejszają dochód zgodnie z ustawieniami rozliczenia pracownika.
+            Cała wypłata obniża gotówkę firmy. Do kosztów podatku dochodowego wchodzi tylko część
+            oficjalna wynagrodzenia oraz obciążenia pracownika, zgodnie z ustawieniami.
           </p>
 
           <p className="pt-2 text-[11px] font-extrabold uppercase tracking-wider text-dim">
@@ -2735,9 +2741,21 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
             </div>
           )}
           <div className="flex justify-between font-bold pt-2 border-t border-line">
-            <span className="text-white">Wypłata dla kierowcy</span>
+            <span className="text-white">Wynagrodzenie naliczone</span>
             <span className="tabular-nums text-white text-lg">{formatZlCaly(wynagrodzenie)}</span>
           </div>
+          {potraceniaKierowcy > 0 && (
+            <>
+              <div className="flex justify-between text-sm">
+                <span className="text-dim">− Potrącenia z wypłaty</span>
+                <span className="tabular-nums text-green-300">{formatZl(potraceniaKierowcy)}</span>
+              </div>
+              <div className="flex justify-between border-t border-line pt-2 font-bold">
+                <span className="text-white">Do wypłaty kierowcy</span>
+                <span className="tabular-nums text-lg text-white">{formatZl(wynagrodzenieDoWyplaty)}</span>
+              </div>
+            </>
+          )}
           {obciazeniaPracownika.obciazeniaPracownika > 0 && (
             <div className="mt-3 space-y-1.5 border-t border-line pt-3">
               <p className="text-[10px] font-extrabold uppercase tracking-wider text-amber-brand">

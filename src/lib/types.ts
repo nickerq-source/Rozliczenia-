@@ -435,8 +435,10 @@ export interface WorkspaceState {
 
 // Wynik obliczeń dla miesiąca
 export interface WynikMiesiaca {
-  przychod: number;
-  wynagrodzeniePracownika: number; // realna wypłata kierowcy (dniówki + premia)
+  przychod: number; // przychód brutto z faktur
+  wynagrodzeniePracownika: number; // naliczone wynagrodzenie przed potrąceniami
+  potraceniaKierowcy: number; // mandaty, szkody, zaliczki potrącane z wypłaty
+  wynagrodzenieDoWyplaty: number; // realna wypłata po potrąceniach
   zusPracodawcy: number; // alias zgodności: pozostałe składki ZUS za pracownika
   podatekDochodowyPracownika: number;
   skladkaZdrowotnaPracownika: number;
@@ -445,6 +447,7 @@ export interface WynikMiesiaca {
   paliwo: number;
   inne: number;
   leasing: number;
+  kosztyOperacyjne: number; // wypłata po potrąceniach + obciążenia + zakupy + leasing
   zysk: number;
   liczbaSobotPrzepracowanych: number;
   premiaUwzglednioneod4Soboty: boolean;

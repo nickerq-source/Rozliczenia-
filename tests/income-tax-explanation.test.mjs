@@ -52,3 +52,20 @@ test("odróżnia wcześniej naliczone zaliczki od straty i kwoty wolnej", () => 
   assert.equal(wynik.podatekNarastajaco, 1800);
   assert.equal(wynik.zaliczkiPoprzednie, 2400);
 });
+
+test("brak kwoty wolnej nie jest opisywany jako wykorzystanie kwoty wolnej", () => {
+  const wynik = wyjasnijPodatekMiesiaca({
+    dochod: 0,
+    dochodYtdPrzed: 0,
+    dochodYtd: 0,
+    pitYtd: 0,
+    pitZaplaconyPrzed: 0,
+    pitMiesiac: 0,
+  }, {
+    taxForm: "skala",
+    taxFreeAmount: 0,
+  });
+
+  assert.equal(wynik.powod, "brak_dochodu");
+  assert.equal(wynik.kwotaWolna, 0);
+});

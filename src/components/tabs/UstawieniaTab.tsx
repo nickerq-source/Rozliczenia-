@@ -222,7 +222,9 @@ export function UstawieniaTab({ ustawienia: u, onUpdate, token, userName }: Prop
                 <p className="mt-1 text-[11px] leading-relaxed text-dim">
                   Bez kwoty wolnej i bez kwoty zmniejszającej: 12% dochodu do
                   120 000 zł, a 32% wyłącznie od nadwyżki ponad 120 000 zł.
-                  Kalkulator zmienia stawkę automatycznie.
+                  Kalkulator zmienia stawkę automatycznie i sumuje dane zapisane
+                  w aplikacji od czerwca. Nie uwzględnia dochodu ze stycznia–maja
+                  ani innych części firmy — te wartości potwierdź z księgową.
                 </p>
               </div>
             ) : (

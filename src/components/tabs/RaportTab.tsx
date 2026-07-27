@@ -28,6 +28,7 @@ import {
 import { podatkiRoku, kosztyWgKategorii, getUstawienia } from "@/lib/tax";
 import { cn } from "@/lib/utils";
 import { Rozliczenie5050Panel } from "../Rozliczenie5050Panel";
+import { calculateInvoiceAmounts } from "@/lib/invoice-amounts";
 
 interface Props {
   data: WorkspaceData;
@@ -82,15 +83,15 @@ export function RaportTab({ data }: Props) {
   const kategorie = useMemo(() => kosztyWgKategorii(data), [data]);
   const ustawienia = useMemo(() => getUstawienia(data), [data]);
   const podatkiSuma = useMemo(() => {
-    const aktywne = podatki.filter(
-      (p) => p.sprzedazNetto > 0 || p.kosztyPodatkowe > 0
-    );
+    const aktywne = podatki.filter((p) => p.aktywny);
     return {
       sprzedazNetto: aktywne.reduce((s, p) => s + p.sprzedazNetto, 0),
       vatNalezny: aktywne.reduce((s, p) => s + p.vatNalezny, 0),
       kosztyNetto: aktywne.reduce((s, p) => s + p.kosztyNetto, 0),
       vatNaliczony: aktywne.reduce((s, p) => s + p.vatNaliczony, 0),
-      vatDoZaplaty: aktywne.reduce((s, p) => s + p.vatDoZaplaty, 0),
+      vatDoZaplaty: aktywne.reduce((s, p) => s + Math.max(0, p.vatDoZaplaty), 0),
+      vatNadwyzkaKoncowa:
+        podatki[podatki.length - 1]?.vatNadwyzkaDoPrzeniesienia ?? 0,
       kosztyPodatkowe: aktywne.reduce((s, p) => s + p.kosztyPodatkowe, 0),
       pit: aktywne.reduce((s, p) => s + p.pitMiesiac, 0),
       zdrowotna: aktywne.reduce((s, p) => s + p.zdrowotna, 0),
@@ -108,10 +109,11 @@ export function RaportTab({ data }: Props) {
 
   const raport = useMemo(() => {
     const u = getUstawienia(data);
-    let przychod = 0, wynagrodzenie = 0, paliwo = 0, inne = 0, leasing = 0;
+    let przychod = 0, wynagrodzenie = 0, wynagrodzenieNaliczane = 0;
+    let potraceniaKierowcy = 0, paliwo = 0, inne = 0, leasing = 0;
     let podatekPrac = 0, zdrowotnaPrac = 0, zusPrac = 0, obciazeniaPrac = 0;
     let oficjalnyBrutto = 0, nieoficjalne = 0;
-    let aktywne = 0, kmTotal = 0, kolkaTotal = 0;
+    let aktywne = 0, kmTotal = 0, kolkaTotal = 0, zysk = 0;
     const miesieczne: {
       m: MiesiącId;
       przychod: number;
@@ -130,12 +132,15 @@ export function RaportTab({ data }: Props) {
         wynik.przychod > 0 ||
         wynik.wynagrodzeniePracownika > 0 ||
         wynik.paliwo > 0 ||
-        wynik.inne > 0;
+        wynik.inne > 0 ||
+        wynik.leasing > 0;
 
       if (aktywny) {
         aktywne++;
         przychod += wynik.przychod;
-        wynagrodzenie += wynik.wynagrodzeniePracownika;
+        wynagrodzenie += wynik.wynagrodzenieDoWyplaty;
+        wynagrodzenieNaliczane += wynik.wynagrodzeniePracownika;
+        potraceniaKierowcy += wynik.potraceniaKierowcy;
         podatekPrac += wynik.podatekDochodowyPracownika;
         zdrowotnaPrac += wynik.skladkaZdrowotnaPracownika;
         zusPrac += wynik.pozostaleSkladkiZusPracownika;
@@ -149,15 +154,16 @@ export function RaportTab({ data }: Props) {
         paliwo += wynik.paliwo;
         inne += wynik.inne;
         leasing += wynik.leasing;
+        zysk += wynik.zysk;
       }
 
       miesieczne.push({
         m,
         przychod: wynik.przychod,
-        koszty: wynik.wynagrodzeniePracownika + wynik.obciazeniaPracownika + wynik.paliwo + wynik.inne + wynik.leasing,
+        koszty: aktywny ? wynik.kosztyOperacyjne : 0,
         paliwo: wynik.paliwo,
-        wynagrodzenie: wynik.wynagrodzeniePracownika,
-        zysk: wynik.zysk,
+        wynagrodzenie: wynik.wynagrodzenieDoWyplaty,
+        zysk: aktywny ? wynik.zysk : 0,
       });
 
       // Ranking tygodni + suma km/kółek z importów PDF
@@ -170,6 +176,7 @@ export function RaportTab({ data }: Props) {
           kolkaTotal += imp.ileKolek;
         }
         if ((saved.kwota ?? 0) > 0) {
+          const invoiceGross = calculateInvoiceAmounts(saved, u).brutto;
           ranking.push({
             id: saved.id,
             label: saved.customRange
@@ -177,7 +184,7 @@ export function RaportTab({ data }: Props) {
               : saved.label,
             monthName: POLSKIE_MIESIACE[m],
             weekNumber: weekIndex + 1,
-            kwota: saved.kwota,
+            kwota: invoiceGross,
             pdf: imp,
           });
         }
@@ -186,17 +193,16 @@ export function RaportTab({ data }: Props) {
 
     // Rangi liczone zawsze od najlepszej (1 = najwyższa kwota)
     const sortedDesc = [...ranking].sort((a, b) => b.kwota - a.kwota);
-    const zysk = przychod - wynagrodzenie - obciazeniaPrac - paliwo - inne - leasing;
-
     return {
-      przychod, wynagrodzenie, podatekPrac, zdrowotnaPrac, zusPrac, obciazeniaPrac, oficjalnyBrutto, nieoficjalne,
+      przychod, wynagrodzenie, wynagrodzenieNaliczane, potraceniaKierowcy,
+      podatekPrac, zdrowotnaPrac, zusPrac, obciazeniaPrac, oficjalnyBrutto, nieoficjalne,
       oficjalneOn: u.pracownikOficjalnyEnabled,
       paliwo, inne, leasing, zysk,
       aktywne, kmTotal, kolkaTotal, miesieczne, sortedDesc,
     };
   }, [data]);
 
-  const zyskDodatni = raport.zysk >= 0;
+  const zyskDodatni = podatkiSuma.cashflow >= 0;
   const wyswietlane = najlepszePierwsze
     ? raport.sortedDesc
     : [...raport.sortedDesc].reverse();
@@ -237,16 +243,23 @@ export function RaportTab({ data }: Props) {
           <h2 className="text-lg font-bold text-white">Rok 2026 — Podsumowanie</h2>
         </div>
 
-        <Row label="Przychód łączny (faktury)" value={raport.przychod} />
+        <Row label="Przychód brutto łącznie (faktury)" value={raport.przychod} />
 
         <p className="mb-1 mt-4 text-xs font-bold uppercase tracking-wider text-amber-brand">
           Koszty pracownika — bez VAT
         </p>
-        <Row label="Wynagrodzenie kierowcy" value={raport.wynagrodzenie} />
+        <Row
+          label="Wypłata kierowcy po potrąceniach"
+          value={raport.wynagrodzenie}
+          note={
+            raport.potraceniaKierowcy > 0
+              ? `naliczone ${formatZl(raport.wynagrodzenieNaliczane)}, potrącenia ${formatZl(raport.potraceniaKierowcy)}`
+              : undefined
+          }
+        />
         <Row label="Podatek dochodowy pracownika" value={raport.podatekPrac} />
         <Row label="Składka zdrowotna pracownika" value={raport.zdrowotnaPrac} />
         <Row label="Pozostałe składki ZUS pracownika" value={raport.zusPrac} />
-        <Row label="Razem obciążenia pracownika" value={raport.obciazeniaPrac} />
 
         <p className="mb-1 mt-4 text-xs font-bold uppercase tracking-wider text-dim">
           Koszty zakupowe — VAT według dokumentów
@@ -259,6 +272,7 @@ export function RaportTab({ data }: Props) {
           note={raport.aktywne > 0 ? `(${raport.aktywne} mies.)` : undefined}
         />
 
+        <Row label="Wynik gotówkowy przed podatkami (rok)" value={raport.zysk} />
         <div
           className="flex items-center gap-3 rounded-2xl px-4 py-4 mt-4"
           style={{ background: zyskDodatni ? "var(--green-bg)" : "var(--red-bg)" }}
@@ -267,7 +281,7 @@ export function RaportTab({ data }: Props) {
             <IconMoneybag size={24} />
           </span>
           <span className="text-sm font-bold text-white uppercase tracking-wide flex-1">
-            Zysk na czysto (rok)
+            Realnie zostaje po wszystkich kosztach i podatkach
           </span>
           <span
             className={cn(
@@ -275,7 +289,7 @@ export function RaportTab({ data }: Props) {
               zyskDodatni ? "text-green-300" : "text-red-300"
             )}
           >
-            {formatZl(raport.zysk)}
+            {formatZl(podatkiSuma.cashflow)}
           </span>
         </div>
       </Card>
@@ -325,11 +339,11 @@ export function RaportTab({ data }: Props) {
               <span className="tabular-nums text-ink">{formatZl(sredniZysk)}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-dim">Paliwo jako % przychodu</span>
+              <span className="text-dim">Paliwo jako % przychodu brutto</span>
               <span className="tabular-nums text-amber-brand">{paliwoProc.toFixed(1).replace(".", ",")}%</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-dim">Wynagrodzenie jako % przychodu</span>
+              <span className="text-dim">Wypłata jako % przychodu brutto</span>
               <span className="tabular-nums text-amber-brand">{wynagrodzenieProc.toFixed(1).replace(".", ",")}%</span>
             </div>
           </div>
@@ -354,9 +368,11 @@ export function RaportTab({ data }: Props) {
         <Row label="VAT należny" value={podatkiSuma.vatNalezny} />
         <Row label="Koszty netto" value={podatkiSuma.kosztyNetto} />
         <Row label="VAT naliczony (do odliczenia)" value={podatkiSuma.vatNaliczony} />
+        <Row label="VAT do zapłaty w okresie" value={podatkiSuma.vatDoZaplaty} />
         <Row
-          label={podatkiSuma.vatDoZaplaty >= 0 ? "VAT do zapłaty" : "Nadwyżka VAT"}
-          value={Math.abs(podatkiSuma.vatDoZaplaty)}
+          label="Nadwyżka VAT do przeniesienia na koniec okresu"
+          value={podatkiSuma.vatNadwyzkaKoncowa}
+          valueClass="text-green-300"
         />
 
         {(raport.oficjalneOn || raport.obciazeniaPrac > 0) && (
@@ -376,23 +392,23 @@ export function RaportTab({ data }: Props) {
         <Row label="Przychód netto (sprzedaż)" value={podatkiSuma.sprzedazNetto} />
         <Row label="Koszty uznane do podatku dochodowego" value={podatkiSuma.kosztyPodatkowe} />
         <Row
-          label={podatkiSuma.dochodYtd >= 0 ? "Łączny wynik podatkowy od początku roku" : "Niewykorzystana strata od początku roku"}
+          label={podatkiSuma.dochodYtd >= 0 ? "Łączny wynik podatkowy w okresie czerwiec–grudzień" : "Niewykorzystana strata z okresu czerwiec–grudzień"}
           value={Math.abs(podatkiSuma.dochodYtd)}
         />
-        <Row label="Podatek dochodowy wyliczony od początku roku" value={podatkiSuma.pitYtd} />
+        <Row label="Podatek dochodowy wyliczony za okres czerwiec–grudzień" value={podatkiSuma.pitYtd} />
         <Row label="Podatek dochodowy do zapłaty łącznie" value={podatkiSuma.pit} />
 
         <p className="text-xs font-bold uppercase tracking-wider text-amber-brand mb-1 mt-4">Zdrowotna właściciela</p>
         <Row label="Suma składek zdrowotnych właściciela" value={podatkiSuma.zdrowotna} />
 
         <p className="text-xs font-bold uppercase tracking-wider text-amber-brand mb-1 mt-4">Ile zostaje</p>
-        <Row label="Zysk przed podatkami" value={raport.zysk} />
+        <Row label="Wynik gotówkowy przed podatkami" value={raport.zysk} />
         <Row label="Po dochodowym i zdrowotnej — przed VAT" value={podatkiSuma.zyskPo} />
         <Row label="REALNIE ZOSTAJE PO WSZYSTKICH KOSZTACH I PODATKACH" value={podatkiSuma.cashflow} valueClass={podatkiSuma.cashflow >= 0 ? "text-green-300" : "text-red-300"} />
 
         {/* Łączne podatki i składki za okres (VAT do zapłaty nigdy ujemny) */}
         {(() => {
-          const vatOkres = podatkiSuma.aktywneMiesiace.reduce((s, p) => s + Math.max(0, p.vatDoZaplaty), 0);
+          const vatOkres = podatkiSuma.vatDoZaplaty;
           const total = Math.round((vatOkres + podatkiSuma.pit + podatkiSuma.zdrowotna + podatkiSuma.obciazeniaPracownika) * 100) / 100;
           return (
             <div className="mt-4 rounded-2xl border border-amber-brand/40 bg-amber-brand/10 p-3">
@@ -494,7 +510,7 @@ export function RaportTab({ data }: Props) {
         <div className="flex items-center gap-2 mb-3">
           <IconTrophy size={18} className="text-amber-brand" />
           <h3 className="text-sm font-bold uppercase tracking-wider text-dim flex-1">
-            Ranking tygodni wg przychodu
+            Ranking tygodni wg przychodu brutto
           </h3>
           {raport.sortedDesc.length > 1 && (
             <button
