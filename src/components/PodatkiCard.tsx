@@ -279,7 +279,24 @@ export function PodatkiCard({
         <div className="border-b border-line p-3">
           <p className="mb-1 text-xs font-bold text-white">2. Policz dochód podatkowy</p>
           <Wiersz label="Przychód netto" value={p.przychodNetto} />
-          <Wiersz label="− Koszty uznane do podatku dochodowego" value={p.kosztyPodatkowe} term="koszty_pit" />
+          <Wiersz
+            label="− Koszty pracownika uznane do podatku"
+            value={p.wynagrodzeniePodatkowe}
+          />
+          <Wiersz
+            label="− Koszty zakupowe uznane do podatku"
+            value={kosztyZakupowePodatkowe}
+          />
+          <Wiersz
+            label="= Razem koszty uznane do podatku dochodowego"
+            value={p.kosztyPodatkowe}
+            term="koszty_pit"
+            bold
+          />
+          <p className="mt-1 text-[10px] leading-relaxed text-dim/70">
+            Paliwo, inne koszty i leasing w podsumowaniu końcowym są pokazane brutto.
+            Tutaj zakupy wchodzą jako netto i ewentualny nieodliczony VAT, dlatego kwoty są inne.
+          </p>
           {strata ? (
             <Wiersz
               label="Strata podatkowa"

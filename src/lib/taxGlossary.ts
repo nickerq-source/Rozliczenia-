@@ -53,7 +53,7 @@ export const TAX_GLOSSARY: Record<TaxTermId, TaxTerm> = {
     nazwa: "Koszty uznane do podatku dochodowego",
     opis: "Suma kosztów pracownika bez VAT oraz podatkowej części zakupów. Zakupy trafiają tu jako netto i ewentualny nieodliczony VAT, zgodnie z dokumentami i ustawieniami.",
     wzor: "koszty pracownika + netto zakupów + nieodliczony VAT",
-    przyklad: "Paliwo 926,49 + inne 159,25 + leasing 2195,12 + pensja 1255 = 4535,86 zł.",
+    przyklad: "Koszty pracownika 1 500 zł + podatkowa część zakupów 3 000 zł = 4 500 zł kosztów uznanych do podatku dochodowego.",
   },
   dochod_pit: {
     nazwa: "Dochód podatkowy",

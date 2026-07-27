@@ -59,7 +59,9 @@ export function InfoHint({ term, className }: { term: TaxTermId; className?: str
             )}
             {t.przyklad && (
               <div className="mt-2 rounded-xl border border-line bg-surface2 px-3 py-2">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-dim">Przykład</p>
+                <p className="text-[10px] font-bold uppercase tracking-wider text-dim">
+                  Przykład orientacyjny — nie Twoje dane
+                </p>
                 <p className="mt-0.5 text-sm text-ink">{t.przyklad}</p>
               </div>
             )}
