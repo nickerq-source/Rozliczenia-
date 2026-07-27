@@ -505,19 +505,29 @@ export function PodsumowanieTab({
               Kasa na koniec miesiąca
             </h3>
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="rounded-xl bg-surface2 border border-line p-3">
-              <p className="text-[11px] text-dim">Na czysto po VAT i podatkach</p>
-              <p className={cn("tabular-nums text-lg font-extrabold", podatki.cashflowPoPodatkach >= 0 ? "text-green-300" : "text-red-300")}>
-                {formatZl(podatki.cashflowPoPodatkach)}
-              </p>
-            </div>
-            <div className="rounded-xl bg-surface2 border border-line p-3">
-              <p className="text-[11px] text-dim">Bezpiecznie do wypłaty</p>
-              <p className={cn("tabular-nums text-lg font-extrabold", podatki.cashflowPoPodatkach > 0 ? "text-green-300" : "text-dim")}>
-                {formatZl(Math.max(0, podatki.cashflowPoPodatkach))}
-              </p>
-            </div>
+          <div
+            className={cn(
+              "rounded-xl border p-3",
+              podatki.cashflowPoPodatkach >= 0
+                ? "border-green-500/35 bg-green-soft"
+                : "border-red-500/35 bg-red-soft"
+            )}
+          >
+            <p className="text-xs font-extrabold uppercase tracking-wide text-white">
+              Realnie zostaje po wszystkich kosztach i podatkach
+            </p>
+            <p className="mt-1 text-[10px] leading-relaxed text-dim">
+              Po odjęciu całej wypłaty kierowcy, paliwa, innych kosztów, leasingu,
+              VAT, podatku dochodowego oraz składek właściciela i pracownika.
+            </p>
+            <p
+              className={cn(
+                "mt-2 tabular-nums text-[28px] font-extrabold leading-none",
+                podatki.cashflowPoPodatkach >= 0 ? "text-green-300" : "text-red-300"
+              )}
+            >
+              {formatZl(podatki.cashflowPoPodatkach)}
+            </p>
           </div>
           <div className="mt-3 space-y-1 text-sm">
             <div className="flex justify-between">
