@@ -11,12 +11,18 @@ import { MiesiącId, WynikMiesiaca } from "@/lib/types";
 import { Card } from "./ui/Card";
 import { IconMoneybag } from "./ui/icons";
 import { cn } from "@/lib/utils";
-import { InfoHint, JakCzytacPodatki } from "./InfoHint";
+import {
+  InfoHint,
+  JakCzytacPodatki,
+  TaxExampleData,
+  TaxExamplesProvider,
+} from "./InfoHint";
 import { TaxTermId } from "@/lib/taxGlossary";
 import {
   WyjasnieniePodatkuMiesiaca,
   wyjasnijPodatekMiesiaca,
 } from "@/lib/income-tax-explanation";
+import { POLSKIE_MIESIACE } from "@/lib/dates";
 
 const MIESIACE_DOPELNIACZ: Record<MiesiącId, string> = {
   6: "czerwca",
@@ -238,9 +244,76 @@ export function PodatkiCard({
   const oficjalnyBrutto = Math.max(0, p.wynagrodzeniePodatkowe - p.obciazeniaPracownika);
   const nieoficjalne = Math.max(0, wynik.wynagrodzeniePracownika - oficjalnyBrutto);
   const wyjasnieniePodatku = wyjasnijPodatekMiesiaca(p, { taxForm, taxFreeAmount });
+  const miesiacLabel = `${POLSKIE_MIESIACE[p.miesiac]} 2026`;
+  const aktualneDaneLabel = `Twoje dane — ${miesiacLabel}`;
+  const taxExamples: Partial<Record<TaxTermId, TaxExampleData>> = {
+    vat_nalezny: {
+      label: aktualneDaneLabel,
+      text: `VAT należny ze sprzedaży w tym miesiącu: ${formatZl(p.vatNalezny)}.`,
+    },
+    vat_naliczony: {
+      label: aktualneDaneLabel,
+      text: `VAT z zakupów możliwy do odliczenia w tym miesiącu: ${formatZl(p.vatNaliczony)}.`,
+    },
+    vat_do_zaplaty: {
+      label: aktualneDaneLabel,
+      text: `${formatZl(p.vatNalezny)} VAT należnego − ${formatZl(p.vatNaliczony)} VAT do odliczenia = ${formatZl(vatDoZaplatyDodatni)} VAT do zapłaty.`,
+    },
+    nadwyzka_vat: {
+      label: aktualneDaneLabel,
+      text: `${formatZl(p.vatNaliczony)} VAT do odliczenia − ${formatZl(p.vatNalezny)} VAT należnego = ${formatZl(nadwyzkaVat)} nadwyżki VAT.`,
+    },
+    koszty_pit: {
+      label: aktualneDaneLabel,
+      text: `Paliwo brutto ${formatZl(wynik.paliwo)}, inne koszty brutto ${formatZl(wynik.inne)}, leasing brutto ${formatZl(wynik.leasing)}. Po rozliczeniu VAT podatkowa część zakupów wynosi ${formatZl(kosztyZakupowePodatkowe)}. Razem z kosztami pracownika ${formatZl(p.wynagrodzeniePodatkowe)} daje ${formatZl(p.kosztyPodatkowe)} kosztów uznanych do podatku dochodowego.`,
+    },
+    dochod_pit: {
+      label: aktualneDaneLabel,
+      text: `${formatZl(p.przychodNetto)} przychodu netto − ${formatZl(p.kosztyPodatkowe)} kosztów podatkowych = ${formatZl(Math.max(0, p.dochod))} dochodu podatkowego.`,
+    },
+    koszty_ponad_przychod: {
+      label: aktualneDaneLabel,
+      text: `${formatZl(p.kosztyPodatkowe)} kosztów podatkowych − ${formatZl(p.przychodNetto)} przychodu netto = ${formatZl(Math.max(0, -p.dochod))} straty podatkowej.`,
+    },
+    wynik_ytd: {
+      label: aktualneDaneLabel,
+      text: p.dochodYtd < 0
+        ? `Od początku rozliczanego okresu pozostaje ${formatZl(-p.dochodYtd)} straty podatkowej.`
+        : `Łączny dochód podatkowy od początku rozliczanego okresu wynosi ${formatZl(p.dochodYtd)}.`,
+    },
+    pit_ytd: {
+      label: aktualneDaneLabel,
+      text: `Podatek dochodowy wyliczony narastająco: ${formatZl(p.pitYtd)}.`,
+    },
+    pit_miesiac: {
+      label: aktualneDaneLabel,
+      text: `${formatZl(p.pitYtd)} podatku narastająco − ${formatZl(p.pitZaplaconyPrzed)} zaliczek naliczonych wcześniej = ${formatZl(p.pitMiesiac)} do zapłaty za ten miesiąc.`,
+    },
+    zdrowotna: {
+      label: aktualneDaneLabel,
+      text: `Dochód podatkowy miesiąca: ${formatZl(p.dochod)}. Składka zdrowotna właściciela: ${formatZl(p.zdrowotna)}.`,
+    },
+    lacznie: {
+      label: aktualneDaneLabel,
+      text: `${formatZl(vatDoZaplatyDodatni)} VAT + ${formatZl(p.pitMiesiac)} podatku dochodowego + ${formatZl(p.zdrowotna)} zdrowotnej właściciela + ${formatZl(p.obciazeniaPracownika)} zobowiązań pracownika = ${formatZl(laczniePowinnoWyjsc)}.`,
+    },
+    wynik_po_podatkach: {
+      label: aktualneDaneLabel,
+      text: `${formatZl(p.zyskPrzedPodatkami)} zysku przed podatkami − ${formatZl(p.pitMiesiac)} podatku dochodowego − ${formatZl(p.zdrowotna)} zdrowotnej = ${formatZl(p.zyskPoPodatkach)} przed rozliczeniem VAT.`,
+    },
+    wynik_na_czysto: {
+      label: aktualneDaneLabel,
+      text: `${formatZl(sprzedazBrutto)} przychodu brutto − ${formatZl(wynik.wynagrodzeniePracownika)} wypłaty kierowcy − ${formatZl(wynik.paliwo)} paliwa − ${formatZl(wynik.inne)} innych kosztów − ${formatZl(wynik.leasing)} leasingu − ${formatZl(laczniePowinnoWyjsc)} podatków i składek = ${formatZl(p.cashflowPoPodatkach)} realnie zostaje.`,
+    },
+  };
+  const taxSummary: TaxExampleData = {
+    label: `Podsumowanie Twoich danych — ${miesiacLabel}`,
+    text: `Przychód netto ${formatZl(p.przychodNetto)}, koszty uznane podatkowo ${formatZl(p.kosztyPodatkowe)}, dochód podatkowy ${formatZl(p.dochod)}, VAT do zapłaty ${formatZl(vatDoZaplatyDodatni)}, podatek dochodowy za miesiąc ${formatZl(p.pitMiesiac)}, zdrowotna właściciela ${formatZl(p.zdrowotna)}.`,
+  };
 
   return (
-    <Card>
+    <TaxExamplesProvider examples={taxExamples} summary={taxSummary}>
+      <Card>
       <div className="mb-1 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <IconMoneybag size={18} className="text-amber-brand" />
@@ -512,6 +585,7 @@ export function PodatkiCard({
           </div>
         </div>
       )}
-    </Card>
+      </Card>
+    </TaxExamplesProvider>
   );
 }

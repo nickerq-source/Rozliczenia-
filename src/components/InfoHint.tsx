@@ -3,13 +3,40 @@
 // Znak „?" przy trudnym pojęciu podatkowym. Na telefonie i desktopie otwiera
 // czytelny modal z wyjaśnieniem ze słownika (nazwa, opis, wzór, przykład).
 
-import { useState } from "react";
+import { createContext, ReactNode, useContext, useState } from "react";
 import { TAX_GLOSSARY, TaxTermId } from "@/lib/taxGlossary";
 import { cn } from "@/lib/utils";
 
+export interface TaxExampleData {
+  label: string;
+  text: string;
+}
+
+interface TaxExamplesContextValue {
+  examples: Partial<Record<TaxTermId, TaxExampleData>>;
+  summary?: TaxExampleData;
+}
+
+const TaxExamplesContext = createContext<TaxExamplesContextValue>({ examples: {} });
+
+export function TaxExamplesProvider({
+  examples,
+  summary,
+  children,
+}: TaxExamplesContextValue & { children: ReactNode }) {
+  return (
+    <TaxExamplesContext.Provider value={{ examples, summary }}>
+      {children}
+    </TaxExamplesContext.Provider>
+  );
+}
+
 export function InfoHint({ term, className }: { term: TaxTermId; className?: string }) {
   const [open, setOpen] = useState(false);
+  const { examples } = useContext(TaxExamplesContext);
   const t = TAX_GLOSSARY[term];
+  const aktualnyPrzyklad = examples[term];
+  const przyklad = aktualnyPrzyklad?.text ?? t.przyklad;
 
   return (
     <>
@@ -57,12 +84,12 @@ export function InfoHint({ term, className }: { term: TaxTermId; className?: str
                 <p className="mt-0.5 text-sm text-amber-brand">{t.wzor}</p>
               </div>
             )}
-            {t.przyklad && (
+            {przyklad && (
               <div className="mt-2 rounded-xl border border-line bg-surface2 px-3 py-2">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-dim">
-                  Przykład orientacyjny — nie Twoje dane
+                  {aktualnyPrzyklad?.label ?? "Przykład orientacyjny — nie Twoje dane"}
                 </p>
-                <p className="mt-0.5 text-sm text-ink">{t.przyklad}</p>
+                <p className="mt-0.5 text-sm text-ink">{przyklad}</p>
               </div>
             )}
             <p className="mt-3 text-[11px] text-dim/70">
@@ -85,6 +112,7 @@ const GRUPY: { tytul: string; terms: TaxTermId[] }[] = [
 
 export function JakCzytacPodatki() {
   const [open, setOpen] = useState(false);
+  const { examples, summary } = useContext(TaxExamplesContext);
   return (
     <>
       <button
@@ -122,11 +150,22 @@ export function JakCzytacPodatki() {
                 <div className="space-y-2">
                   {g.terms.map((id) => {
                     const t = TAX_GLOSSARY[id];
+                    const aktualnyPrzyklad = examples[id];
                     return (
                       <div key={id} className="rounded-xl border border-line bg-surface2 p-2.5">
                         <p className="text-sm font-bold text-ink">{t.nazwa}</p>
                         <p className="mt-0.5 text-xs text-dim">{t.opis}</p>
                         {t.wzor && <p className="mt-1 text-[11px] text-amber-brand">Wzór: {t.wzor}</p>}
+                        {aktualnyPrzyklad && (
+                          <div className="mt-2 border-t border-line pt-2">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-green-300">
+                              {aktualnyPrzyklad.label}
+                            </p>
+                            <p className="mt-0.5 text-[11px] leading-relaxed text-ink">
+                              {aktualnyPrzyklad.text}
+                            </p>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -134,13 +173,19 @@ export function JakCzytacPodatki() {
               </div>
             ))}
             <div className="rounded-xl border border-amber-brand/35 bg-amber-brand/10 p-3">
-              <p className="text-xs font-bold text-amber-brand">Prosty przykład</p>
+              <p className="text-xs font-bold text-amber-brand">
+                {summary?.label ?? "Prosty przykład orientacyjny"}
+              </p>
               <p className="mt-1 text-xs leading-relaxed text-ink">
-                Firma wystawiła fakturę na 10 000 zł netto + 2 300 zł VAT. Koszty: 6 000 zł netto + VAT.
-                <br />Dochód podatkowy: 10 000 − 6 000 = 4 000 zł.
-                <br />VAT do zapłaty: 2 300 − odliczalny VAT z kosztów.
-                <br />Podatek dochodowy i zdrowotna są liczone od dochodu, a VAT rozlicza się osobno.
-                <br />Podatki i składki razem: VAT + podatek firmy + zdrowotna właściciela + zobowiązania za pracownika.
+                {summary?.text ?? (
+                  <>
+                    Firma wystawiła fakturę na 10 000 zł netto + 2 300 zł VAT. Koszty: 6 000 zł netto + VAT.
+                    <br />Dochód podatkowy: 10 000 − 6 000 = 4 000 zł.
+                    <br />VAT do zapłaty: 2 300 − odliczalny VAT z kosztów.
+                    <br />Podatek dochodowy i zdrowotna są liczone od dochodu, a VAT rozlicza się osobno.
+                    <br />Podatki i składki razem: VAT + podatek firmy + zdrowotna właściciela + zobowiązania za pracownika.
+                  </>
+                )}
               </p>
             </div>
           </div>
