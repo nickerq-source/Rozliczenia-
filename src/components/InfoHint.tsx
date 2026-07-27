@@ -106,7 +106,7 @@ export function InfoHint({ term, className }: { term: TaxTermId; className?: str
 const GRUPY: { tytul: string; terms: TaxTermId[] }[] = [
   { tytul: "VAT", terms: ["vat_nalezny", "vat_naliczony", "vat_do_zaplaty", "nadwyzka_vat"] },
   { tytul: "Podatek dochodowy", terms: ["koszty_pit", "dochod_pit", "koszty_ponad_przychod", "wynik_ytd", "pit_ytd", "pit_miesiac"] },
-  { tytul: "Zdrowotna właściciela", terms: ["zdrowotna"] },
+  { tytul: "Zdrowotna właściciela — szacunek", terms: ["zdrowotna"] },
   { tytul: "Wynik i łącznie", terms: ["wynik_po_podatkach", "wynik_na_czysto", "lacznie"] },
 ];
 
@@ -183,7 +183,7 @@ export function JakCzytacPodatki() {
                     <br />Dochód podatkowy: 10 000 − 6 000 = 4 000 zł.
                     <br />VAT do zapłaty: 2 300 − odliczalny VAT z kosztów.
                     <br />Podatek dochodowy i zdrowotna są liczone od dochodu, a VAT rozlicza się osobno.
-                    <br />Podatki i składki razem: VAT + podatek firmy + zdrowotna właściciela + zobowiązania za pracownika.
+                    <br />Podatki i składki razem: VAT + podatek firmy + rezerwa na zdrowotną właściciela + zobowiązania za pracownika.
                   </>
                 )}
               </p>

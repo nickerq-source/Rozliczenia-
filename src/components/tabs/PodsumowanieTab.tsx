@@ -307,7 +307,7 @@ export function PodsumowanieTab({
       `${csvCell("VAT do zapłaty")};${csvCell(Math.max(0, podatki?.vatDoZaplaty ?? 0))}`,
       `${csvCell("Nadwyżka VAT do przeniesienia")};${csvCell(podatki?.vatNadwyzkaDoPrzeniesienia ?? 0)}`,
       `${csvCell("Podatek dochodowy")};${csvCell(podatki?.pitMiesiac ?? 0)}`,
-      `${csvCell("Zdrowotna właściciela")};${csvCell(podatki?.zdrowotna ?? 0)}`,
+      `${csvCell("Rezerwa na zdrowotną właściciela")};${csvCell(podatki?.zdrowotna ?? 0)}`,
       `${csvCell("Realnie zostaje po wszystkich kosztach i podatkach")};${csvCell(podatki?.cashflowPoPodatkach ?? wynik.zysk)}`,
       `${csvCell("Podatek dochodowy pracownika")};${csvCell(podatki?.podatekDochodowyPracownika ?? 0)}`,
       `${csvCell("Zdrowotna pracownika")};${csvCell(podatki?.skladkaZdrowotnaPracownika ?? 0)}`,
@@ -341,7 +341,7 @@ export function PodsumowanieTab({
         <tr><td>VAT do zapłaty</td><td>${Math.max(0, podatki?.vatDoZaplaty ?? 0)}</td></tr>
         <tr><td>Nadwyżka VAT do przeniesienia</td><td>${podatki?.vatNadwyzkaDoPrzeniesienia ?? 0}</td></tr>
         <tr><td>Podatek dochodowy</td><td>${podatki?.pitMiesiac ?? 0}</td></tr>
-        <tr><td>Zdrowotna właściciela</td><td>${podatki?.zdrowotna ?? 0}</td></tr>
+        <tr><td>Rezerwa na zdrowotną właściciela</td><td>${podatki?.zdrowotna ?? 0}</td></tr>
         <tr><td>Realnie zostaje po wszystkich kosztach i podatkach</td><td>${podatki?.cashflowPoPodatkach ?? wynik.zysk}</td></tr>
         <tr><td>Podatek dochodowy pracownika</td><td>${podatki?.podatekDochodowyPracownika ?? 0}</td></tr>
         <tr><td>Zdrowotna pracownika</td><td>${podatki?.skladkaZdrowotnaPracownika ?? 0}</td></tr>
@@ -385,7 +385,7 @@ export function PodsumowanieTab({
         <div class="box">VAT do zapłaty: <b>${formatZl(Math.max(0, podatki?.vatDoZaplaty ?? 0))}</b></div>
         <div class="box">Nadwyżka VAT do przeniesienia: <b>${formatZl(podatki?.vatNadwyzkaDoPrzeniesienia ?? 0)}</b></div>
         <div class="box">Podatek dochodowy: <b>${formatZl(podatki?.pitMiesiac ?? 0)}</b></div>
-        <div class="box">Zdrowotna właściciela: <b>${formatZl(podatki?.zdrowotna ?? 0)}</b></div>
+        <div class="box">Rezerwa na zdrowotną właściciela: <b>${formatZl(podatki?.zdrowotna ?? 0)}</b></div>
         <div class="box">Realnie zostaje po wszystkich kosztach i podatkach: <b>${formatZl(podatki?.cashflowPoPodatkach ?? wynik.zysk)}</b></div>
         <div class="box">Podatek pracownika: <b>${formatZl(podatki?.podatekDochodowyPracownika ?? 0)}</b></div>
         <div class="box">Zdrowotna pracownika: <b>${formatZl(podatki?.skladkaZdrowotnaPracownika ?? 0)}</b></div>

@@ -398,8 +398,8 @@ export function RaportTab({ data }: Props) {
         <Row label="Podatek dochodowy wyliczony za okres czerwiec–grudzień" value={podatkiSuma.pitYtd} />
         <Row label="Podatek dochodowy do zapłaty łącznie" value={podatkiSuma.pit} />
 
-        <p className="text-xs font-bold uppercase tracking-wider text-amber-brand mb-1 mt-4">Zdrowotna właściciela</p>
-        <Row label="Suma składek zdrowotnych właściciela" value={podatkiSuma.zdrowotna} />
+        <p className="text-xs font-bold uppercase tracking-wider text-amber-brand mb-1 mt-4">Zdrowotna właściciela — rezerwa</p>
+        <Row label="Suma rezerw na zdrowotną właściciela" value={podatkiSuma.zdrowotna} />
 
         <p className="text-xs font-bold uppercase tracking-wider text-amber-brand mb-1 mt-4">Ile zostaje</p>
         <Row label="Wynik gotówkowy przed podatkami" value={raport.zysk} />

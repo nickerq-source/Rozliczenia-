@@ -292,11 +292,11 @@ export function PodatkiCard({
     },
     zdrowotna: {
       label: aktualneDaneLabel,
-      text: `Dochód podatkowy miesiąca: ${formatZl(p.dochod)}. Składka zdrowotna właściciela: ${formatZl(p.zdrowotna)}.`,
+      text: `Bieżący dochód podatkowy modułu: ${formatZl(p.dochod)}. Rezerwa na zdrowotną właściciela: ${formatZl(p.zdrowotna)}. Faktyczną kwotę ZUS DRA ustala się z danych całej działalności za poprzedni miesiąc.`,
     },
     lacznie: {
       label: aktualneDaneLabel,
-      text: `${formatZl(vatDoZaplatyDodatni)} VAT + ${formatZl(p.pitMiesiac)} podatku dochodowego + ${formatZl(p.zdrowotna)} zdrowotnej właściciela + ${formatZl(p.obciazeniaPracownika)} zobowiązań pracownika = ${formatZl(laczniePowinnoWyjsc)}.`,
+      text: `${formatZl(vatDoZaplatyDodatni)} VAT + ${formatZl(p.pitMiesiac)} podatku dochodowego + ${formatZl(p.zdrowotna)} rezerwy na zdrowotną właściciela + ${formatZl(p.obciazeniaPracownika)} zobowiązań pracownika = ${formatZl(laczniePowinnoWyjsc)}.`,
     },
     wynik_po_podatkach: {
       label: aktualneDaneLabel,
@@ -309,7 +309,7 @@ export function PodatkiCard({
   };
   const taxSummary: TaxExampleData = {
     label: `Podsumowanie Twoich danych — ${miesiacLabel}`,
-    text: `Przychód netto ${formatZl(p.przychodNetto)}, koszty uznane podatkowo ${formatZl(p.kosztyPodatkowe)}, dochód podatkowy ${formatZl(p.dochod)}, VAT do zapłaty ${formatZl(vatDoZaplatyDodatni)}, podatek dochodowy za miesiąc ${formatZl(p.pitMiesiac)}, zdrowotna właściciela ${formatZl(p.zdrowotna)}.`,
+    text: `Przychód netto ${formatZl(p.przychodNetto)}, koszty uznane podatkowo ${formatZl(p.kosztyPodatkowe)}, dochód podatkowy ${formatZl(p.dochod)}, VAT do zapłaty ${formatZl(vatDoZaplatyDodatni)}, podatek dochodowy za miesiąc ${formatZl(p.pitMiesiac)}, rezerwa na zdrowotną właściciela ${formatZl(p.zdrowotna)}.`,
   };
 
   return (
@@ -414,7 +414,7 @@ export function PodatkiCard({
           />
           <WyjasnienieZerowegoPodatku wyjasnienie={wyjasnieniePodatku} miesiac={p.miesiac} />
           <Wiersz
-            label="Składka zdrowotna właściciela"
+            label="Rezerwa na zdrowotną właściciela"
             value={p.zdrowotna}
             term="zdrowotna"
           />
@@ -438,7 +438,7 @@ export function PodatkiCard({
           <Wiersz
             label="− Podatki i składki razem"
             value={laczniePowinnoWyjsc}
-            note="VAT, podatek dochodowy, zdrowotna właściciela i zobowiązania pracownika"
+            note="VAT, podatek dochodowy, rezerwa na zdrowotną właściciela i zobowiązania pracownika"
             term="lacznie"
           />
           <Wiersz
@@ -451,24 +451,24 @@ export function PodatkiCard({
         </div>
       </div>
 
-      {/* Podatki i składki do odprowadzenia */}
+      {/* Podatki i składki — rezerwa do odłożenia */}
       <div className="mt-3 rounded-2xl border border-amber-brand/40 bg-amber-brand/10 p-3">
         <div className="mb-1 flex items-center gap-1.5">
           <p className="text-xs font-bold uppercase tracking-wider text-amber-brand">
-            Podatki i składki do odprowadzenia
+            Podatki i składki — rezerwa do odłożenia
           </p>
           <InfoHint term="lacznie" />
         </div>
         <Wiersz label="VAT do zapłaty" value={vatDoZaplatyDodatni} klasa="text-ink" term="vat_do_zaplaty" />
         <Wiersz label="Podatek dochodowy do zapłaty" value={p.pitMiesiac} klasa="text-ink" term="pit_miesiac" />
-        <Wiersz label="Składka zdrowotna właściciela" value={p.zdrowotna} klasa="text-ink" term="zdrowotna" />
+        <Wiersz label="Rezerwa na zdrowotną właściciela" value={p.zdrowotna} klasa="text-ink" term="zdrowotna" />
         {p.podatekDochodowyPracownika > 0 && <Wiersz label="Podatek dochodowy pracownika" value={p.podatekDochodowyPracownika} klasa="text-ink" />}
         {p.skladkaZdrowotnaPracownika > 0 && <Wiersz label="Składka zdrowotna pracownika" value={p.skladkaZdrowotnaPracownika} klasa="text-ink" />}
         {p.pozostaleSkladkiZusPracownika > 0 && <Wiersz label="Pozostałe składki ZUS pracownika" value={p.pozostaleSkladkiZusPracownika} klasa="text-ink" />}
         <Wiersz label="RAZEM PODATKI I SKŁADKI" value={laczniePowinnoWyjsc} klasa="text-amber-brand" bold />
         {vatDoZaplatyDodatni === 0 && p.pitMiesiac === 0 && p.obciazeniaPracownika === 0 && (
           <p className="mt-2 text-[11px] text-dim">
-            W tym miesiącu nie wychodzi VAT ani podatek dochodowy do zapłaty. Zostaje składka zdrowotna właściciela: {formatZl(p.zdrowotna)}.
+            W tym miesiącu nie wychodzi VAT ani podatek dochodowy do zapłaty. Do odłożenia zostaje rezerwa na zdrowotną właściciela: {formatZl(p.zdrowotna)}.
           </p>
         )}
         {nadwyzka && (
@@ -587,7 +587,7 @@ export function PodatkiCard({
           <Wiersz label="Podatek dochodowy do zapłaty za ten miesiąc" value={p.pitMiesiac} klasa="text-red-300" bold term="pit_miesiac" />
 
           {/* Zdrowotna */}
-          <p className="mb-1 mt-4 text-xs font-bold uppercase tracking-wider text-amber-brand">Zdrowotna właściciela</p>
+          <p className="mb-1 mt-4 text-xs font-bold uppercase tracking-wider text-amber-brand">Zdrowotna właściciela — rezerwa</p>
           <Wiersz
             label="Składka za miesiąc"
             value={p.zdrowotna}
