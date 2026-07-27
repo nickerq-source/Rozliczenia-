@@ -1955,13 +1955,16 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
   const obciazeniaPracownika = obliczObciazeniaPracownika(ustawienia, wynagrodzenie > 0);
   const sumaKosztowPracownika = wynagrodzenie + obciazeniaPracownika.obciazeniaPracownika;
   const sumaKosztow = sumaKosztowPracownika + sumaFuel + sumaInne + leasing;
-  const glowneKoszty = [
+  const kosztyPracownikaRows = [
     { label: "Wypłata kierowcy", value: wynagrodzenie, icon: <IconUsers size={16} /> },
     { label: "Obciążenia pracownika", value: obciazeniaPracownika.obciazeniaPracownika, icon: <IconUsers size={16} /> },
+  ];
+  const kosztyZakupoweRows = [
     { label: "Paliwo", value: sumaFuel, icon: <IconGasStation size={16} /> },
     { label: "Auto i działalność", value: sumaInne, icon: <IconPackage size={16} /> },
     { label: "Leasing", value: leasing, icon: <IconCar size={16} /> },
   ];
+  const glowneKoszty = [...kosztyPracownikaRows, ...kosztyZakupoweRows];
   const najwiekszyKoszt = [...glowneKoszty].sort((a, b) => b.value - a.value)[0];
   const rozkminyKosztow = [
     kosztyPodatkowe.bezDokumentu > 0
@@ -2056,16 +2059,33 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
         </div>
 
         <div className="mt-4 space-y-2">
-          <p className="text-[11px] font-extrabold uppercase tracking-wider text-dim">
-            Rozbicie kosztów
+          <p className="text-[11px] font-extrabold uppercase tracking-wider text-amber-brand">
+            Koszty pracownika — bez VAT
           </p>
-          {glowneKoszty.map((row) => (
+          {kosztyPracownikaRows.map((row) => (
             <div key={row.label} className="flex items-center gap-2 rounded-xl border border-line/70 bg-surface2/70 px-3 py-2">
               <span className="text-amber-brand">{row.icon}</span>
               <span className="min-w-0 flex-1 text-sm text-dim">{row.label}</span>
               <span className="tabular-nums text-sm font-bold text-white">{formatZl(row.value)}</span>
             </div>
           ))}
+          <p className="text-[10px] leading-relaxed text-dim/70">
+            Te pozycje nie mają VAT. Pomniejszają dochód zgodnie z ustawieniami rozliczenia pracownika.
+          </p>
+
+          <p className="pt-2 text-[11px] font-extrabold uppercase tracking-wider text-dim">
+            Koszty zakupowe — VAT według dokumentów
+          </p>
+          {kosztyZakupoweRows.map((row) => (
+            <div key={row.label} className="flex items-center gap-2 rounded-xl border border-line/70 bg-surface2/70 px-3 py-2">
+              <span className="text-amber-brand">{row.icon}</span>
+              <span className="min-w-0 flex-1 text-sm text-dim">{row.label}</span>
+              <span className="tabular-nums text-sm font-bold text-white">{formatZl(row.value)}</span>
+            </div>
+          ))}
+          <p className="text-[10px] leading-relaxed text-dim/70">
+            VAT i koszt dochodowy są liczone na podstawie dokumentu oraz ustawień każdej pozycji.
+          </p>
         </div>
 
         <div className="mt-4 rounded-2xl border border-line bg-surface2/70 p-3">

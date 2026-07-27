@@ -63,6 +63,9 @@ export function PodatkiCard({
 
   const kosztyOperacyjne =
     wynik.wynagrodzeniePracownika + wynik.obciazeniaPracownika + wynik.paliwo + wynik.inne + wynik.leasing;
+  const kosztPracownika = wynik.wynagrodzeniePracownika + wynik.obciazeniaPracownika;
+  const kosztyZakupowe = wynik.paliwo + wynik.inne + wynik.leasing;
+  const kosztyZakupowePodatkowe = Math.max(0, p.kosztyPodatkowe - p.wynagrodzeniePodatkowe);
   const oficjalneAktywne = p.wynagrodzeniePodatkowe !== wynik.wynagrodzeniePracownika || p.obciazeniaPracownika > 0;
   const oficjalnyBrutto = Math.max(0, p.wynagrodzeniePodatkowe - p.obciazeniaPracownika);
   const nieoficjalne = Math.max(0, wynik.wynagrodzeniePracownika - oficjalnyBrutto);
@@ -153,26 +156,34 @@ export function PodatkiCard({
 
       {!szczegoly ? null : (
         <div className="mt-3 space-y-0.5">
-          {/* Koszty */}
-          <p className="mb-1 text-xs font-bold uppercase tracking-wider text-amber-brand">Koszty miesiąca (brutto)</p>
+          {/* Koszty pracownika — poza VAT */}
+          <p className="mb-1 text-xs font-bold uppercase tracking-wider text-amber-brand">
+            Koszty pracownika — bez VAT
+          </p>
           <Wiersz
             label="Wynagrodzenie kierowcy"
             value={wynik.wynagrodzeniePracownika}
-            note={oficjalneAktywne ? "realna wypłata (do podatku tylko część oficjalna)" : undefined}
+            note={oficjalneAktywne ? "kwota wypłacana kierowcy; do podatku tylko część oficjalna" : "kwota wypłacana kierowcy; bez VAT"}
           />
           {wynik.podatekDochodowyPracownika > 0 && <Wiersz label="Podatek dochodowy pracownika" value={wynik.podatekDochodowyPracownika} />}
           {wynik.skladkaZdrowotnaPracownika > 0 && <Wiersz label="Składka zdrowotna pracownika" value={wynik.skladkaZdrowotnaPracownika} />}
           {wynik.pozostaleSkladkiZusPracownika > 0 && <Wiersz label="Pozostałe składki ZUS pracownika" value={wynik.pozostaleSkladkiZusPracownika} />}
-          {wynik.obciazeniaPracownika > 0 && <Wiersz label="Razem obciążenia pracownika" value={wynik.obciazeniaPracownika} bold />}
+          <Wiersz label="Razem koszt pracownika" value={kosztPracownika} bold />
+
+          {/* Koszty zakupowe — VAT tylko z dokumentów */}
+          <p className="mb-1 mt-4 text-xs font-bold uppercase tracking-wider text-amber-brand">
+            Koszty zakupowe — VAT według dokumentów
+          </p>
           <Wiersz label="Paliwo" value={wynik.paliwo} />
           <Wiersz label="Inne koszty" value={wynik.inne} />
           <Wiersz label="Leasing" value={wynik.leasing} />
+          <Wiersz label="Razem koszty zakupowe (brutto)" value={kosztyZakupowe} bold />
           <Wiersz label="Razem koszty operacyjne" value={kosztyOperacyjne} bold />
 
           {/* VAT */}
           <p className="mb-1 mt-4 text-xs font-bold uppercase tracking-wider text-amber-brand">VAT</p>
           <Wiersz label="VAT należny (sprzedaż)" value={p.vatNalezny} term="vat_nalezny" />
-          <Wiersz label="Netto kosztów z faktur" value={p.kosztyNetto} />
+          <Wiersz label="Netto kosztów zakupowych z dokumentów" value={p.kosztyNetto} />
           <Wiersz label="VAT naliczony (do odliczenia)" value={p.vatNaliczony} klasa="text-green-300" term="vat_naliczony" />
           {nadwyzka ? (
             <Wiersz label="Nadwyżka VAT na kolejny miesiąc" value={nadwyzkaVat} klasa="text-green-300" bold term="nadwyzka_vat" />
@@ -183,7 +194,9 @@ export function PodatkiCard({
           {/* Koszty pracownika */}
           {oficjalneAktywne && (
             <>
-              <p className="mb-1 mt-4 text-xs font-bold uppercase tracking-wider text-amber-brand">Koszty pracownika</p>
+              <p className="mb-1 mt-4 text-xs font-bold uppercase tracking-wider text-amber-brand">
+                Wpływ kosztów pracownika na podatek dochodowy
+              </p>
               <Wiersz label="Wynagrodzenie przyjęte do podatku (bez obciążeń)" value={oficjalnyBrutto} />
               {p.podatekDochodowyPracownika > 0 && <Wiersz label="Podatek dochodowy pracownika" value={p.podatekDochodowyPracownika} />}
               {p.skladkaZdrowotnaPracownika > 0 && <Wiersz label="Składka zdrowotna pracownika" value={p.skladkaZdrowotnaPracownika} />}
@@ -204,7 +217,9 @@ export function PodatkiCard({
             Podatek dochodowy ({taxForm === "skala" ? "skala" : "liniowy 19%"})
           </p>
           <Wiersz label="Przychód netto" value={p.przychodNetto} />
-          <Wiersz label="Koszty uznane do PIT" value={p.kosztyPodatkowe} term="koszty_pit" />
+          <Wiersz label="Koszty pracownika uznane do dochodowego" value={p.wynagrodzeniePodatkowe} />
+          <Wiersz label="Koszty zakupowe uznane do dochodowego" value={kosztyZakupowePodatkowe} />
+          <Wiersz label="Razem koszty uznane do dochodowego" value={p.kosztyPodatkowe} term="koszty_pit" bold />
           {strata ? (
             <Wiersz label="Koszty przewyższają przychód o" value={-p.dochod} klasa="text-ink" bold term="koszty_ponad_przychod" />
           ) : (

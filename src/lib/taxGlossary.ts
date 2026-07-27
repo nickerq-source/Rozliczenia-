@@ -50,9 +50,9 @@ export const TAX_GLOSSARY: Record<TaxTermId, TaxTerm> = {
     przyklad: "Naliczony 300 − należny 100 = 200 zł nadwyżki na kolejny miesiąc.",
   },
   koszty_pit: {
-    nazwa: "Koszty uznane do PIT",
-    opis: "Wydatki, które zgodnie z ustawieniami zmniejszają dochód do opodatkowania (netto z faktur + oficjalne wynagrodzenie).",
-    wzor: "netto kosztów + nieodliczony VAT + oficjalne wynagrodzenie",
+    nazwa: "Koszty uznane do podatku dochodowego",
+    opis: "Suma kosztów pracownika bez VAT oraz podatkowej części zakupów. Zakupy trafiają tu jako netto i ewentualny nieodliczony VAT, zgodnie z dokumentami i ustawieniami.",
+    wzor: "koszty pracownika + netto zakupów + nieodliczony VAT",
     przyklad: "Paliwo 926,49 + inne 159,25 + leasing 2195,12 + pensja 1255 = 4535,86 zł.",
   },
   dochod_pit: {

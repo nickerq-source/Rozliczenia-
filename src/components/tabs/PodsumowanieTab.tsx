@@ -440,16 +440,31 @@ export function PodsumowanieTab({
           />
         </div>
 
-        {/* KOSZTY */}
-        <div className="mb-4">
-          <p className="text-xs font-bold uppercase tracking-wider text-dim mb-1">Koszty</p>
+        {/* KOSZTY PRACOWNIKA — BEZ VAT */}
+        <div className="mb-3">
+          <p className="mb-1 text-xs font-bold uppercase tracking-wider text-amber-brand">
+            Koszty pracownika — bez VAT
+          </p>
           <Row icon={<IconUsers size={18} />} label="Wynagrodzenie kierowcy" value={wynik.wynagrodzeniePracownika} />
           {wynik.podatekDochodowyPracownika > 0 && <Row icon={<IconUsers size={18} />} label="Podatek dochodowy pracownika" value={wynik.podatekDochodowyPracownika} />}
           {wynik.skladkaZdrowotnaPracownika > 0 && <Row icon={<IconUsers size={18} />} label="Składka zdrowotna pracownika" value={wynik.skladkaZdrowotnaPracownika} />}
           {wynik.pozostaleSkladkiZusPracownika > 0 && <Row icon={<IconUsers size={18} />} label="Pozostałe składki ZUS pracownika" value={wynik.pozostaleSkladkiZusPracownika} />}
+          <p className="mt-1 text-[10px] leading-relaxed text-dim/70">
+            Wynagrodzenie oznacza kwotę wypłacaną kierowcy, a obciążenia są doliczane osobno. Nie tworzą VAT i są uwzględniane przy wyliczeniu dochodu.
+          </p>
+        </div>
+
+        {/* KOSZTY ZAKUPOWE — VAT WG DOKUMENTÓW */}
+        <div className="mb-4">
+          <p className="mb-1 text-xs font-bold uppercase tracking-wider text-dim">
+            Koszty zakupowe — VAT według dokumentów
+          </p>
           <Row icon={<IconGasStation size={18} />} label="Paliwo" value={wynik.paliwo} />
           <Row icon={<IconPackage size={18} />} label="Inne koszty" value={wynik.inne} />
           <Row icon={<IconCar size={18} />} label="Leasing" value={wynik.leasing} />
+          <p className="mt-1 text-[10px] leading-relaxed text-dim/70">
+            VAT jest liczony wyłącznie z dokumentów i zgodnie z ustawionym prawem do odliczenia.
+          </p>
         </div>
 
         {/* ZYSK NA CZYSTO */}

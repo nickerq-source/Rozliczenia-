@@ -238,11 +238,23 @@ export function RaportTab({ data }: Props) {
         </div>
 
         <Row label="Przychód łączny (faktury)" value={raport.przychod} />
-        <Row label="Koszty – wynagrodzenie" value={raport.wynagrodzenie} />
-        <Row label="Koszty – paliwo" value={raport.paliwo} />
-        <Row label="Koszty – inne" value={raport.inne} />
+
+        <p className="mb-1 mt-4 text-xs font-bold uppercase tracking-wider text-amber-brand">
+          Koszty pracownika — bez VAT
+        </p>
+        <Row label="Wynagrodzenie kierowcy" value={raport.wynagrodzenie} />
+        <Row label="Podatek dochodowy pracownika" value={raport.podatekPrac} />
+        <Row label="Składka zdrowotna pracownika" value={raport.zdrowotnaPrac} />
+        <Row label="Pozostałe składki ZUS pracownika" value={raport.zusPrac} />
+        <Row label="Razem obciążenia pracownika" value={raport.obciazeniaPrac} />
+
+        <p className="mb-1 mt-4 text-xs font-bold uppercase tracking-wider text-dim">
+          Koszty zakupowe — VAT według dokumentów
+        </p>
+        <Row label="Paliwo" value={raport.paliwo} />
+        <Row label="Inne koszty" value={raport.inne} />
         <Row
-          label="Koszty – leasing"
+          label="Leasing"
           value={raport.leasing}
           note={raport.aktywne > 0 ? `(${raport.aktywne} mies.)` : undefined}
         />
