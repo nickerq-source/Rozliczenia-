@@ -307,6 +307,7 @@ export function PodsumowanieTab({
       `${csvCell("VAT do zapłaty")};${csvCell(podatki?.vatDoZaplaty ?? 0)}`,
       `${csvCell("Podatek dochodowy")};${csvCell(podatki?.pitMiesiac ?? 0)}`,
       `${csvCell("Zdrowotna właściciela")};${csvCell(podatki?.zdrowotna ?? 0)}`,
+      `${csvCell("Realnie zostaje po wszystkich kosztach i podatkach")};${csvCell(podatki?.cashflowPoPodatkach ?? wynik.zysk)}`,
       `${csvCell("Podatek dochodowy pracownika")};${csvCell(podatki?.podatekDochodowyPracownika ?? 0)}`,
       `${csvCell("Zdrowotna pracownika")};${csvCell(podatki?.skladkaZdrowotnaPracownika ?? 0)}`,
       `${csvCell("Pozostałe składki ZUS pracownika")};${csvCell(podatki?.pozostaleSkladkiZusPracownika ?? 0)}`,
@@ -339,6 +340,7 @@ export function PodsumowanieTab({
         <tr><td>VAT do zapłaty</td><td>${podatki?.vatDoZaplaty ?? 0}</td></tr>
         <tr><td>Podatek dochodowy</td><td>${podatki?.pitMiesiac ?? 0}</td></tr>
         <tr><td>Zdrowotna właściciela</td><td>${podatki?.zdrowotna ?? 0}</td></tr>
+        <tr><td>Realnie zostaje po wszystkich kosztach i podatkach</td><td>${podatki?.cashflowPoPodatkach ?? wynik.zysk}</td></tr>
         <tr><td>Podatek dochodowy pracownika</td><td>${podatki?.podatekDochodowyPracownika ?? 0}</td></tr>
         <tr><td>Zdrowotna pracownika</td><td>${podatki?.skladkaZdrowotnaPracownika ?? 0}</td></tr>
         <tr><td>Pozostałe składki ZUS pracownika</td><td>${podatki?.pozostaleSkladkiZusPracownika ?? 0}</td></tr>
@@ -381,6 +383,7 @@ export function PodsumowanieTab({
         <div class="box">VAT do zapłaty: <b>${formatZl(podatki?.vatDoZaplaty ?? 0)}</b></div>
         <div class="box">Podatek dochodowy: <b>${formatZl(podatki?.pitMiesiac ?? 0)}</b></div>
         <div class="box">Zdrowotna właściciela: <b>${formatZl(podatki?.zdrowotna ?? 0)}</b></div>
+        <div class="box">Realnie zostaje po wszystkich kosztach i podatkach: <b>${formatZl(podatki?.cashflowPoPodatkach ?? wynik.zysk)}</b></div>
         <div class="box">Podatek pracownika: <b>${formatZl(podatki?.podatekDochodowyPracownika ?? 0)}</b></div>
         <div class="box">Zdrowotna pracownika: <b>${formatZl(podatki?.skladkaZdrowotnaPracownika ?? 0)}</b></div>
         <div class="box">Pozostałe składki ZUS pracownika: <b>${formatZl(podatki?.pozostaleSkladkiZusPracownika ?? 0)}</b></div>

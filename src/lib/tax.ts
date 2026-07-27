@@ -18,6 +18,7 @@ import { czyTankowanieWliczane, obliczWynagrodzenie, parseNum } from "./business
 import { MIESIACE_ZAKRESU } from "./dates";
 import { obliczObciazeniaPracownika } from "./employee-costs";
 import { calculateScaleTaxYtd } from "./income-tax-calculation";
+import { calculateFinalCash } from "./final-cash-calculation";
 
 // ─── USTAWIENIA DOMYŚLNE ─────────────────────────────────────────────────────
 
@@ -419,6 +420,12 @@ export function podatkiRoku(data: WorkspaceData): PodatkiMiesiaca[] {
 
     const zdrowotna = zdrowotnaMiesiaca(p.dochod, u);
     const vatDoZaplaty = round2(p.vatNalezny - p.vatNaliczony);
+    const finalCash = calculateFinalCash({
+      profitBeforeTaxes: p.zyskPrzedPodatkami,
+      incomeTax: pitMiesiac,
+      ownerHealthContribution: zdrowotna,
+      vatDue: vatDoZaplaty,
+    });
 
     wyniki.push({
       miesiac: m as MiesiącId,
@@ -443,10 +450,8 @@ export function podatkiRoku(data: WorkspaceData): PodatkiMiesiaca[] {
       pitMiesiac,
       zdrowotna,
       zyskPrzedPodatkami: p.zyskPrzedPodatkami,
-      zyskPoPodatkach: round2(p.zyskPrzedPodatkami - pitMiesiac - zdrowotna),
-      cashflowPoPodatkach: round2(
-        p.zyskPrzedPodatkami - pitMiesiac - zdrowotna - Math.max(0, vatDoZaplaty)
-      ),
+      zyskPoPodatkach: finalCash.afterIncomeTaxAndHealth,
+      cashflowPoPodatkach: finalCash.afterAllTaxes,
     });
   }
   return wyniki;

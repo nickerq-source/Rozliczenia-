@@ -10,7 +10,8 @@
     "test:fuel": "node --experimental-strip-types --test tests/fuel-chain.test.mjs",
     "test:employee-costs": "node --experimental-strip-types --test tests/employee-costs.test.mjs",
     "test:tax-explanation": "node --experimental-strip-types --test tests/income-tax-explanation.test.mjs",
-    "test:income-tax-scope": "node --experimental-strip-types --test tests/income-tax-scope.test.mjs"
+    "test:income-tax-scope": "node --experimental-strip-types --test tests/income-tax-scope.test.mjs",
+    "test:final-cash": "node --experimental-strip-types --test tests/final-cash-calculation.test.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.104.1",
