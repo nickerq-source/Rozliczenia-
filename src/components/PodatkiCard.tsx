@@ -30,8 +30,8 @@ function Wiersz({
   term?: TaxTermId;
 }) {
   return (
-    <div className={cn("flex justify-between text-sm py-1", bold && "font-bold pt-1.5 border-t border-line")}>
-      <span className={cn("flex items-center gap-1.5", bold ? "text-white" : "text-dim")}>
+    <div className={cn("flex items-start justify-between gap-3 text-sm py-1", bold && "font-bold pt-1.5 border-t border-line")}>
+      <span className={cn("flex min-w-0 items-center gap-1.5 pr-1", bold ? "text-white" : "text-dim")}>
         <span>
           {label}
           {note && <span className="block text-[10px] font-normal text-dim/60">{note}</span>}
@@ -76,7 +76,7 @@ export function PodatkiCard({
       <div className="mb-1 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <IconMoneybag size={18} className="text-amber-brand" />
-          <h3 className="text-sm font-bold uppercase tracking-wider text-dim">Podatki i wynik końcowy</h3>
+          <h3 className="text-sm font-bold uppercase tracking-wider text-dim">Podsumowanie rozliczenia</h3>
         </div>
         <JakCzytacPodatki />
       </div>
@@ -155,13 +155,20 @@ export function PodatkiCard({
         </div>
 
         <div className="bg-green-soft/70 p-3">
-          <p className="mb-1 text-xs font-bold text-green-300">4. Ile realnie zostaje</p>
-          <Wiersz label="Wynik gotówkowy przed podatkami firmy" value={p.zyskPrzedPodatkami} />
-          <Wiersz label="− Podatek dochodowy" value={p.pitMiesiac} />
-          <Wiersz label="− Składka zdrowotna właściciela" value={p.zdrowotna} />
-          <Wiersz label="− VAT do zapłaty" value={vatDoZaplatyDodatni} />
+          <p className="mb-1 text-xs font-bold text-green-300">4. Podsumowanie końcowe</p>
+          <Wiersz label="Przychód brutto" value={sprzedazBrutto} />
+          <Wiersz label="− Cała wypłata kierowcy" value={wynik.wynagrodzeniePracownika} />
+          <Wiersz label="− Paliwo" value={wynik.paliwo} />
+          <Wiersz label="− Inne koszty" value={wynik.inne} />
+          <Wiersz label="− Leasing" value={wynik.leasing} />
           <Wiersz
-            label="= NA CZYSTO PO WSZYSTKICH PODATKACH"
+            label="− Podatki i składki razem"
+            value={laczniePowinnoWyjsc}
+            note="VAT, podatek dochodowy, zdrowotna właściciela i zobowiązania pracownika"
+            term="lacznie"
+          />
+          <Wiersz
+            label="= REALNIE ZOSTAJE PO WSZYSTKICH KOSZTACH I PODATKACH"
             value={p.cashflowPoPodatkach}
             klasa={p.cashflowPoPodatkach >= 0 ? "text-green-300" : "text-red-300"}
             bold
@@ -170,11 +177,11 @@ export function PodatkiCard({
         </div>
       </div>
 
-      {/* Łącznie powinno wyjść */}
+      {/* Podatki i składki do odprowadzenia */}
       <div className="mt-3 rounded-2xl border border-amber-brand/40 bg-amber-brand/10 p-3">
         <div className="mb-1 flex items-center gap-1.5">
           <p className="text-xs font-bold uppercase tracking-wider text-amber-brand">
-            Podatki i składka — ile powinno wyjść
+            Podatki i składki do odprowadzenia
           </p>
           <InfoHint term="lacznie" />
         </div>
@@ -184,7 +191,7 @@ export function PodatkiCard({
         {p.podatekDochodowyPracownika > 0 && <Wiersz label="Podatek dochodowy pracownika" value={p.podatekDochodowyPracownika} klasa="text-ink" />}
         {p.skladkaZdrowotnaPracownika > 0 && <Wiersz label="Składka zdrowotna pracownika" value={p.skladkaZdrowotnaPracownika} klasa="text-ink" />}
         {p.pozostaleSkladkiZusPracownika > 0 && <Wiersz label="Pozostałe składki ZUS pracownika" value={p.pozostaleSkladkiZusPracownika} klasa="text-ink" />}
-        <Wiersz label="ŁĄCZNIE POWINNO WYJŚĆ" value={laczniePowinnoWyjsc} klasa="text-amber-brand" bold />
+        <Wiersz label="RAZEM PODATKI I SKŁADKI" value={laczniePowinnoWyjsc} klasa="text-amber-brand" bold />
         {vatDoZaplatyDodatni === 0 && p.pitMiesiac === 0 && p.obciazeniaPracownika === 0 && (
           <p className="mt-2 text-[11px] text-dim">
             W tym miesiącu nie wychodzi VAT ani podatek dochodowy do zapłaty. Zostaje składka zdrowotna właściciela: {formatZl(p.zdrowotna)}.
@@ -303,10 +310,10 @@ export function PodatkiCard({
           />
           <div className="mt-2 rounded-xl border border-green-500/35 bg-green-soft px-3 py-1.5">
             <Wiersz
-              label="NA CZYSTO PO WSZYSTKICH PODATKACH"
+              label="REALNIE ZOSTAJE PO WSZYSTKICH KOSZTACH I PODATKACH"
               value={p.cashflowPoPodatkach}
               klasa={p.cashflowPoPodatkach >= 0 ? "text-green-300" : "text-red-300"}
-              note="po odjęciu VAT, podatku dochodowego i zdrowotnej"
+              note="po odjęciu wypłaty kierowcy, zakupów, VAT, podatku dochodowego i wszystkich składek"
               bold
               term="wynik_na_czysto"
             />

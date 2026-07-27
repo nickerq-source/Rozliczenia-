@@ -388,7 +388,7 @@ export function RaportTab({ data }: Props) {
         <p className="text-xs font-bold uppercase tracking-wider text-amber-brand mb-1 mt-4">Ile zostaje</p>
         <Row label="Zysk przed podatkami" value={raport.zysk} />
         <Row label="Po dochodowym i zdrowotnej — przed VAT" value={podatkiSuma.zyskPo} />
-        <Row label="NA CZYSTO PO WSZYSTKICH PODATKACH" value={podatkiSuma.cashflow} valueClass={podatkiSuma.cashflow >= 0 ? "text-green-300" : "text-red-300"} />
+        <Row label="REALNIE ZOSTAJE PO WSZYSTKICH KOSZTACH I PODATKACH" value={podatkiSuma.cashflow} valueClass={podatkiSuma.cashflow >= 0 ? "text-green-300" : "text-red-300"} />
 
         {/* Łączne podatki i składki za okres (VAT do zapłaty nigdy ujemny) */}
         {(() => {
@@ -405,7 +405,7 @@ export function RaportTab({ data }: Props) {
               <Row label="Podatek dochodowy pracownika łącznie" value={podatkiSuma.podatekPracownika} />
               <Row label="Zdrowotna pracownika łącznie" value={podatkiSuma.zdrowotnaPracownika} />
               <Row label="Pozostałe składki ZUS pracownika łącznie" value={podatkiSuma.zusPracownika} />
-              <Row label="ŁĄCZNIE POWINNO WYJŚĆ ZA OKRES" value={total} valueClass="text-amber-brand" />
+              <Row label="RAZEM PODATKI I SKŁADKI ZA OKRES" value={total} valueClass="text-amber-brand" />
               <p className="mt-2 text-[11px] text-dim/70">
                 Wyliczenie obejmuje okres Czerwiec–Grudzień 2026. Wyliczenia są szacunkowe — ostateczne rozliczenie potwierdza księgowa.
               </p>

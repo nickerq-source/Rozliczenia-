@@ -138,7 +138,7 @@ export function JakCzytacPodatki() {
                 <br />Dochód podatkowy: 10 000 − 6 000 = 4 000 zł.
                 <br />VAT do zapłaty: 2 300 − odliczalny VAT z kosztów.
                 <br />Podatek dochodowy i zdrowotna są liczone od dochodu, a VAT rozlicza się osobno.
-                <br />Łącznie powinno wyjść: VAT + podatek firmy + zdrowotna właściciela + zobowiązania za pracownika.
+                <br />Podatki i składki razem: VAT + podatek firmy + zdrowotna właściciela + zobowiązania za pracownika.
               </p>
             </div>
           </div>

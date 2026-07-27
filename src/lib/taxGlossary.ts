@@ -92,7 +92,7 @@ export const TAX_GLOSSARY: Record<TaxTermId, TaxTerm> = {
     przyklad: "Dochód niski/ujemny → minimum 432,54 zł.",
   },
   lacznie: {
-    nazwa: "Łącznie powinno wyjść",
+    nazwa: "Podatki i składki razem",
     opis: "Suma VAT do zapłaty, podatku dochodowego firmy, składki zdrowotnej właściciela oraz trzech zobowiązań za pracownika. To kwota obciążeń do zapłaty, a nie kwota, która zostaje firmie.",
     wzor: "VAT + podatek firmy + zdrowotna właściciela + podatek pracownika + zdrowotna pracownika + pozostały ZUS pracownika",
     przyklad: "Obciążenia pracownika: 107 + 120,30 + 165 = 392,30 zł. Ta suma jest doliczana do pozostałych zobowiązań miesiąca.",
@@ -104,9 +104,9 @@ export const TAX_GLOSSARY: Record<TaxTermId, TaxTerm> = {
     przyklad: "Zysk 1 680,85 − podatek dochodowy 0 − zdrowotna 432,54 = 1 248,31 zł przed zapłatą VAT.",
   },
   wynik_na_czysto: {
-    nazwa: "Na czysto po wszystkich podatkach",
-    opis: "Końcowa gotówka, która zostaje po odjęciu podatku dochodowego, składki zdrowotnej oraz VAT do zapłaty. To jest właściwy wynik na czysto.",
-    wzor: "zysk operacyjny − podatek dochodowy − zdrowotna − VAT do zapłaty",
-    przyklad: "1 680,85 − 0 − 432,54 − 847,23 = 401,08 zł na czysto.",
+    nazwa: "Realnie zostaje po wszystkich kosztach i podatkach",
+    opis: "Końcowa gotówka po odjęciu całej wypłaty kierowcy, paliwa, innych kosztów, leasingu oraz wszystkich podatków i składek. Każda pozycja jest odejmowana tylko raz.",
+    wzor: "przychód brutto − wypłata kierowcy − paliwo − inne koszty − leasing − podatki i składki razem",
+    przyklad: "Przychód brutto minus wszystkie koszty operacyjne, podatki i składki = realna gotówka, która zostaje.",
   },
 };
