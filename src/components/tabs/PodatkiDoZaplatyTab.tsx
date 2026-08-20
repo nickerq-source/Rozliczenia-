@@ -24,20 +24,35 @@ export function PodatkiDoZaplatyTab({
   onToggle: (miesiac: MiesiącId, oplacono: boolean) => void;
 }) {
   const wiersze = useMemo(() => {
+    // VAT: nadwyżka (VAT z kosztów > VAT ze sprzedaży) przechodzi na kolejny
+    // miesiąc i pomniejsza tam VAT do zapłaty. PIT/strata już liczy się
+    // narastająco w silniku, więc nie ruszamy.
+    let vatNadwyzka = 0;
     return podatkiRoku(data)
-      .map((p) => ({
-        miesiac: p.miesiac,
-        razem: r2(
-          Math.max(0, p.vatDoZaplaty) +
-            p.pitMiesiac +
-            p.zdrowotna +
-            p.podatekDochodowyPracownika +
-            p.skladkaZdrowotnaPracownika +
-            p.pozostaleSkladkiZusPracownika
-        ),
-        oplacono: !!data.podatkiOplacone?.[p.miesiac]?.oplacono,
-      }))
-      .filter((w) => w.razem > 0);
+      .map((p) => {
+        // VAT gdyby bez przeniesienia nadwyżki (sam ten miesiąc):
+        const vatBezNadwyzki = Math.max(0, r2(p.vatNalezny - p.vatNaliczony));
+        // z przeniesieniem nadwyżki z poprzednich miesięcy:
+        const dostepnyVat = vatNadwyzka + p.vatNaliczony;
+        const vatDoZaplaty = Math.max(0, r2(p.vatNalezny - dostepnyVat));
+        const uzytaNadwyzka = Math.max(0, r2(vatBezNadwyzki - vatDoZaplaty)); // ile nadwyżka zmniejszyła VAT
+        vatNadwyzka = Math.max(0, r2(dostepnyVat - p.vatNalezny));
+        return {
+          miesiac: p.miesiac,
+          razem: r2(
+            vatDoZaplaty +
+              p.pitMiesiac +
+              p.zdrowotna +
+              p.podatekDochodowyPracownika +
+              p.skladkaZdrowotnaPracownika +
+              p.pozostaleSkladkiZusPracownika
+          ),
+          nadwyzkaVatDalej: vatNadwyzka,
+          uzytaNadwyzka,
+          oplacono: !!data.podatkiOplacone?.[p.miesiac]?.oplacono,
+        };
+      })
+      .filter((w) => w.razem > 0 || w.nadwyzkaVatDalej > 0 || w.uzytaNadwyzka > 0);
   }, [data]);
 
   const sumaWszystko = r2(wiersze.reduce((s, w) => s + w.razem, 0));
@@ -52,7 +67,8 @@ export function PodatkiDoZaplatyTab({
           <CardTitle className="mb-1">Podatki do zapłaty</CardTitle>
           <p className="text-[11px] text-dim">
             Jedna kwota za miesiąc (VAT + dochodowy i zdrowotna właściciela + podatek, zdrowotna i ZUS
-            pracownika). Zaznacz, które miesiące już opłaciłeś. Szacunkowo — potwierdza księgowa.
+            pracownika). Nadwyżka VAT ze stratnego miesiąca przechodzi na kolejny i pomniejsza kwotę.
+            Zaznacz, które miesiące już opłaciłeś. Szacunkowo — potwierdza księgowa.
           </p>
         </div>
       </div>
@@ -102,7 +118,19 @@ export function PodatkiDoZaplatyTab({
               >
                 {w.oplacono ? <IconCheck size={16} /> : ""}
               </span>
-              <span className="flex-1 text-base font-extrabold text-white">{POLSKIE_MIESIACE[w.miesiac]} 2026</span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-base font-extrabold text-white">{POLSKIE_MIESIACE[w.miesiac]} 2026</span>
+                {w.uzytaNadwyzka > 0 && (
+                  <span className="block text-[10px] font-semibold text-green-300">
+                    VAT −{formatZl(w.uzytaNadwyzka)} (nadwyżka z poprzedniego miesiąca)
+                  </span>
+                )}
+                {w.nadwyzkaVatDalej > 0 && (
+                  <span className="block text-[10px] text-dim">
+                    nadwyżka VAT na kolejny miesiąc: {formatZl(w.nadwyzkaVatDalej)}
+                  </span>
+                )}
+              </span>
               <span className="text-right">
                 <span
                   className={cn(
