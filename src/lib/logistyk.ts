@@ -7,6 +7,8 @@ import { WorkspaceData, MiesiącId, LOGISTYK_AUTA, ZlecenieLog } from "./types";
 import { podatkiMiesiaca } from "./tax";
 import { parseNum } from "./business-logic";
 
+// Logistyk rozliczany dopiero od sierpnia 2026 (wcześniej go nie było).
+export const LOGISTYK_START_MONTH = 8;
 export const LOGISTYK_PROWIZJA_ZLECENIA = 0.12;
 export const LOGISTYK_PROWIZJA_ZYSK = 0.05;
 export const LOGISTYK_BONUS_ZA_AUTO = 200;

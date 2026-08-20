@@ -7,7 +7,7 @@ import { NextResponse } from "next/server";
 import { getSessionProfile } from "@/lib/supabase-server";
 import { getAdminSupabase } from "@/lib/supabase-admin";
 import { MIESIACE_ZAKRESU } from "@/lib/dates";
-import { obliczLogistyka } from "@/lib/logistyk";
+import { obliczLogistyka, LOGISTYK_START_MONTH } from "@/lib/logistyk";
 import { WorkspaceData, MiesiącId } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -29,9 +29,9 @@ export async function GET() {
   }
 
   const data = (ws.data ?? {}) as WorkspaceData;
-  const miesiace = MIESIACE_ZAKRESU.map((m) => obliczLogistyka(data, m as MiesiącId)).filter(
-    (r) => r.razem > 0 || r.zleceniaNettoRazem > 0 || r.zleceniaReczne.length > 0
-  );
+  const miesiace = MIESIACE_ZAKRESU.filter((m) => m >= LOGISTYK_START_MONTH)
+    .map((m) => obliczLogistyka(data, m as MiesiącId))
+    .filter((r) => r.razem > 0 || r.zleceniaNettoRazem > 0 || r.zleceniaReczne.length > 0);
   const razemOkres = Math.round(miesiace.reduce((s, r) => s + r.razem, 0) * 100) / 100;
 
   return NextResponse.json({ imie: profile.name, miesiace, razemOkres });

@@ -7,7 +7,7 @@
 import { useMemo, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { DaneMiesiaca, MiesiącId, WorkspaceData, LOGISTYK_AUTA } from "@/lib/types";
-import { obliczLogistyka } from "@/lib/logistyk";
+import { obliczLogistyka, LOGISTYK_START_MONTH } from "@/lib/logistyk";
 import { formatZl, formatZlCaly, parseNum } from "@/lib/business-logic";
 import { POLSKIE_MIESIACE } from "@/lib/dates";
 import { logChange } from "@/lib/audit";
@@ -106,6 +106,12 @@ export function ZleceniaTab({
           </div>
         </div>
 
+        {miesiac < LOGISTYK_START_MONTH ? (
+          <p className="rounded-xl border border-amber-brand/35 bg-amber-brand/10 px-3 py-3 text-sm text-amber-brand">
+            Logistyk jest rozliczany dopiero od sierpnia 2026 — ten miesiąc nie wchodzi do jego wynagrodzenia.
+            Zlecenia możesz wpisywać, ale nie liczą się do prowizji.
+          </p>
+        ) : (
         <div className="space-y-1">
           <Wiersz label={`12% z netto zleceń (${formatZl(rozliczenie.zleceniaNettoRazem)})`} value={rozliczenie.prowizja12} />
           <Wiersz label={`5% z „na czysto" (${formatZl(rozliczenie.naCzysto)})`} value={rozliczenie.prowizja5} />
@@ -115,8 +121,10 @@ export function ZleceniaTab({
             <span className="tabular-nums text-amber-brand">{formatZl(rozliczenie.razem)}</span>
           </div>
         </div>
+        )}
 
         {/* Rozpisanie po autach */}
+        {miesiac >= LOGISTYK_START_MONTH && (
         <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
           {rozliczenie.perAuto.map((a) => (
             <div key={a.plate} className="rounded-xl border border-line bg-surface2 p-3">
@@ -131,6 +139,7 @@ export function ZleceniaTab({
             </div>
           ))}
         </div>
+        )}
       </Card>
 
       {/* Dodawanie zlecenia */}
