@@ -212,17 +212,22 @@ const ORDER_RE = /^\s*(\d{2,6}\/\d{2}\/\d{2}CLKR2)\b/i;
 const VEHICLE_RE = /\b\d+\/\d+\b/;
 const ISO_RE = /\b\d{4}-\d{2}-\d{2}\b/g;
 
-function extractContinuationSurname(lines: string[]): string | null {
+function extractContinuationSurname(lines: string[], znane: Set<string> = new Set()): string | null {
   for (const line of lines.slice(0, 3)) {
-    // Trasy /D: nazwisko po przecinku, np. "/D KRAKÓW, PITIANIN".
-    const afterComma = line.match(/,\s*([A-Za-zĄĆĘŁŃÓŚŹŻąćęłńóśźż-]{2,})\b/);
-    if (afterComma) return afterComma[1].toUpperCase();
-    // Zlecenia /I: nazwisko zaraz po znaczniku, bez przecinka, np.
-    // "/I PITIANIN przewóz na" → pierwszy token pisany WERSALIKAMI po znaczniku.
+    // Nazwisko po przecinku, np. "/D KRAKÓW, PITIANIN". Pomijamy słowa już znane
+    // z głównej linii (miasto/imię), bo nazwisko to to INNE słowo.
+    for (const m of line.matchAll(/,\s*([A-Za-zĄĆĘŁŃÓŚŹŻąćęłńóśźż-]{2,})\b/g)) {
+      const cand = m[1].toUpperCase();
+      if (!znane.has(cand)) return cand;
+    }
+    // Znacznik /D lub /I, np. "/I PITIANIN przewóz na" albo "/D KRAKÓW PITIANIN"
+    // (bywa BEZ przecinka). Z tokenów WERSALIKAMI bierzemy ten, który nie jest
+    // miastem/imieniem z głównej linii — inaczej łapało miasto (KRAKÓW) jako nazwisko.
     const marker = line.match(/^\/[A-Za-z]\b\s*(.*)$/);
     if (marker) {
-      const caps = marker[1].match(/\b([A-ZĄĆĘŁŃÓŚŹŻ]{2,})\b/);
-      if (caps) return caps[1].toUpperCase();
+      const caps = [...marker[1].matchAll(/\b([A-ZĄĆĘŁŃÓŚŹŻ]{2,})\b/g)].map((c) => c[1].toUpperCase());
+      const surname = caps.find((c) => !znane.has(c));
+      if (surname) return surname;
     }
   }
   return null;
@@ -233,7 +238,8 @@ function splitRouteDriver(beforeType: string, continuationLines: string[]): { ro
   const tokens = cleaned.split(" ").filter(Boolean);
   if (tokens.length === 0) return { route: "", driverName: "" };
 
-  const continuationSurname = extractContinuationSurname(continuationLines);
+  const znane = new Set(tokens.map((t) => t.toUpperCase()));
+  const continuationSurname = extractContinuationSurname(continuationLines, znane);
   if (continuationSurname && tokens.length >= 1) {
     const firstName = tokens[tokens.length - 1];
     return {
