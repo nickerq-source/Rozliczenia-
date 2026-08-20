@@ -22,8 +22,11 @@ export interface LogistykAutoRozliczenie {
   kierowca: string;
   liczbaZlecen: number;
   zleceniaNetto: number;
+  prowizja12: number; // 12% z netto tego auta
   bonus: number; // 200 zł
-  automatyczne: boolean; // true dla Żeni (z faktur)
+  prowizja5: number; // 5% z na-czysto — tylko auto kierowcy (Żenia), 0 dla adminów
+  lacznie: number; // łącznie za to auto
+  automatyczne: boolean; // true dla Żeni (z faktur) = kierowca
 }
 
 export interface RozliczenieLogistyka {
@@ -53,6 +56,11 @@ export function obliczLogistyka(data: WorkspaceData, miesiac: MiesiącId): Rozli
   }
   zeniNetto = r2(zeniNetto);
 
+  // 5% z na-czysto — dolicza się TYLKO do auta kierowcy (Żenia); Damian i Artur
+  // to admini, ich auta dostają jedynie 12% + 200.
+  const naCzysto = podatkiMiesiaca(data, miesiac).zyskPoPodatkach;
+  const prowizja5 = r2(Math.max(0, naCzysto) * LOGISTYK_PROWIZJA_ZYSK);
+
   const perAuto: LogistykAutoRozliczenie[] = LOGISTYK_AUTA.map((auto) => {
     const zAuta = reczne.filter((z) => z.plate === auto.plate);
     let netto = r2(zAuta.reduce((s, z) => s + parseNum(z.wartoscNetto), 0));
@@ -62,22 +70,23 @@ export function obliczLogistyka(data: WorkspaceData, miesiac: MiesiącId): Rozli
       netto = r2(netto + zeniNetto);
       liczba += zeniLiczba;
     }
+    const prowizja12Auto = r2(netto * LOGISTYK_PROWIZJA_ZLECENIA);
+    const prowizja5Auto = automatyczne ? prowizja5 : 0;
     return {
       plate: auto.plate,
       kierowca: auto.kierowca,
       liczbaZlecen: liczba,
       zleceniaNetto: netto,
+      prowizja12: prowizja12Auto,
       bonus: LOGISTYK_BONUS_ZA_AUTO,
+      prowizja5: prowizja5Auto,
+      lacznie: r2(prowizja12Auto + LOGISTYK_BONUS_ZA_AUTO + prowizja5Auto),
       automatyczne,
     };
   });
 
   const zleceniaNettoRazem = r2(perAuto.reduce((s, a) => s + a.zleceniaNetto, 0));
   const prowizja12 = r2(zleceniaNettoRazem * LOGISTYK_PROWIZJA_ZLECENIA);
-
-  const naCzysto = podatkiMiesiaca(data, miesiac).zyskPoPodatkach;
-  const prowizja5 = r2(Math.max(0, naCzysto) * LOGISTYK_PROWIZJA_ZYSK);
-
   const autaBonus = r2(perAuto.reduce((s, a) => s + a.bonus, 0)); // 600
 
   return {
