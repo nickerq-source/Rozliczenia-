@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getBrowserSupabase } from "@/lib/supabase-browser";
 import { formatZl } from "@/lib/business-logic";
-import { POLSKIE_MIESIACE } from "@/lib/dates";
+import { POLSKIE_MIESIACE, getDefaultMonth } from "@/lib/dates";
 import { RozliczenieLogistyka } from "@/lib/logistyk";
 import { MiesiącId } from "@/lib/types";
 import { Card } from "./ui/Card";
@@ -32,9 +32,11 @@ export function LogistykView({ name }: { name: string }) {
         const j = await r.json();
         setMiesiace(j.miesiace ?? []);
         setRazemOkres(j.razemOkres ?? 0);
-        // domyślnie ostatni miesiąc z danymi
+        // domyślnie aktualny miesiąc (jeśli jest na liście), inaczej ostatni z danymi
         const lista = (j.miesiace ?? []) as RozliczenieLogistyka[];
-        if (lista.length) setAktywna(lista[lista.length - 1].miesiac);
+        const biezacy = getDefaultMonth();
+        if (lista.some((m) => m.miesiac === biezacy)) setAktywna(biezacy);
+        else if (lista.length) setAktywna(lista[lista.length - 1].miesiac);
       } catch {
         setError(true);
       }
@@ -50,6 +52,26 @@ export function LogistykView({ name }: { name: string }) {
     () => (aktywna === "wszystko" ? null : miesiace?.find((m) => m.miesiac === aktywna) ?? null),
     [aktywna, miesiace]
   );
+
+  const [nowe, setNowe] = useState("");
+  const [hasloBusy, setHasloBusy] = useState(false);
+  const [hasloMsg, setHasloMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  async function zmienHaslo() {
+    if (nowe.length < 6) {
+      setHasloMsg({ ok: false, text: "Hasło musi mieć min. 6 znaków." });
+      return;
+    }
+    setHasloBusy(true);
+    setHasloMsg(null);
+    const { error } = await getBrowserSupabase().auth.updateUser({ password: nowe });
+    setHasloBusy(false);
+    if (error) setHasloMsg({ ok: false, text: "Nie udało się zmienić hasła. Spróbuj ponownie." });
+    else {
+      setHasloMsg({ ok: true, text: "Hasło zmienione." });
+      setNowe("");
+    }
+  }
 
   return (
     <div className="min-h-screen bg-bg text-ink">
@@ -132,6 +154,35 @@ export function LogistykView({ name }: { name: string }) {
         ) : (
           <Card><p className="text-sm text-dim">Brak danych za ten miesiąc.</p></Card>
         )}
+
+        {/* Zmiana hasła */}
+        <Card>
+          <div className="mb-2 flex items-center gap-2">
+            <IconLock size={16} className="text-amber-brand" />
+            <h3 className="text-sm font-bold text-white">Zmień hasło</h3>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <input
+              type="password"
+              value={nowe}
+              onChange={(e) => setNowe(e.target.value)}
+              placeholder="Nowe hasło (min. 6 znaków)"
+              autoComplete="new-password"
+              className="w-full rounded-lg border border-line bg-input px-3 py-2 text-sm text-ink placeholder:text-dim/40"
+            />
+            <button
+              type="button"
+              onClick={zmienHaslo}
+              disabled={hasloBusy || nowe.length < 6}
+              className="shrink-0 rounded-lg bg-amber-brand px-4 py-2 text-sm font-bold text-amber-ink hover:bg-[#e09420] disabled:opacity-40"
+            >
+              {hasloBusy ? "Zmieniam…" : "Zmień"}
+            </button>
+          </div>
+          {hasloMsg && (
+            <p className={cn("mt-2 text-xs", hasloMsg.ok ? "text-green-300" : "text-red-300")}>{hasloMsg.text}</p>
+          )}
+        </Card>
 
         <p className="flex items-center justify-center gap-1.5 py-2 text-[11px] text-dim/60">
           <IconLock size={12} /> Widzisz tylko swoje rozliczenie.
