@@ -52,7 +52,16 @@ export async function getSessionProfile(): Promise<Profile | null> {
       .eq("id", user.id)
       .single();
 
-    return (profile as Profile) ?? null;
+    if (!profile) return null;
+    const p = profile as Profile;
+    // Logistyk trzymany w bazie jako role='driver' + name='Logistyk' (CHECK na
+    // profiles.role nie dopuszcza jeszcze 'logistyk'). Mapujemy na efektywną rolę
+    // logistyk: dzięki temu API kierowcy (if role !== 'driver') go odrzucają
+    // (brak wycieku danych kierowcy), a routing/panel logistyka działają.
+    if (p.role === "driver" && p.name === "Logistyk") {
+      return { ...p, role: "logistyk" };
+    }
+    return p;
   } catch {
     // Brak env Supabase (lokalny dev bez konfiguracji)
     return null;
