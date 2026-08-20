@@ -10,6 +10,7 @@ import { PodsumowanieTab } from "./tabs/PodsumowanieTab";
 import { ZarobekTab } from "./tabs/ZarobekTab";
 import { KosztyTab } from "./tabs/KosztyTab";
 import { RaportTab } from "./tabs/RaportTab";
+import { PodatkiDoZaplatyTab } from "./tabs/PodatkiDoZaplatyTab";
 import { WiadomosciTab } from "./tabs/WiadomosciTab";
 import { LegendaWyplaty } from "./LegendaWyplaty";
 import { UstawieniaTab } from "./tabs/UstawieniaTab";
@@ -210,7 +211,7 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
       setAktywnyMiesiac(m as MiesiącId);
     }
     const zNorm = z === "historia" ? "wiadomosci" : z; // alias starych linków
-    if (zNorm === "podsumowanie" || zNorm === "zarobek" || zNorm === "koszty" || zNorm === "raport" || zNorm === "wiadomosci" || zNorm === "legenda" || zNorm === "ustawienia") {
+    if (zNorm === "podsumowanie" || zNorm === "zarobek" || zNorm === "koszty" || zNorm === "raport" || zNorm === "podatki" || zNorm === "wiadomosci" || zNorm === "legenda" || zNorm === "ustawienia") {
       setAktywnaZakladka(zNorm as TabName);
     }
     if (zgl) setFocusZgloszenie(zgl);
@@ -400,6 +401,28 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
     });
   }
 
+  // Ręczny ślad „podatki opłacone za miesiąc" — nie zmienia żadnych wyliczeń.
+  function oznaczPodatekOplacony(miesiac: MiesiącId, oplacono: boolean) {
+    updateWorkspace((prev) => ({
+      ...prev,
+      podatkiOplacone: {
+        ...(prev.podatkiOplacone ?? {}),
+        [miesiac]: oplacono
+          ? { oplacono: true, oplaconoAt: new Date().toISOString(), oplaconoBy: userName ?? "" }
+          : { oplacono: false },
+      },
+    }));
+    logChange({
+      workspaceId: token,
+      userName: userName ?? "",
+      action: oplacono ? "podatki_oplacone" : "podatki_oplacone_cofniete",
+      entity: "month",
+      entityId: String(miesiac),
+      description: `${userName} ${oplacono ? "oznaczył podatki jako opłacone" : "cofnął opłacenie podatków"} za ${POLSKIE_MIESIACE[miesiac]} 2026`,
+      url: `/admin?zakladka=podatki`,
+    });
+  }
+
   return (
     <div className="min-h-screen text-ink">
       <Background />
@@ -480,6 +503,9 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
               </fieldset>
 
               {aktywnaZakladka === "raport" && <RaportTab data={data} />}
+              {aktywnaZakladka === "podatki" && isAdmin && (
+                <PodatkiDoZaplatyTab data={data} onToggle={oznaczPodatekOplacony} />
+              )}
               {aktywnaZakladka === "wiadomosci" && isAdmin && (
                 <WiadomosciTab
                   token={token}
@@ -500,7 +526,7 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
               )}
 
               {/* Zamknięcie / odblokowanie miesiąca (poza fieldsetem) */}
-              {isAdmin && aktywnaZakladka !== "raport" && aktywnaZakladka !== "wiadomosci" && aktywnaZakladka !== "legenda" && aktywnaZakladka !== "ustawienia" && (
+              {isAdmin && aktywnaZakladka !== "raport" && aktywnaZakladka !== "podatki" && aktywnaZakladka !== "wiadomosci" && aktywnaZakladka !== "legenda" && aktywnaZakladka !== "ustawienia" && (
                 <div className="space-y-2">
                   <div className="rounded-2xl border border-line bg-surface p-4">
                     <p className="mb-2 text-xs font-bold uppercase tracking-wider text-dim">

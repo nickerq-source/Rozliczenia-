@@ -420,11 +420,20 @@ export interface UstawieniaPodatkowe {
   pracownikPozostaleSkladkiZusMies: number; // pozostałe składki ZUS za pracownika
 }
 
+/** Oznaczenie podatków danego miesiąca jako opłacone (ręczny ślad admina). */
+export interface PodatekMiesiacaOplacony {
+  oplacono: boolean;
+  oplaconoAt?: string;
+  oplaconoBy?: string;
+}
+
 export interface WorkspaceData {
   miesiace: Partial<Record<MiesiącId, DaneMiesiaca>>;
   notatki?: Notatka[];
   ustawienia?: Partial<UstawieniaPodatkowe>;
   vehicles?: FuelVehicleConfig[];
+  // Które miesiące admin oznaczył jako „podatki opłacone" (tylko ślad, nie zmienia wyliczeń)
+  podatkiOplacone?: Partial<Record<MiesiącId, PodatekMiesiacaOplacony>>;
 }
 
 export interface WorkspaceState {

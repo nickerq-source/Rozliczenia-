@@ -9,6 +9,7 @@ export type TabName =
   | "zarobek"
   | "koszty"
   | "raport"
+  | "podatki"
   | "wiadomosci"
   | "legenda"
   | "ustawienia";
@@ -18,12 +19,13 @@ const TABS: { id: TabName; label: string; short: string }[] = [
   { id: "zarobek", label: "Zarobek", short: "Zarobek" },
   { id: "koszty", label: "Koszty", short: "Koszty" },
   { id: "raport", label: "Raport", short: "Raport" },
+  { id: "podatki", label: "Podatki", short: "Podatki" },
   { id: "wiadomosci", label: "Wiadomości", short: "Wiad." },
   { id: "legenda", label: "Legenda", short: "Legenda" },
   { id: "ustawienia", label: "Ustawienia", short: "Ustaw." },
 ];
 
-const TYLKO_ADMIN: TabName[] = ["wiadomosci", "legenda", "ustawienia"];
+const TYLKO_ADMIN: TabName[] = ["podatki", "wiadomosci", "legenda", "ustawienia"];
 
 interface TabSwitchProps {
   active: TabName;
