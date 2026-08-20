@@ -11,6 +11,7 @@ import { ZarobekTab } from "./tabs/ZarobekTab";
 import { KosztyTab } from "./tabs/KosztyTab";
 import { RaportTab } from "./tabs/RaportTab";
 import { PodatkiDoZaplatyTab } from "./tabs/PodatkiDoZaplatyTab";
+import { ZleceniaTab } from "./tabs/ZleceniaTab";
 import { WiadomosciTab } from "./tabs/WiadomosciTab";
 import { LegendaWyplaty } from "./LegendaWyplaty";
 import { UstawieniaTab } from "./tabs/UstawieniaTab";
@@ -211,7 +212,7 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
       setAktywnyMiesiac(m as MiesiącId);
     }
     const zNorm = z === "historia" ? "wiadomosci" : z; // alias starych linków
-    if (zNorm === "podsumowanie" || zNorm === "zarobek" || zNorm === "koszty" || zNorm === "raport" || zNorm === "podatki" || zNorm === "wiadomosci" || zNorm === "legenda" || zNorm === "ustawienia") {
+    if (zNorm === "podsumowanie" || zNorm === "zarobek" || zNorm === "koszty" || zNorm === "zlecenia" || zNorm === "raport" || zNorm === "podatki" || zNorm === "wiadomosci" || zNorm === "legenda" || zNorm === "ustawienia") {
       setAktywnaZakladka(zNorm as TabName);
     }
     if (zgl) setFocusZgloszenie(zgl);
@@ -497,6 +498,15 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
                       saveStatus={saveStatus}
                       focusZgloszenieId={focusZgloszenie}
                       onMoveTankowanie={moveTankowanieDoMiesiaca}
+                    />
+                  )}
+                  {aktywnaZakladka === "zlecenia" && isAdmin && (
+                    <ZleceniaTab
+                      miesiac={aktywnyMiesiac}
+                      data={data}
+                      onUpdate={handleUpdateMiesiac}
+                      token={token}
+                      userName={userName ?? ""}
                     />
                   )}
                 </div>

@@ -363,6 +363,31 @@ export interface DaneMiesiaca {
   zamkniety?: MonthLock;
   zgloszenia?: ZgloszenieDnia[]; // weryfikacje dni przez kierowcę
   obciazenia?: Obciazenie[]; // potrącenia z wypłaty kierowcy
+  zleceniaLog?: ZlecenieLog[]; // zlecenia wpisywane ręcznie (dla rozliczenia logistyka)
+}
+
+/** Pojazd/kierowca w rozliczeniu logistyka (200 zł/mies. za auto + atrybucja zleceń). */
+export interface LogistykAuto {
+  plate: string;
+  kierowca: string;
+}
+
+export const LOGISTYK_AUTA: LogistykAuto[] = [
+  { plate: "KK8108N", kierowca: "Damian" },
+  { plate: "KK2063A", kierowca: "Artur" },
+  { plate: "KK9848Y", kierowca: "Żenia" },
+];
+
+/** Pojedyncze zlecenie wpisane ręcznie przez admina (widoczne dla logistyka). */
+export interface ZlecenieLog {
+  id: string;
+  data: string; // ISO YYYY-MM-DD
+  plate: string; // tablica auta z LOGISTYK_AUTA
+  kierowca: string; // imię kierowcy (z auta)
+  wartoscNetto: number; // wartość zlecenia netto (podstawa 12%)
+  opis?: string;
+  dodanyBy?: string; // kto wpisał (PapiKing / PapiMinion)
+  createdAt?: string;
 }
 
 /** Kanał notatki: wewnętrzny (tylko admini) lub wspólny wątek z kierowcą */
