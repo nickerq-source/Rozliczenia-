@@ -54,6 +54,7 @@ function mergeWithDefaults(remote: WorkspaceData): WorkspaceData {
   merged.notatki = remote.notatki ?? [];
   merged.ustawienia = remote.ustawienia ?? {};
   merged.vehicles = remote.vehicles?.length ? remote.vehicles : [DEFAULT_FUEL_VEHICLE];
+  merged.podatkiOplacone = remote.podatkiOplacone; // ślad „podatki opłacone" — nie gubić przy ładowaniu
   return recalculateWorkspaceFuelChains(merged).data;
 }
 
