@@ -100,8 +100,8 @@ export function ZleceniaTab({
           <div className="min-w-0 flex-1">
             <CardTitle className="mb-1">Rozliczenie logistyka — {POLSKIE_MIESIACE[miesiac]} 2026</CardTitle>
             <p className="text-[11px] text-dim">
-              12% z netto zleceń + 5% z „na czysto po PIT i zdrowotnej” + 600 zł za auta (3×200).
-              Zlecenia Żeni liczone automatycznie z faktur. Szacunkowo — potwierdza księgowa.
+              12% z netto zleceń + 5% z „na czysto po PIT i zdrowotnej” (bez zleceń — te już dają 12%)
+              + 600 zł za auta (3×200). Zlecenia Żeni liczone automatycznie z faktur. Szacunkowo — potwierdza księgowa.
             </p>
           </div>
         </div>
@@ -114,7 +114,7 @@ export function ZleceniaTab({
         ) : (
         <div className="space-y-1">
           <Wiersz label={`12% z netto zleceń (${formatZl(rozliczenie.zleceniaNettoRazem)})`} value={rozliczenie.prowizja12} />
-          <Wiersz label={`5% z „na czysto" (${formatZl(rozliczenie.naCzysto)})`} value={rozliczenie.prowizja5} />
+          <Wiersz label={`5% z „na czysto" bez zleceń (${formatZl(rozliczenie.podstawa5)})`} value={rozliczenie.prowizja5} />
           <Wiersz label="Za auta (3 × 200 zł)" value={rozliczenie.autaBonus} />
           <div className="flex items-center justify-between border-t border-line pt-2 text-base font-extrabold">
             <span className="text-white">Razem dla logistyka</span>

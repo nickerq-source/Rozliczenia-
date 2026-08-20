@@ -35,7 +35,8 @@ export interface RozliczenieLogistyka {
   zleceniaReczne: ZlecenieLog[];
   zleceniaNettoRazem: number;
   prowizja12: number;
-  naCzysto: number; // na czysto po PIT i zdrowotnej (podstawa 5%)
+  naCzysto: number; // na czysto po PIT i zdrowotnej (cały miesiąc)
+  podstawa5: number; // na czysto MINUS netto zleceń (żeby nie liczyć zleceń podwójnie)
   prowizja5: number;
   autaBonus: number; // 600
   razem: number;
@@ -56,10 +57,15 @@ export function obliczLogistyka(data: WorkspaceData, miesiac: MiesiącId): Rozli
   }
   zeniNetto = r2(zeniNetto);
 
-  // 5% z na-czysto — dolicza się TYLKO do auta kierowcy (Żenia); Damian i Artur
-  // to admini, ich auta dostają jedynie 12% + 200.
+  const zleceniaNettoRazem = r2(reczne.reduce((s, z) => s + parseNum(z.wartoscNetto), 0) + zeniNetto);
+
+  // 5% liczymy z „na czysto" POMNIEJSZONEGO o netto zleceń — bo od zleceń logistyk
+  // dostaje już 12%, a te same zlecenia wchodzą do „na czysto" (nie liczymy ich
+  // drugi raz). Dolicza się TYLKO do auta kierowcy (Żenia); Damian i Artur to
+  // admini, ich auta dostają jedynie 12% + 200.
   const naCzysto = podatkiMiesiaca(data, miesiac).zyskPoPodatkach;
-  const prowizja5 = r2(Math.max(0, naCzysto) * LOGISTYK_PROWIZJA_ZYSK);
+  const podstawa5 = r2(Math.max(0, naCzysto - zleceniaNettoRazem));
+  const prowizja5 = r2(podstawa5 * LOGISTYK_PROWIZJA_ZYSK);
 
   const perAuto: LogistykAutoRozliczenie[] = LOGISTYK_AUTA.map((auto) => {
     const zAuta = reczne.filter((z) => z.plate === auto.plate);
@@ -85,7 +91,6 @@ export function obliczLogistyka(data: WorkspaceData, miesiac: MiesiącId): Rozli
     };
   });
 
-  const zleceniaNettoRazem = r2(perAuto.reduce((s, a) => s + a.zleceniaNetto, 0));
   const prowizja12 = r2(zleceniaNettoRazem * LOGISTYK_PROWIZJA_ZLECENIA);
   const autaBonus = r2(perAuto.reduce((s, a) => s + a.bonus, 0)); // 600
 
@@ -96,6 +101,7 @@ export function obliczLogistyka(data: WorkspaceData, miesiac: MiesiącId): Rozli
     zleceniaNettoRazem,
     prowizja12,
     naCzysto,
+    podstawa5,
     prowizja5,
     autaBonus,
     razem: r2(prowizja12 + prowizja5 + autaBonus),

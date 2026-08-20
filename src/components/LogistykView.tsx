@@ -107,8 +107,8 @@ export function LogistykView({ name }: { name: string }) {
                 </div>
               </div>
               <p className="mt-2 text-[11px] text-dim">
-                12% z netto zleceń + 5% z „na czysto po PIT i zdrowotnej” + 600 zł za auta (3×200).
-                Wyliczenia szacunkowe — potwierdza księgowa.
+                12% z netto zleceń + 5% z „na czysto po PIT i zdrowotnej” (bez zleceń — te już dają 12%)
+                + 600 zł za auta (3×200). Wyliczenia szacunkowe — potwierdza księgowa.
               </p>
             </Card>
 
@@ -168,7 +168,7 @@ function MiesiacCard({ m }: { m: RozliczenieLogistyka }) {
 
       <div className="space-y-1 text-sm">
         <Wiersz label={`12% z netto zleceń (${formatZl(m.zleceniaNettoRazem)})`} value={m.prowizja12} />
-        <Wiersz label={`5% z „na czysto” (${formatZl(m.naCzysto)})`} value={m.prowizja5} />
+        <Wiersz label={`5% z „na czysto” bez zleceń (${formatZl(m.podstawa5)})`} value={m.prowizja5} />
         <Wiersz label="Za auta (3 × 200 zł)" value={m.autaBonus} />
       </div>
 
