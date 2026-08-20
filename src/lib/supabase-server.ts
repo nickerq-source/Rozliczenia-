@@ -35,7 +35,7 @@ export interface Profile {
   id: string;
   email: string;
   name: string;
-  role: "admin" | "driver";
+  role: "admin" | "driver" | "logistyk";
   workspace_id: string;
 }
 

@@ -10,5 +10,6 @@ export default async function DashboardPage() {
 
   if (!profile) redirect("/login");
   if (profile.role === "driver") redirect("/driver");
+  if (profile.role === "logistyk") redirect("/logistyk");
   redirect("/admin");
 }

@@ -10,7 +10,7 @@ export default async function AdminPage() {
   const profile = await getSessionProfile();
 
   if (!profile) redirect("/login");
-  if (profile.role !== "admin") redirect("/driver");
+  if (profile.role !== "admin") redirect("/dashboard");
 
   return (
     <WorkspaceView

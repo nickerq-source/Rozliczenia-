@@ -10,7 +10,7 @@ export default async function DriverPage() {
   const profile = await getSessionProfile();
 
   if (!profile) redirect("/login");
-  if (profile.role !== "driver") redirect("/admin");
+  if (profile.role !== "driver") redirect("/dashboard");
 
   return <DriverView name={profile.name} />;
 }
