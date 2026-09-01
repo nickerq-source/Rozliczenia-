@@ -137,6 +137,7 @@ export interface FakturaWeek {
   customRange?: { od: string; do: string } | null; // ISO "YYYY-MM-DD"
   status?: InvoiceStatus; // domyślnie do_wystawienia
   issueDate?: string; // ISO "YYYY-MM-DD"; termin płatności = +21 dni
+  transferredToAlior?: boolean; // środki z faktury przelane na konto Alior Bank
   // VAT sprzedaży: tryb kwoty i stawka — domyślne z ustawień (netto, 23%)
   amountMode?: "netto" | "brutto";
   vatRate?: number; // np. 0.23

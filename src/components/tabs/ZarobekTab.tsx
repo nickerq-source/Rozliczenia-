@@ -504,6 +504,37 @@ export function ZarobekTab({
     });
   }
 
+  function setTransferredToAlior(fakturaId: string, transferredToAlior: boolean) {
+    const faktura = faktury.find((invoice) => invoice.id === fakturaId);
+    if (!faktura) return;
+    const weekNumber = (faktura.weekIndex ?? 0) + 1;
+
+    onUpdate((prev) => {
+      const newFaktury = normalizeMonthInvoices(prev.faktury, miesiac);
+      const idx = newFaktury.findIndex((invoice) => invoice.id === fakturaId);
+      if (idx >= 0) {
+        newFaktury[idx] = { ...newFaktury[idx], transferredToAlior };
+      }
+      return { ...prev, faktury: newFaktury };
+    });
+
+    logChange({
+      workspaceId: token,
+      userName,
+      action: transferredToAlior
+        ? "faktura_przelana_na_alior"
+        : "faktura_cofnieto_przelew_na_alior",
+      entity: "invoice",
+      entityId: faktura.id,
+      oldValue: { transferredToAlior: faktura.transferredToAlior ?? false },
+      newValue: { transferredToAlior },
+      description: transferredToAlior
+        ? `${userName} oznaczył fakturę (tydzień ${weekNumber}) jako przelaną na konto Alior Bank`
+        : `${userName} cofnął oznaczenie przelewu faktury (tydzień ${weekNumber}) na konto Alior Bank`,
+      url: `/admin?miesiac=${miesiac}&zakladka=zarobek`,
+    });
+  }
+
   const sumaFaktur = obliczPrzychod(faktury, ustawienia);
   const invoiceCountByWeek = new Map<number, number>();
   const invoicePositionById = new Map<string, number>();
@@ -672,6 +703,32 @@ export function ZarobekTab({
                   </span>
                 )}
               </div>
+
+              <label
+                className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border px-3 py-2.5 transition-colors ${
+                  faktura.transferredToAlior
+                    ? "border-green-500/50 bg-green-soft text-green-200"
+                    : "border-line bg-surface2 text-ink hover:border-amber-brand/50"
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={faktura.transferredToAlior ?? false}
+                  onChange={(e) => setTransferredToAlior(faktura.id, e.target.checked)}
+                  className="peer sr-only"
+                />
+                <span
+                  aria-hidden="true"
+                  className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-amber-brand peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-surface ${
+                    faktura.transferredToAlior
+                      ? "border-green-400 bg-green-500 text-black"
+                      : "border-dim bg-input text-transparent"
+                  }`}
+                >
+                  <IconCheck size={14} />
+                </span>
+                <span className="text-sm font-semibold">Przelane na konto Alior Bank</span>
+              </label>
 
               {/* Podpis importu PDF — zielona pill, klik otwiera podgląd */}
               {faktura.pdfImport && (
