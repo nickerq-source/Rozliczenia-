@@ -1,5 +1,5 @@
 // API tylko dla roli „logistyk": zwraca jego rozliczenie za każdy miesiąc
-// (12% ze zleceń + 5% z na-czysto + 600 za auta). Logistyk NIE ma RLS do
+// według stawek i składników ustawionych przez administratora. Logistyk NIE ma RLS do
 // workspaces — dane czytamy service-rolem i zwracamy wyłącznie to, co jego
 // dotyczy (bez pełnych finansów firmy).
 

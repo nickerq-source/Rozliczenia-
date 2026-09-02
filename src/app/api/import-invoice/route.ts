@@ -7,6 +7,7 @@ import fs from "fs";
 import path from "path";
 import { parseInvoicePDF } from "@/lib/invoice";
 import { KIEROWCA, TYP_TRANSPORTU } from "@/lib/config";
+import { getSessionProfile } from "@/lib/supabase-server";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -105,6 +106,12 @@ async function extractTextFromPDF(buffer: Buffer): Promise<string> {
 }
 
 export async function POST(req: NextRequest) {
+  const profile = await getSessionProfile();
+  if (!profile) return NextResponse.json({ error: "Brak sesji" }, { status: 401 });
+  if (profile.role !== "admin") {
+    return NextResponse.json({ error: "Brak dostępu" }, { status: 403 });
+  }
+
   let formData: FormData;
   try {
     formData = await req.formData();

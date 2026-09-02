@@ -6,10 +6,15 @@ export function LogistykProwizja5Breakdown({
 }: {
   rozliczenie: RozliczenieLogistyka;
 }) {
+  const stawkaNaCzysto = rozliczenie.ustawienia.prowizjaNaCzystoProcent;
+  const stawkaZlecen = rozliczenie.ustawienia.prowizjaZlecenProcent;
+
   return (
     <div className="my-2 border-y border-line/60 py-2.5">
       <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-amber-brand">
-        Jak liczymy prowizję 5%
+        {rozliczenie.ustawienia.liczProwizjeNaCzysto
+          ? `Jak liczymy prowizję ${stawkaNaCzysto}%`
+          : "Prowizja od kwoty na czysto jest wyłączona"}
       </p>
       <div className="space-y-1.5 text-xs">
         <BreakdownRow
@@ -17,12 +22,14 @@ export function LogistykProwizja5Breakdown({
           value={rozliczenie.naCzysto}
         />
         <BreakdownRow
-          label="Minus zlecenia Żeni objęte już prowizją 12%"
-          value={rozliczenie.zleceniaZeniNetto}
+          label={rozliczenie.ustawienia.liczProwizjeZlecen
+            ? `Minus zlecenia Żeni objęte już prowizją ${stawkaZlecen}%`
+            : "Prowizja od zleceń wyłączona — bez pomniejszenia"}
+          value={rozliczenie.zleceniaZeniOdjeteOdPodstawy}
           prefix="−"
         />
-        <BreakdownRow label="Podstawa prowizji 5%" value={rozliczenie.podstawa5} strong />
-        <BreakdownRow label="5% dla logistyka" value={rozliczenie.prowizja5} accent strong />
+        <BreakdownRow label={`Podstawa prowizji ${stawkaNaCzysto}%`} value={rozliczenie.podstawa5} strong />
+        <BreakdownRow label={`${stawkaNaCzysto}% dla logistyka`} value={rozliczenie.prowizja5} accent strong />
       </div>
     </div>
   );

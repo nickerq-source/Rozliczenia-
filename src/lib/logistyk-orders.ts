@@ -1,7 +1,14 @@
-import type { FakturaWeek, PDFImportDiagnosticRow, ZlecenieLog } from "./types";
+import type {
+  FakturaWeek,
+  FakturaZlecenLog,
+  PDFImportData,
+  PDFImportDiagnosticRow,
+  ZlecenieLog,
+} from "./types";
 
 const ARTUR = { plate: "KK2063A", kierowca: "Artur" } as const;
 const ZENIA = { plate: "KK9848Y", kierowca: "Żenia" } as const;
+type AutomaticDriver = { plate: string; kierowca: string };
 
 function normalize(value: string | undefined | null): string {
   return String(value ?? "")
@@ -12,7 +19,7 @@ function normalize(value: string | undefined | null): string {
     .toUpperCase();
 }
 
-function resolveAuto(row: PDFImportDiagnosticRow): typeof ARTUR | typeof ZENIA | null {
+function resolveAuto(row: PDFImportDiagnosticRow): AutomaticDriver | null {
   const driver = normalize(row.driverName);
   const route = normalize(row.route);
 
@@ -26,9 +33,7 @@ function resolveAuto(row: PDFImportDiagnosticRow): typeof ARTUR | typeof ZENIA |
   return null;
 }
 
-function inSelectedRange(invoice: FakturaWeek, date: string): boolean {
-  const pdf = invoice.pdfImport;
-  if (!pdf) return false;
+function inSelectedRange(pdf: PDFImportData, date: string): boolean {
   const from = pdf.filters?.dateFrom ?? pdf.invoiceImportDateFrom ?? pdf.zakresOd;
   const to = pdf.filters?.dateTo ?? pdf.invoiceImportDateTo ?? pdf.zakresDo;
   return (!from || date >= from) && (!to || date <= to);
@@ -67,9 +72,10 @@ function addonExclusionReason(row: PDFImportDiagnosticRow): string | null {
 }
 
 function buildAutomaticOrder(
-  invoice: FakturaWeek,
+  sourceInvoiceId: string,
+  sourceFileName: string | undefined,
   row: PDFImportDiagnosticRow,
-  auto: typeof ARTUR | typeof ZENIA
+  auto: AutomaticDriver
 ): ZlecenieLog {
   const notes = String(row.notes ?? "").trim();
   const fullDescription = String(row.additionalDescription ?? "").trim();
@@ -77,18 +83,18 @@ function buildAutomaticOrder(
   const orderLabel = row.orderNumber ? `Zlecenie ${row.orderNumber}` : "Zlecenie z faktury";
 
   return {
-    id: automaticId(invoice.id, row),
+    id: automaticId(sourceInvoiceId, row),
     data: row.date ?? "",
     plate: auto.plate,
     kierowca: auto.kierowca,
     wartoscNetto: Math.round(Number(row.cost) * 100) / 100,
     opis: fullDescription || usableNotes || orderLabel,
     source: "pdf",
-    sourceInvoiceId: invoice.id,
+    sourceInvoiceId,
     sourceOrderNumber: row.orderNumber || undefined,
     sourceNotes: notes || undefined,
     sourceDescription: fullDescription || undefined,
-    sourceFileName: invoice.pdfImport?.nazwaPliku || undefined,
+    sourceFileName,
   };
 }
 
@@ -97,32 +103,73 @@ export interface AutomaticLogisticsOrdersResult {
   excluded: ZlecenieLog[];
 }
 
-/** Buduje pojedyncze zlecenia Artura i Żeni bezpośrednio z pozycji PDF. */
+function isOrderRow(row: PDFImportDiagnosticRow): boolean {
+  const notes = String(row.notes ?? "").trim();
+  const description = String(row.additionalDescription ?? "").trim();
+  return row.isAdditional === true || notes.length > 0 || description.length > 0;
+}
+
+function registerOrder(
+  includedById: Map<string, ZlecenieLog>,
+  excludedById: Map<string, ZlecenieLog>,
+  sourceInvoiceId: string,
+  sourceFileName: string | undefined,
+  row: PDFImportDiagnosticRow,
+  auto: AutomaticDriver
+) {
+  const order = buildAutomaticOrder(sourceInvoiceId, sourceFileName, row, auto);
+  const exclusionReason = addonExclusionReason(row);
+  if (exclusionReason) {
+    excludedById.set(order.id, { ...order, sourceExclusionReason: exclusionReason });
+    includedById.delete(order.id);
+  } else if (!excludedById.has(order.id)) {
+    includedById.set(order.id, order);
+  }
+}
+
+/** Buduje zlecenia z faktur wspólnych Artura/Żeni oraz osobnych faktur Damiana. */
 export function extractAutomaticLogisticsOrderResult(
-  invoices: FakturaWeek[]
+  invoices: FakturaWeek[],
+  dedicatedInvoices: FakturaZlecenLog[] = []
 ): AutomaticLogisticsOrdersResult {
   const includedById = new Map<string, ZlecenieLog>();
   const excludedById = new Map<string, ZlecenieLog>();
 
   for (const invoice of invoices) {
     for (const row of invoice.pdfImport?.sourceRows ?? []) {
-      const notes = String(row.notes ?? "").trim();
-      const description = String(row.additionalDescription ?? "").trim();
-      const isOrder = row.isAdditional === true || notes.length > 0 || description.length > 0;
       const date = row.date ?? "";
       const amount = Number(row.cost);
       const auto = resolveAuto(row);
-      if (!isOrder || !date || !Number.isFinite(amount) || amount <= 0 || !auto) continue;
-      if (!inSelectedRange(invoice, date)) continue;
+      if (!isOrderRow(row) || !date || !Number.isFinite(amount) || amount <= 0 || !auto) continue;
+      if (!invoice.pdfImport || !inSelectedRange(invoice.pdfImport, date)) continue;
 
-      const order = buildAutomaticOrder(invoice, row, auto);
-      const exclusionReason = addonExclusionReason(row);
-      if (exclusionReason) {
-        excludedById.set(order.id, { ...order, sourceExclusionReason: exclusionReason });
-        includedById.delete(order.id);
-      } else if (!excludedById.has(order.id)) {
-        includedById.set(order.id, order);
-      }
+      registerOrder(
+        includedById,
+        excludedById,
+        invoice.id,
+        invoice.pdfImport.nazwaPliku,
+        row,
+        auto
+      );
+    }
+  }
+
+  for (const invoice of dedicatedInvoices) {
+    const auto = { plate: invoice.plate, kierowca: invoice.kierowca };
+    for (const row of invoice.pdfImport.sourceRows ?? []) {
+      const date = row.date ?? "";
+      const amount = Number(row.cost);
+      if (!isOrderRow(row) || !date || !Number.isFinite(amount) || amount <= 0) continue;
+      if (!inSelectedRange(invoice.pdfImport, date)) continue;
+
+      registerOrder(
+        includedById,
+        excludedById,
+        invoice.id,
+        invoice.nazwaPliku,
+        row,
+        auto
+      );
     }
   }
 
@@ -135,8 +182,11 @@ export function extractAutomaticLogisticsOrderResult(
   };
 }
 
-export function extractAutomaticLogisticsOrders(invoices: FakturaWeek[]): ZlecenieLog[] {
-  return extractAutomaticLogisticsOrderResult(invoices).included;
+export function extractAutomaticLogisticsOrders(
+  invoices: FakturaWeek[],
+  dedicatedInvoices: FakturaZlecenLog[] = []
+): ZlecenieLog[] {
+  return extractAutomaticLogisticsOrderResult(invoices, dedicatedInvoices).included;
 }
 
 function duplicateKey(order: ZlecenieLog): string {

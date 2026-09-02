@@ -14,6 +14,7 @@
     "test:final-cash": "node --experimental-strip-types --test tests/final-cash-calculation.test.mjs",
     "test:logistyk": "node --experimental-strip-types --test tests/logistyk-calculation.test.mjs",
     "test:logistyk-orders": "node --experimental-strip-types --test tests/logistyk-orders.test.mjs",
+    "test:logistyk-settings": "node --experimental-strip-types --test tests/logistyk-settings.test.mjs",
     "test:invoice-description": "node --experimental-strip-types --test tests/invoice-additional-description.test.mjs",
     "test:accounting": "node --experimental-strip-types --test tests/accounting-consistency.test.mjs"
   },

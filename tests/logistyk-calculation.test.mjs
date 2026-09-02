@@ -21,3 +21,14 @@ test("niepoprawne i ujemne wartości nie tworzą ujemnej prowizji", () => {
     commission: 0,
   });
 });
+
+test("zmieniona stawka i wyłączenie prowizji przeliczają wynik", () => {
+  assert.deepEqual(calculateLogisticsProfitShare(10_000, 2_000, 0.04), {
+    base: 8_000,
+    commission: 320,
+  });
+  assert.deepEqual(calculateLogisticsProfitShare(10_000, 0, 0), {
+    base: 10_000,
+    commission: 0,
+  });
+});

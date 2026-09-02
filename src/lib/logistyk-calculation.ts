@@ -5,8 +5,8 @@ function nonNegative(value: number): number {
 }
 
 /**
- * Prowizja 5% jest liczona od końcowej gotówki firmy po wszystkich podatkach,
- * pomniejszonej wyłącznie o zlecenia Żeni, które dostały już prowizję 12%.
+ * Prowizja od wyniku firmy jest liczona od końcowej gotówki po wszystkich podatkach,
+ * pomniejszonej wyłącznie o zlecenia Żeni, które dostały już prowizję od zleceń.
  * Ręczne zlecenia pozostałych aut nie wchodzą do wyniku firmy z faktur, więc
  * nie wolno odejmować ich od tej podstawy drugi raz.
  */

@@ -366,9 +366,32 @@ export interface DaneMiesiaca {
   zgloszenia?: ZgloszenieDnia[]; // weryfikacje dni przez kierowcę
   obciazenia?: Obciazenie[]; // potrącenia z wypłaty kierowcy
   zleceniaLog?: ZlecenieLog[]; // zlecenia wpisywane ręcznie (dla rozliczenia logistyka)
+  fakturyZlecenLog?: FakturaZlecenLog[]; // osobne faktury zleceń, np. faktury Damiana
+  logistykUstawienia?: LogistykUstawienia; // stawki i włączniki rozliczenia dla miesiąca
 }
 
-/** Pojazd/kierowca w rozliczeniu logistyka (200 zł/mies. za auto + atrybucja zleceń). */
+export interface LogistykUstawienia {
+  liczProwizjeZlecen: boolean;
+  prowizjaZlecenProcent: number;
+  liczProwizjeNaCzysto: boolean;
+  prowizjaNaCzystoProcent: number;
+  liczBonusZaAuta: boolean;
+  bonusZaAuto: number;
+  liczFakturyDamiana: boolean;
+}
+
+export interface FakturaZlecenLog {
+  id: string;
+  nazwaPliku: string;
+  numerFaktury: string | null;
+  plate: string;
+  kierowca: string;
+  importedAt: string;
+  importedBy?: string;
+  pdfImport: PDFImportData;
+}
+
+/** Pojazd/kierowca w rozliczeniu logistyka (konfigurowalny bonus + atrybucja zleceń). */
 export interface LogistykAuto {
   plate: string;
   kierowca: string;

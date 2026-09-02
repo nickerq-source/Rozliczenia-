@@ -1,14 +1,20 @@
 "use client";
 
-// Zakładka „Zlecenia" (admin) — wpisywanie zleceń (data, auto/kierowca, netto)
-// oraz rozliczenie logistyka za miesiąc: 12% z netto zleceń + 5% z „na czysto"
-// + 600 zł za auta. Zlecenia Żeni doklejają się automatycznie z faktur.
+// Zakładka „Zlecenia" (admin): rozliczenie, osobne faktury Damiana i ustawienia miesiąca.
 
 import { useMemo, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { LOGISTYK_AUTA } from "@/lib/types";
-import type { DaneMiesiaca, MiesiącId, WorkspaceData, ZlecenieLog } from "@/lib/types";
+import type {
+  DaneMiesiaca,
+  FakturaZlecenLog,
+  LogistykUstawienia,
+  MiesiącId,
+  WorkspaceData,
+  ZlecenieLog,
+} from "@/lib/types";
 import { obliczLogistyka, LOGISTYK_START_MONTH } from "@/lib/logistyk";
+import { getLogistykUstawienia } from "@/lib/logistyk-settings";
 import { formatZl, formatZlCaly, parseNum } from "@/lib/business-logic";
 import { POLSKIE_MIESIACE } from "@/lib/dates";
 import { logChange } from "@/lib/audit";
@@ -18,6 +24,14 @@ import { IconPackage, IconUsers, IconX, IconPlus } from "../ui/icons";
 import { cn } from "@/lib/utils";
 import { LogistykProwizja5Breakdown } from "../LogistykProwizja5Breakdown";
 import { LogistykPdfOrderRow } from "../LogistykPdfOrderRow";
+import { LogistykInvoicesPanel } from "../LogistykInvoicesPanel";
+import { LogistykSettingsPanel } from "../LogistykSettingsPanel";
+
+type SekcjaZlecen = "rozliczenie" | "faktury" | "ustawienia";
+
+function procent(value: number): string {
+  return value.toLocaleString("pl-PL", { maximumFractionDigits: 2 });
+}
 
 function todayInMonth(miesiac: MiesiącId): string {
   const now = new Date();
@@ -50,9 +64,15 @@ export function ZleceniaTab({
   const [fPlate, setFPlate] = useState(LOGISTYK_AUTA[0].plate);
   const [fNetto, setFNetto] = useState<number>(0);
   const [fOpis, setFOpis] = useState("");
+  const [sekcja, setSekcja] = useState<SekcjaZlecen>("rozliczenie");
 
   const dane = data.miesiace?.[miesiac];
   const reczne = dane?.zleceniaLog ?? [];
+  const fakturyZlecenLog = dane?.fakturyZlecenLog ?? [];
+  const ustawieniaLogistyka = useMemo(
+    () => getLogistykUstawienia(dane?.logistykUstawienia),
+    [dane?.logistykUstawienia]
+  );
   const rozliczenie = useMemo(() => obliczLogistyka(data, miesiac), [data, miesiac]);
   const pominieteDuplikatyIds = useMemo(
     () => new Set(rozliczenie.pominieteDuplikatyReczne.map((order) => order.id)),
@@ -145,10 +165,94 @@ export function ZleceniaTab({
     });
   }
 
+  function dodajFaktureDamiana(invoice: FakturaZlecenLog) {
+    onUpdate((prev) => ({
+      ...prev,
+      fakturyZlecenLog: [...(prev.fakturyZlecenLog ?? []), { ...invoice, importedBy: userName }],
+    }));
+    logChange({
+      workspaceId: token,
+      userName,
+      action: "faktura_zlecen_damiana_dodana",
+      entity: "logistics_invoice",
+      entityId: invoice.id,
+      newValue: {
+        numerFaktury: invoice.numerFaktury,
+        liczbaZlecen: invoice.pdfImport.sourceRows?.length ?? 0,
+        netto: invoice.pdfImport.zleceniaNetto ?? invoice.pdfImport.netto,
+      },
+      description: `${userName} dodał fakturę zleceń Damiana ${invoice.numerFaktury || invoice.nazwaPliku}`,
+      url: `/admin?miesiac=${miesiac}&zakladka=zlecenia`,
+    });
+  }
+
+  function usunFaktureDamiana(invoice: FakturaZlecenLog) {
+    onUpdate((prev) => ({
+      ...prev,
+      fakturyZlecenLog: (prev.fakturyZlecenLog ?? []).filter((item) => item.id !== invoice.id),
+    }));
+    logChange({
+      workspaceId: token,
+      userName,
+      action: "faktura_zlecen_damiana_usunieta",
+      entity: "logistics_invoice",
+      entityId: invoice.id,
+      oldValue: {
+        numerFaktury: invoice.numerFaktury,
+        netto: invoice.pdfImport.zleceniaNetto ?? invoice.pdfImport.netto,
+      },
+      description: `${userName} usunął fakturę zleceń Damiana ${invoice.numerFaktury || invoice.nazwaPliku}`,
+      url: `/admin?miesiac=${miesiac}&zakladka=zlecenia`,
+    });
+  }
+
+  function zapiszUstawieniaLogistyka(settings: LogistykUstawienia) {
+    const normalized = getLogistykUstawienia(settings);
+    onUpdate((prev) => ({ ...prev, logistykUstawienia: normalized }));
+    logChange({
+      workspaceId: token,
+      userName,
+      action: "ustawienia_logistyka_zmienione",
+      entity: "month",
+      entityId: String(miesiac),
+      oldValue: ustawieniaLogistyka,
+      newValue: normalized,
+      description: `${userName} zmienił ustawienia rozliczenia logistyka za ${POLSKIE_MIESIACE[miesiac]} 2026`,
+      url: `/admin?miesiac=${miesiac}&zakladka=zlecenia`,
+    });
+  }
+
   const inputCls = "w-full rounded-lg border border-line bg-input px-3 py-2 text-sm text-ink placeholder:text-dim/40";
 
   return (
     <div className="space-y-4">
+      <div className="grid grid-cols-3 gap-1 rounded-xl border border-line bg-surface p-1">
+        <SekcjaButton active={sekcja === "rozliczenie"} onClick={() => setSekcja("rozliczenie")}>
+          Rozliczenie
+        </SekcjaButton>
+        <SekcjaButton active={sekcja === "faktury"} onClick={() => setSekcja("faktury")}>
+          Faktury Damiana
+        </SekcjaButton>
+        <SekcjaButton active={sekcja === "ustawienia"} onClick={() => setSekcja("ustawienia")}>
+          Ustawienia
+        </SekcjaButton>
+      </div>
+
+      {sekcja === "faktury" ? (
+        <LogistykInvoicesPanel
+          invoices={fakturyZlecenLog}
+          enabled={ustawieniaLogistyka.liczFakturyDamiana}
+          onAdd={dodajFaktureDamiana}
+          onDelete={usunFaktureDamiana}
+        />
+      ) : sekcja === "ustawienia" ? (
+        <LogistykSettingsPanel
+          miesiac={miesiac}
+          settings={ustawieniaLogistyka}
+          onSave={zapiszUstawieniaLogistyka}
+        />
+      ) : (
+      <>
       {/* Rozliczenie logistyka */}
       <Card>
         <div className="mb-3 flex items-start gap-2">
@@ -156,9 +260,8 @@ export function ZleceniaTab({
           <div className="min-w-0 flex-1">
             <CardTitle className="mb-1">Rozliczenie logistyka — {POLSKIE_MIESIACE[miesiac]} 2026</CardTitle>
             <p className="text-[11px] text-dim">
-              12% z netto wszystkich zleceń + 5% z kwoty, która została po wszystkich kosztach i podatkach,
-              po odjęciu zleceń Żeni objętych już prowizją 12% + 600 zł za auta (3×200).
-              Zlecenia Żeni są liczone automatycznie z faktur. Szacunkowo — potwierdza księgowa.
+              Składniki wynagrodzenia są liczone według ustawień tego miesiąca. Zlecenia Artura i Żeni
+              są pobierane z faktur wspólnych, a Damiana z jego osobnych faktur. Szacunkowo — potwierdza księgowa.
             </p>
           </div>
         </div>
@@ -170,9 +273,15 @@ export function ZleceniaTab({
           </p>
         ) : (
         <div className="space-y-1">
-          <Wiersz label={`12% z netto zleceń (${formatZl(rozliczenie.zleceniaNettoRazem)})`} value={rozliczenie.prowizja12} />
+          <Wiersz
+            label={`${procent(rozliczenie.ustawienia.prowizjaZlecenProcent)}% z netto zleceń (${formatZl(rozliczenie.zleceniaNettoRazem)})${rozliczenie.ustawienia.liczProwizjeZlecen ? "" : " — wyłączone"}`}
+            value={rozliczenie.prowizja12}
+          />
           <LogistykProwizja5Breakdown rozliczenie={rozliczenie} />
-          <Wiersz label="Za auta (3 × 200 zł)" value={rozliczenie.autaBonus} />
+          <Wiersz
+            label={`Za auta (${LOGISTYK_AUTA.length} × ${formatZl(rozliczenie.ustawienia.bonusZaAuto)})${rozliczenie.ustawienia.liczBonusZaAuta ? "" : " — wyłączone"}`}
+            value={rozliczenie.autaBonus}
+          />
           <div className="flex items-center justify-between border-t border-line pt-2 text-base font-extrabold">
             <span className="text-white">Razem dla logistyka</span>
             <span className="tabular-nums text-amber-brand">{formatZl(rozliczenie.razem)}</span>
@@ -190,10 +299,10 @@ export function ZleceniaTab({
               <div className="mt-2 space-y-0.5 text-[11px]">
                 <div className="flex justify-between"><span className="text-dim">Zleceń</span><span className="tabular-nums text-ink">{a.liczbaZlecen}</span></div>
                 <div className="flex justify-between"><span className="text-dim">Netto zleceń</span><span className="tabular-nums text-ink">{formatZl(a.zleceniaNetto)}</span></div>
-                <div className="flex justify-between"><span className="text-dim">12% ze zleceń</span><span className="tabular-nums text-ink">{formatZl(a.prowizja12)}</span></div>
+                <div className="flex justify-between"><span className="text-dim">{procent(rozliczenie.ustawienia.prowizjaZlecenProcent)}% ze zleceń</span><span className="tabular-nums text-ink">{formatZl(a.prowizja12)}</span></div>
                 <div className="flex justify-between"><span className="text-dim">Za auto</span><span className="tabular-nums text-green-300">{formatZl(a.bonus)}</span></div>
                 {a.prowizja5 > 0 && (
-                  <div className="flex justify-between"><span className="text-dim">5% z „na czysto”</span><span className="tabular-nums text-ink">{formatZl(a.prowizja5)}</span></div>
+                  <div className="flex justify-between"><span className="text-dim">{procent(rozliczenie.ustawienia.prowizjaNaCzystoProcent)}% z „na czysto”</span><span className="tabular-nums text-ink">{formatZl(a.prowizja5)}</span></div>
                 )}
                 <div className="flex justify-between border-t border-line/60 pt-1 font-bold"><span className="text-white">Łącznie za auto</span><span className="tabular-nums text-amber-brand">{formatZl(a.lacznie)}</span></div>
                 {a.automatyczne && <p className="text-[10px] text-amber-brand">kierowca · zlecenia z faktur</p>}
@@ -213,7 +322,7 @@ export function ZleceniaTab({
           </CardTitle>
         </div>
         <p className="mb-2 text-[11px] text-dim">
-          Zlecenia Artura i Żeni są pobierane z pozycji PDF. Rozwiń pozycję, aby zobaczyć pełny opis.
+          Zlecenia Artura, Żeni i Damiana są pobierane z pozycji PDF. Rozwiń pozycję, aby zobaczyć pełny opis.
         </p>
         {rozliczenie.zleceniaAutomatyczne.length === 0 ? (
           <p className="rounded-xl border border-line bg-surface2/60 px-3 py-6 text-center text-sm text-dim">
@@ -353,7 +462,32 @@ export function ZleceniaTab({
           </div>
         )}
       </Card>
+      </>
+      )}
     </div>
+  );
+}
+
+function SekcjaButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "min-w-0 rounded-lg px-2 py-2 text-[11px] font-bold leading-tight sm:text-xs",
+        active ? "bg-amber-brand text-amber-ink" : "text-dim hover:bg-surface2 hover:text-ink"
+      )}
+    >
+      {children}
+    </button>
   );
 }
 

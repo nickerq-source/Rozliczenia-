@@ -1,7 +1,6 @@
 "use client";
 
-// Panel logistyka: zakładki (Wszystko + miesiące od sierpnia), w każdej
-// jego rozliczenie (12% ze zleceń + 5% z na-czysto + 600 za auta). Read-only.
+// Panel logistyka: zakładki miesięczne i rozliczenie według ustawień administratora. Read-only.
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -18,6 +17,10 @@ import { LogistykPdfOrderRow } from "./LogistykPdfOrderRow";
 
 const ddmm = (iso: string) => (/^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso.slice(8, 10)}.${iso.slice(5, 7)}` : iso);
 type Zakladka = "wszystko" | MiesiącId;
+
+function procent(value: number): string {
+  return value.toLocaleString("pl-PL", { maximumFractionDigits: 2 });
+}
 
 export function LogistykView({ name }: { name: string }) {
   const router = useRouter();
@@ -109,8 +112,7 @@ export function LogistykView({ name }: { name: string }) {
                 </div>
               </div>
               <p className="mt-2 text-[11px] text-dim">
-                12% z netto wszystkich zleceń + 5% z końcowej kwoty po wszystkich kosztach i podatkach,
-                po odjęciu zleceń Żeni objętych już prowizją 12% + 600 zł za auta (3×200).
+                Każdy miesiąc jest liczony według stawek i składników ustawionych przez administratora.
                 Wyliczenia szacunkowe — potwierdza księgowa.
               </p>
             </Card>
@@ -170,9 +172,15 @@ function MiesiacCard({ m }: { m: RozliczenieLogistyka }) {
       </div>
 
       <div className="space-y-1 text-sm">
-        <Wiersz label={`12% z netto zleceń (${formatZl(m.zleceniaNettoRazem)})`} value={m.prowizja12} />
+        <Wiersz
+          label={`${procent(m.ustawienia.prowizjaZlecenProcent)}% z netto zleceń (${formatZl(m.zleceniaNettoRazem)})${m.ustawienia.liczProwizjeZlecen ? "" : " — wyłączone"}`}
+          value={m.prowizja12}
+        />
         <LogistykProwizja5Breakdown rozliczenie={m} />
-        <Wiersz label="Za auta (3 × 200 zł)" value={m.autaBonus} />
+        <Wiersz
+          label={`Za auta (${m.perAuto.length} × ${formatZl(m.ustawienia.bonusZaAuto)})${m.ustawienia.liczBonusZaAuta ? "" : " — wyłączone"}`}
+          value={m.autaBonus}
+        />
       </div>
 
       <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -183,10 +191,10 @@ function MiesiacCard({ m }: { m: RozliczenieLogistyka }) {
             <div className="mt-2 space-y-0.5 text-[11px]">
               <div className="flex justify-between"><span className="text-dim">Zleceń</span><span className="tabular-nums text-ink">{a.liczbaZlecen}</span></div>
               <div className="flex justify-between"><span className="text-dim">Netto zleceń</span><span className="tabular-nums text-ink">{formatZl(a.zleceniaNetto)}</span></div>
-              <div className="flex justify-between"><span className="text-dim">12% ze zleceń</span><span className="tabular-nums text-ink">{formatZl(a.prowizja12)}</span></div>
+              <div className="flex justify-between"><span className="text-dim">{procent(m.ustawienia.prowizjaZlecenProcent)}% ze zleceń</span><span className="tabular-nums text-ink">{formatZl(a.prowizja12)}</span></div>
               <div className="flex justify-between"><span className="text-dim">Za auto</span><span className="tabular-nums text-green-300">{formatZl(a.bonus)}</span></div>
               {a.prowizja5 > 0 && (
-                <div className="flex justify-between"><span className="text-dim">5% z „na czysto”</span><span className="tabular-nums text-ink">{formatZl(a.prowizja5)}</span></div>
+                <div className="flex justify-between"><span className="text-dim">{procent(m.ustawienia.prowizjaNaCzystoProcent)}% z „na czysto”</span><span className="tabular-nums text-ink">{formatZl(a.prowizja5)}</span></div>
               )}
               <div className="flex justify-between border-t border-line/60 pt-1 font-bold"><span className="text-white">Łącznie za auto</span><span className="tabular-nums text-amber-brand">{formatZl(a.lacznie)}</span></div>
               {a.automatyczne && <p className="text-[10px] text-amber-brand">kierowca · zlecenia z faktur</p>}
