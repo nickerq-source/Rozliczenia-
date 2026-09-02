@@ -6,15 +6,15 @@ export function LogistykProwizja5Breakdown({
 }: {
   rozliczenie: RozliczenieLogistyka;
 }) {
+  if (!rozliczenie.ustawienia.liczProwizjeNaCzysto) return null;
+
   const stawkaNaCzysto = rozliczenie.ustawienia.prowizjaNaCzystoProcent;
   const stawkaZlecen = rozliczenie.ustawienia.prowizjaZlecenProcent;
 
   return (
     <div className="my-2 border-y border-line/60 py-2.5">
       <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-amber-brand">
-        {rozliczenie.ustawienia.liczProwizjeNaCzysto
-          ? `Jak liczymy prowizję ${stawkaNaCzysto}%`
-          : "Prowizja od kwoty na czysto jest wyłączona"}
+        Jak liczymy prowizję {stawkaNaCzysto}%
       </p>
       <div className="space-y-1.5 text-xs">
         <BreakdownRow
