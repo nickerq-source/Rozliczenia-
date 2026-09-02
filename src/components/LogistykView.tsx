@@ -194,13 +194,33 @@ function MiesiacCard({ m }: { m: RozliczenieLogistyka }) {
         ))}
       </div>
 
-      {m.zleceniaReczne.length > 0 && (
+      {m.zleceniaAutomatyczne.length > 0 && (
         <div className="mt-3 border-t border-line/60 pt-2">
-          <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-dim">Zlecenia</p>
+          <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-green-400">
+            Automatycznie z faktur
+          </p>
           <div className="divide-y divide-line/40">
-            {m.zleceniaReczne.map((z) => (
+            {m.zleceniaAutomatyczne.map((z) => (
               <div key={z.id} className="flex items-center justify-between gap-2 py-1.5 text-[12px]">
-                <span className="min-w-0 text-ink">
+                <span className="min-w-0 break-words text-ink">
+                  <span className="tabular-nums">{ddmm(z.data)}</span> · {z.kierowca}{" "}
+                  <span className="text-dim">({z.plate})</span>
+                  {z.opis ? <span className="text-dim"> · {z.opis}</span> : null}
+                </span>
+                <span className="shrink-0 tabular-nums font-bold text-white">{formatZl(z.wartoscNetto)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {m.zleceniaReczneDoRozliczenia.length > 0 && (
+        <div className="mt-3 border-t border-line/60 pt-2">
+          <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-dim">Dopisane ręcznie</p>
+          <div className="divide-y divide-line/40">
+            {m.zleceniaReczneDoRozliczenia.map((z) => (
+              <div key={z.id} className="flex items-center justify-between gap-2 py-1.5 text-[12px]">
+                <span className="min-w-0 break-words text-ink">
                   <span className="tabular-nums">{ddmm(z.data)}</span> · {z.kierowca}{" "}
                   <span className="text-dim">({z.plate})</span>
                   {z.opis ? <span className="text-dim"> · {z.opis}</span> : null}

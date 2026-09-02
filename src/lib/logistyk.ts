@@ -8,6 +8,10 @@ import { WorkspaceData, MiesiącId, LOGISTYK_AUTA, ZlecenieLog } from "./types";
 import { podatkiMiesiaca } from "./tax";
 import { parseNum } from "./business-logic";
 import { calculateLogisticsProfitShare } from "./logistyk-calculation";
+import {
+  extractAutomaticLogisticsOrders,
+  splitManualOrderDuplicates,
+} from "./logistyk-orders";
 
 // Logistyk rozliczany dopiero od sierpnia 2026 (wcześniej go nie było).
 export const LOGISTYK_START_MONTH = 8;
@@ -35,6 +39,9 @@ export interface RozliczenieLogistyka {
   miesiac: MiesiącId;
   perAuto: LogistykAutoRozliczenie[];
   zleceniaReczne: ZlecenieLog[];
+  zleceniaReczneDoRozliczenia: ZlecenieLog[];
+  zleceniaAutomatyczne: ZlecenieLog[];
+  pominieteDuplikatyReczne: ZlecenieLog[];
   zleceniaNettoRazem: number;
   zleceniaZeniNetto: number;
   prowizja12: number;
@@ -48,6 +55,11 @@ export interface RozliczenieLogistyka {
 export function obliczLogistyka(data: WorkspaceData, miesiac: MiesiącId): RozliczenieLogistyka {
   const dane = data.miesiace?.[miesiac];
   const reczne = (dane?.zleceniaLog ?? []).filter((z) => parseNum(z.wartoscNetto) > 0);
+  const automatyczne = extractAutomaticLogisticsOrders(dane?.faktury ?? []);
+  const {
+    included: reczneDoRozliczenia,
+    duplicates: pominieteDuplikatyReczne,
+  } = splitManualOrderDuplicates(reczne, automatyczne);
 
   // Zlecenia Żeni z faktur (automatycznie) — suma netto + liczba z importu PDF.
   let zeniNetto = 0;
@@ -55,12 +67,22 @@ export function obliczLogistyka(data: WorkspaceData, miesiac: MiesiącId): Rozli
   for (const f of dane?.faktury ?? []) {
     const pi = f.pdfImport;
     if (!pi) continue;
-    zeniNetto += parseNum(pi.zleceniaNetto);
-    zeniLiczba += parseNum(pi.ileZlecen);
+    const zeniZPozycji = automatyczne.filter(
+      (order) => order.sourceInvoiceId === f.id && order.plate === AUTO_ZENI
+    );
+    zeniNetto += zeniZPozycji.length > 0
+      ? zeniZPozycji.reduce((sum, order) => sum + parseNum(order.wartoscNetto), 0)
+      : parseNum(pi.zleceniaNetto);
+    zeniLiczba += zeniZPozycji.length > 0 ? zeniZPozycji.length : parseNum(pi.ileZlecen);
   }
   zeniNetto = r2(zeniNetto);
 
-  const zleceniaNettoRazem = r2(reczne.reduce((s, z) => s + parseNum(z.wartoscNetto), 0) + zeniNetto);
+  const automatycznePozaZenia = automatyczne.filter((order) => order.plate !== AUTO_ZENI);
+  const zleceniaNettoRazem = r2(
+    reczneDoRozliczenia.reduce((sum, order) => sum + parseNum(order.wartoscNetto), 0)
+    + automatycznePozaZenia.reduce((sum, order) => sum + parseNum(order.wartoscNetto), 0)
+    + zeniNetto
+  );
 
   // Kwota „na czysto" musi odpowiadać końcowemu wynikowi widocznemu w panelu,
   // czyli uwzględniać również VAT. Odejmujemy tylko zlecenia Żeni, bo to one są
@@ -73,16 +95,20 @@ export function obliczLogistyka(data: WorkspaceData, miesiac: MiesiącId): Rozli
   );
 
   const perAuto: LogistykAutoRozliczenie[] = LOGISTYK_AUTA.map((auto) => {
-    const zAuta = reczne.filter((z) => z.plate === auto.plate);
-    let netto = r2(zAuta.reduce((s, z) => s + parseNum(z.wartoscNetto), 0));
-    let liczba = zAuta.length;
-    const automatyczne = auto.plate === AUTO_ZENI;
-    if (automatyczne) {
-      netto = r2(netto + zeniNetto);
-      liczba += zeniLiczba;
+    const reczneAuta = reczneDoRozliczenia.filter((order) => order.plate === auto.plate);
+    const automatyczneAuta = automatyczne.filter((order) => order.plate === auto.plate);
+    let netto = r2(
+      reczneAuta.reduce((sum, order) => sum + parseNum(order.wartoscNetto), 0)
+      + automatyczneAuta.reduce((sum, order) => sum + parseNum(order.wartoscNetto), 0)
+    );
+    let liczba = reczneAuta.length + automatyczneAuta.length;
+    const jestAutoZeni = auto.plate === AUTO_ZENI;
+    if (jestAutoZeni) {
+      netto = r2(reczneAuta.reduce((sum, order) => sum + parseNum(order.wartoscNetto), 0) + zeniNetto);
+      liczba = reczneAuta.length + zeniLiczba;
     }
     const prowizja12Auto = r2(netto * LOGISTYK_PROWIZJA_ZLECENIA);
-    const prowizja5Auto = automatyczne ? prowizja5 : 0;
+    const prowizja5Auto = jestAutoZeni ? prowizja5 : 0;
     return {
       plate: auto.plate,
       kierowca: auto.kierowca,
@@ -92,7 +118,7 @@ export function obliczLogistyka(data: WorkspaceData, miesiac: MiesiącId): Rozli
       bonus: LOGISTYK_BONUS_ZA_AUTO,
       prowizja5: prowizja5Auto,
       lacznie: r2(prowizja12Auto + LOGISTYK_BONUS_ZA_AUTO + prowizja5Auto),
-      automatyczne,
+      automatyczne: jestAutoZeni,
     };
   });
 
@@ -103,6 +129,9 @@ export function obliczLogistyka(data: WorkspaceData, miesiac: MiesiącId): Rozli
     miesiac,
     perAuto,
     zleceniaReczne: reczne,
+    zleceniaReczneDoRozliczenia: reczneDoRozliczenia,
+    zleceniaAutomatyczne: automatyczne,
+    pominieteDuplikatyReczne,
     zleceniaNettoRazem,
     zleceniaZeniNetto: zeniNetto,
     prowizja12,

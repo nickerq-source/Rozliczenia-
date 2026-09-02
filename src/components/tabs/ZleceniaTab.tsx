@@ -48,6 +48,10 @@ export function ZleceniaTab({
   const dane = data.miesiace?.[miesiac];
   const reczne = dane?.zleceniaLog ?? [];
   const rozliczenie = useMemo(() => obliczLogistyka(data, miesiac), [data, miesiac]);
+  const pominieteDuplikatyIds = useMemo(
+    () => new Set(rozliczenie.pominieteDuplikatyReczne.map((order) => order.id)),
+    [rozliczenie.pominieteDuplikatyReczne]
+  );
 
   function dodaj() {
     if (fNetto <= 0) return;
@@ -149,6 +153,48 @@ export function ZleceniaTab({
         )}
       </Card>
 
+      {/* Zlecenia automatyczne z pozycji PDF */}
+      <Card>
+        <div className="mb-1 flex items-center gap-2">
+          <IconPackage size={18} className="text-green-400" />
+          <CardTitle className="mb-0">
+            Automatycznie z faktur ({rozliczenie.zleceniaAutomatyczne.length})
+          </CardTitle>
+        </div>
+        <p className="mb-2 text-[11px] text-dim">
+          Zlecenia Artura i Żeni są pobierane z pozycji PDF. Kwota pochodzi z kosztu potwierdzonego,
+          a opis z pola „Uwagi”.
+        </p>
+        {rozliczenie.zleceniaAutomatyczne.length === 0 ? (
+          <p className="rounded-xl border border-line bg-surface2/60 px-3 py-6 text-center text-sm text-dim">
+            Brak pozycji z uwagami w zaimportowanych fakturach.
+          </p>
+        ) : (
+          <div className="divide-y divide-line/50">
+            {rozliczenie.zleceniaAutomatyczne.map((z) => (
+              <div key={z.id} className="flex items-center gap-3 py-2">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm text-ink">
+                    <span className="tabular-nums">{ddmm(z.data)}</span> · {z.kierowca}{" "}
+                    <span className="text-dim">({z.plate})</span>
+                  </p>
+                  <p className="break-words text-[11px] text-dim">
+                    {z.opis}
+                    {z.sourceOrderNumber ? ` · ${z.sourceOrderNumber}` : ""}
+                  </p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <span className="block tabular-nums text-sm font-bold text-white">
+                    {formatZl(z.wartoscNetto)}
+                  </span>
+                  <span className="text-[10px] font-bold uppercase text-green-400">PDF</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
       {/* Dodawanie zlecenia */}
       <Card>
         <CardTitle className="mb-3">Dodaj zlecenie</CardTitle>
@@ -188,22 +234,33 @@ export function ZleceniaTab({
       <Card>
         <div className="mb-2 flex items-center gap-2">
           <IconPackage size={18} className="text-amber-brand" />
-          <CardTitle className="mb-0">Zlecenia miesiąca ({reczne.length})</CardTitle>
+          <CardTitle className="mb-0">Zlecenia ręczne ({reczne.length})</CardTitle>
         </div>
+        {rozliczenie.pominieteDuplikatyReczne.length > 0 && (
+          <p className="mb-2 rounded-xl border border-amber-brand/35 bg-amber-brand/10 px-3 py-2 text-[11px] text-amber-brand">
+            {rozliczenie.pominieteDuplikatyReczne.length} ręcznych wpisów ma już odpowiednik w PDF.
+            Pozostają widoczne do usunięcia, ale nie są liczone drugi raz.
+          </p>
+        )}
         {reczne.length === 0 ? (
           <p className="rounded-xl border border-line bg-surface2/60 px-3 py-6 text-center text-sm text-dim">
-            Brak ręcznych zleceń w tym miesiącu. Zlecenia Żeni liczą się osobno z faktur.
+            Brak ręcznych zleceń w tym miesiącu.
           </p>
         ) : (
           <div className="divide-y divide-line/50">
-            {reczne.map((z) => (
-              <div key={z.id} className="flex items-center gap-3 py-2">
+            {reczne.map((z) => {
+              const pominietyDuplikat = pominieteDuplikatyIds.has(z.id);
+              return (
+              <div key={z.id} className={`flex items-center gap-3 py-2 ${pominietyDuplikat ? "opacity-60" : ""}`}>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm text-ink">
                     <span className="tabular-nums">{ddmm(z.data)}</span> · {z.kierowca} <span className="text-dim">({z.plate})</span>
                     {z.opis ? <span className="text-dim"> · {z.opis}</span> : null}
                   </p>
                   {z.dodanyBy ? <p className="text-[10px] text-dim/60">wpisał: {z.dodanyBy}</p> : null}
+                  {pominietyDuplikat && (
+                    <p className="text-[10px] font-semibold text-amber-brand">już pobrane z PDF — pominięte w sumie</p>
+                  )}
                 </div>
                 <span className="shrink-0 tabular-nums text-sm font-bold text-white">{formatZl(z.wartoscNetto)}</span>
                 <button
@@ -215,7 +272,8 @@ export function ZleceniaTab({
                   <IconX size={15} />
                 </button>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </Card>

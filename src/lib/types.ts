@@ -389,6 +389,9 @@ export interface ZlecenieLog {
   opis?: string;
   dodanyBy?: string; // kto wpisał (PapiKing / PapiMinion)
   createdAt?: string;
+  source?: "manual" | "pdf";
+  sourceInvoiceId?: string;
+  sourceOrderNumber?: string;
 }
 
 /** Kanał notatki: wewnętrzny (tylko admini) lub wspólny wątek z kierowcą */
