@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { formatZl } from "@/lib/business-logic";
 import type { ZlecenieLog } from "@/lib/types";
 import { IconChevronDown } from "./ui/icons";
@@ -9,7 +10,15 @@ function isDateOnlyNote(value: string | undefined): boolean {
   return /^\d{1,2}[./-]\d{1,2}[.,]?(?:\s*[-–—,])?$/.test(String(value ?? "").trim());
 }
 
-export function LogistykPdfOrderRow({ order }: { order: ZlecenieLog }) {
+export function LogistykPdfOrderRow({
+  order,
+  variant = "included",
+  action,
+}: {
+  order: ZlecenieLog;
+  variant?: "included" | "rejected";
+  action?: ReactNode;
+}) {
   const fullDescription = order.sourceDescription?.trim();
   const sourceNotes = order.sourceNotes?.trim();
   const showSourceNotes = sourceNotes
@@ -31,7 +40,13 @@ export function LogistykPdfOrderRow({ order }: { order: ZlecenieLog }) {
             <span className="block tabular-nums text-sm font-bold text-white">
               {formatZl(order.wartoscNetto)}
             </span>
-            <span className="text-[10px] font-bold uppercase text-green-400">PDF</span>
+            <span
+              className={`text-[10px] font-bold uppercase ${
+                variant === "rejected" ? "text-amber-brand" : "text-green-400"
+              }`}
+            >
+              {variant === "rejected" ? "Odrzucone" : "PDF"}
+            </span>
           </div>
           <IconChevronDown
             size={15}
@@ -65,6 +80,13 @@ export function LogistykPdfOrderRow({ order }: { order: ZlecenieLog }) {
             <span className="font-semibold text-ink">Faktura:</span> {order.sourceFileName}
           </p>
         ) : null}
+        {order.sourceExclusionReason ? (
+          <p className="mt-2 rounded-md border border-amber-brand/30 bg-amber-brand/10 px-2 py-1.5 text-amber-brand">
+            <span className="font-semibold">Powód odrzucenia:</span>{" "}
+            {order.sourceExclusionReason}
+          </p>
+        ) : null}
+        {action ? <div className="mt-2 border-t border-line pt-2">{action}</div> : null}
       </div>
     </details>
   );

@@ -396,6 +396,8 @@ export interface ZlecenieLog {
   sourceNotes?: string;
   sourceDescription?: string;
   sourceFileName?: string;
+  sourceExclusionReason?: string;
+  sourceRejectedOverride?: boolean;
 }
 
 /** Kanał notatki: wewnętrzny (tylko admini) lub wspólny wątek z kierowcą */

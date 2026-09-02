@@ -6,7 +6,8 @@
 
 import { useMemo, useState } from "react";
 import { v4 as uuidv4 } from "uuid";
-import { DaneMiesiaca, MiesiącId, WorkspaceData, LOGISTYK_AUTA } from "@/lib/types";
+import { LOGISTYK_AUTA } from "@/lib/types";
+import type { DaneMiesiaca, MiesiącId, WorkspaceData, ZlecenieLog } from "@/lib/types";
 import { obliczLogistyka, LOGISTYK_START_MONTH } from "@/lib/logistyk";
 import { formatZl, formatZlCaly, parseNum } from "@/lib/business-logic";
 import { POLSKIE_MIESIACE } from "@/lib/dates";
@@ -27,6 +28,10 @@ function todayInMonth(miesiac: MiesiącId): string {
 }
 
 const ddmm = (iso: string) => (/^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso.slice(8, 10)}.${iso.slice(5, 7)}` : iso);
+
+function rejectedSourceKey(order: Pick<ZlecenieLog, "sourceInvoiceId" | "sourceOrderNumber">): string {
+  return `${order.sourceInvoiceId ?? ""}|${order.sourceOrderNumber ?? ""}`;
+}
 
 export function ZleceniaTab({
   miesiac,
@@ -52,6 +57,11 @@ export function ZleceniaTab({
   const pominieteDuplikatyIds = useMemo(
     () => new Set(rozliczenie.pominieteDuplikatyReczne.map((order) => order.id)),
     [rozliczenie.pominieteDuplikatyReczne]
+  );
+  const przywroconeOdrzuconeKeys = new Set(
+    reczne
+      .filter((order) => order.sourceRejectedOverride)
+      .map(rejectedSourceKey)
   );
 
   function dodaj() {
@@ -91,6 +101,46 @@ export function ZleceniaTab({
       entity: "zlecenie",
       entityId: id,
       description: `${userName} usunął zlecenie`,
+      url: `/admin?miesiac=${miesiac}&zakladka=zlecenia`,
+    });
+  }
+
+  function dodajOdrzucone(order: ZlecenieLog) {
+    const sourceKey = rejectedSourceKey(order);
+    if (przywroconeOdrzuconeKeys.has(sourceKey)) return;
+
+    const wpis: ZlecenieLog = {
+      id: uuidv4(),
+      data: order.data,
+      plate: order.plate,
+      kierowca: order.kierowca,
+      wartoscNetto: order.wartoscNetto,
+      opis: order.sourceDescription || order.opis,
+      dodanyBy: userName,
+      createdAt: new Date().toISOString(),
+      source: "manual",
+      sourceInvoiceId: order.sourceInvoiceId,
+      sourceOrderNumber: order.sourceOrderNumber,
+      sourceNotes: order.sourceNotes,
+      sourceDescription: order.sourceDescription,
+      sourceFileName: order.sourceFileName,
+      sourceRejectedOverride: true,
+    };
+
+    onUpdate((prev) => ({ ...prev, zleceniaLog: [...(prev.zleceniaLog ?? []), wpis] }));
+    logChange({
+      workspaceId: token,
+      userName,
+      action: "zlecenie_pdf_przywrocone",
+      entity: "zlecenie",
+      entityId: wpis.id,
+      newValue: {
+        plate: wpis.plate,
+        kierowca: wpis.kierowca,
+        netto: wpis.wartoscNetto,
+        sourceOrderNumber: wpis.sourceOrderNumber,
+      },
+      description: `${userName} dodał odrzucone zlecenie PDF ${wpis.sourceOrderNumber ?? ""}: ${formatZlCaly(wpis.wartoscNetto)} netto`,
       url: `/admin?miesiac=${miesiac}&zakladka=zlecenia`,
     });
   }
@@ -165,12 +215,6 @@ export function ZleceniaTab({
         <p className="mb-2 text-[11px] text-dim">
           Zlecenia Artura i Żeni są pobierane z pozycji PDF. Rozwiń pozycję, aby zobaczyć pełny opis.
         </p>
-        {rozliczenie.wykluczoneDodatkiAutomatyczne.length > 0 && (
-          <p className="mb-2 rounded-xl border border-amber-brand/35 bg-amber-brand/10 px-3 py-2 text-[11px] text-amber-brand">
-            Pominięto {rozliczenie.wykluczoneDodatkiAutomatyczne.length} pozycji oznaczonych jako
-            „dodatek” lub „niedziela”. Nie są liczone do prowizji ze zleceń.
-          </p>
-        )}
         {rozliczenie.zleceniaAutomatyczne.length === 0 ? (
           <p className="rounded-xl border border-line bg-surface2/60 px-3 py-6 text-center text-sm text-dim">
             Brak pozycji z uwagami w zaimportowanych fakturach.
@@ -180,6 +224,49 @@ export function ZleceniaTab({
             {rozliczenie.zleceniaAutomatyczne.map((z) => (
               <LogistykPdfOrderRow key={z.id} order={z} />
             ))}
+          </div>
+        )}
+      </Card>
+
+      {/* Pozycje odrzucone automatycznie, z możliwością ręcznego przywrócenia przez admina */}
+      <Card>
+        <div className="mb-1 flex items-center gap-2">
+          <IconPackage size={18} className="text-amber-brand" />
+          <CardTitle className="mb-0">
+            Odrzucone z PDF ({rozliczenie.wykluczoneDodatkiAutomatyczne.length})
+          </CardTitle>
+        </div>
+        <p className="mb-2 text-[11px] text-dim">
+          System pomija dodatki i pozycje niedzielne. Rozwiń wpis i dodaj go ręcznie tylko wtedy,
+          gdy został odrzucony błędnie.
+        </p>
+        {rozliczenie.wykluczoneDodatkiAutomatyczne.length === 0 ? (
+          <p className="rounded-xl border border-line bg-surface2/60 px-3 py-4 text-center text-sm text-dim">
+            Brak odrzuconych pozycji w tym miesiącu.
+          </p>
+        ) : (
+          <div>
+            {rozliczenie.wykluczoneDodatkiAutomatyczne.map((order) => {
+              const przywrocone = przywroconeOdrzuconeKeys.has(rejectedSourceKey(order));
+              return (
+                <LogistykPdfOrderRow
+                  key={order.id}
+                  order={order}
+                  variant="rejected"
+                  action={
+                    <button
+                      type="button"
+                      onClick={() => dodajOdrzucone(order)}
+                      disabled={przywrocone}
+                      className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-amber-brand/50 px-3 py-2 text-xs font-bold text-amber-brand hover:bg-amber-brand/10 disabled:border-green-500/30 disabled:text-green-400 disabled:opacity-80"
+                    >
+                      <IconPlus size={14} />
+                      {przywrocone ? "Dodano do zleceń" : "Dodaj do zleceń"}
+                    </button>
+                  }
+                />
+              );
+            })}
           </div>
         )}
       </Card>

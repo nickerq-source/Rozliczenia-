@@ -54,11 +54,16 @@ function isDriverIdentityOnly(value: string, row: PDFImportDiagnosticRow): boole
   return noteTokens.every((token) => identity.has(token));
 }
 
-function isExcludedAddon(row: PDFImportDiagnosticRow): boolean {
+function addonExclusionReason(row: PDFImportDiagnosticRow): string | null {
   const text = normalize(
     `${row.notes ?? ""} ${row.additionalDescription ?? ""} ${row.rawText ?? ""}`
   );
-  return /\bDODATEK\b/.test(text) || /\bNIEDZIEL[A-Z]*\b/.test(text);
+  const hasAddon = /\bDODATEK\b/.test(text);
+  const hasSunday = /\bNIEDZIEL[A-Z]*\b/.test(text);
+  if (hasAddon && hasSunday) return "Opis zawiera słowa „dodatek” i „niedziela”";
+  if (hasAddon) return "Opis zawiera słowo „dodatek”";
+  if (hasSunday) return "Opis zawiera odmianę słowa „niedziela”";
+  return null;
 }
 
 function buildAutomaticOrder(
@@ -111,8 +116,9 @@ export function extractAutomaticLogisticsOrderResult(
       if (!inSelectedRange(invoice, date)) continue;
 
       const order = buildAutomaticOrder(invoice, row, auto);
-      if (isExcludedAddon(row)) {
-        excludedById.set(order.id, order);
+      const exclusionReason = addonExclusionReason(row);
+      if (exclusionReason) {
+        excludedById.set(order.id, { ...order, sourceExclusionReason: exclusionReason });
         includedById.delete(order.id);
       } else if (!excludedById.has(order.id)) {
         includedById.set(order.id, order);

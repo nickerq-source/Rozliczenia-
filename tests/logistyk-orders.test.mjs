@@ -151,6 +151,22 @@ test("wyklucza z prowizji pozycje opisane jako dodatek albo niedziela", () => {
     result.excluded.map((order) => order.sourceOrderNumber),
     ["ART-DODATEK", "ZEN-NIEDZIELA"]
   );
+  assert.equal(result.excluded[0].sourceExclusionReason, "Opis zawiera słowo „dodatek”");
+  assert.equal(result.excluded[1].sourceExclusionReason, "Opis zawiera odmianę słowa „niedziela”");
+});
+
+test("ręczne przywrócenie odrzuconej pozycji wchodzi do rozliczenia", () => {
+  const result = extractAutomaticLogisticsOrderResult([invoice]);
+  const override = {
+    ...result.excluded[0],
+    id: "manual-rejected-override",
+    source: "manual",
+    sourceRejectedOverride: true,
+  };
+
+  const split = splitManualOrderDuplicates([override], result.included);
+  assert.deepEqual(split.included.map((order) => order.id), ["manual-rejected-override"]);
+  assert.equal(split.duplicates.length, 0);
 });
 
 test("stary skrót daty nie jest pokazywany drugi raz jako opis", () => {
