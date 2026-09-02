@@ -13,6 +13,7 @@ import { MiesiącId } from "@/lib/types";
 import { Card } from "./ui/Card";
 import { IconUsers, IconMoneybag, IconLoader, IconLock } from "./ui/icons";
 import { cn } from "@/lib/utils";
+import { LogistykProwizja5Breakdown } from "./LogistykProwizja5Breakdown";
 
 const ddmm = (iso: string) => (/^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso.slice(8, 10)}.${iso.slice(5, 7)}` : iso);
 type Zakladka = "wszystko" | MiesiącId;
@@ -107,8 +108,9 @@ export function LogistykView({ name }: { name: string }) {
                 </div>
               </div>
               <p className="mt-2 text-[11px] text-dim">
-                12% z netto zleceń + 5% z „na czysto po PIT i zdrowotnej” (bez zleceń — te już dają 12%)
-                + 600 zł za auta (3×200). Wyliczenia szacunkowe — potwierdza księgowa.
+                12% z netto wszystkich zleceń + 5% z końcowej kwoty po wszystkich kosztach i podatkach,
+                po odjęciu zleceń Żeni objętych już prowizją 12% + 600 zł za auta (3×200).
+                Wyliczenia szacunkowe — potwierdza księgowa.
               </p>
             </Card>
 
@@ -168,7 +170,7 @@ function MiesiacCard({ m }: { m: RozliczenieLogistyka }) {
 
       <div className="space-y-1 text-sm">
         <Wiersz label={`12% z netto zleceń (${formatZl(m.zleceniaNettoRazem)})`} value={m.prowizja12} />
-        <Wiersz label={`5% z „na czysto” bez zleceń (${formatZl(m.podstawa5)})`} value={m.prowizja5} />
+        <LogistykProwizja5Breakdown rozliczenie={m} />
         <Wiersz label="Za auta (3 × 200 zł)" value={m.autaBonus} />
       </div>
 

@@ -15,6 +15,7 @@ import { NumInput } from "../ui/NumInput";
 import { Card, CardTitle } from "../ui/Card";
 import { IconPackage, IconUsers, IconX, IconPlus } from "../ui/icons";
 import { cn } from "@/lib/utils";
+import { LogistykProwizja5Breakdown } from "../LogistykProwizja5Breakdown";
 
 function todayInMonth(miesiac: MiesiącId): string {
   const now = new Date();
@@ -100,8 +101,9 @@ export function ZleceniaTab({
           <div className="min-w-0 flex-1">
             <CardTitle className="mb-1">Rozliczenie logistyka — {POLSKIE_MIESIACE[miesiac]} 2026</CardTitle>
             <p className="text-[11px] text-dim">
-              12% z netto zleceń + 5% z „na czysto po PIT i zdrowotnej” (bez zleceń — te już dają 12%)
-              + 600 zł za auta (3×200). Zlecenia Żeni liczone automatycznie z faktur. Szacunkowo — potwierdza księgowa.
+              12% z netto wszystkich zleceń + 5% z kwoty, która została po wszystkich kosztach i podatkach,
+              po odjęciu zleceń Żeni objętych już prowizją 12% + 600 zł za auta (3×200).
+              Zlecenia Żeni są liczone automatycznie z faktur. Szacunkowo — potwierdza księgowa.
             </p>
           </div>
         </div>
@@ -114,7 +116,7 @@ export function ZleceniaTab({
         ) : (
         <div className="space-y-1">
           <Wiersz label={`12% z netto zleceń (${formatZl(rozliczenie.zleceniaNettoRazem)})`} value={rozliczenie.prowizja12} />
-          <Wiersz label={`5% z „na czysto" bez zleceń (${formatZl(rozliczenie.podstawa5)})`} value={rozliczenie.prowizja5} />
+          <LogistykProwizja5Breakdown rozliczenie={rozliczenie} />
           <Wiersz label="Za auta (3 × 200 zł)" value={rozliczenie.autaBonus} />
           <div className="flex items-center justify-between border-t border-line pt-2 text-base font-extrabold">
             <span className="text-white">Razem dla logistyka</span>

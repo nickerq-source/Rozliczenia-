@@ -1,11 +1,13 @@
 // Rozliczenie logistyka za miesiąc:
 //  • 12% z NETTO zleceń (ręczne wpisy + zlecenia Żeni z faktur, liczone automatycznie),
-//  • 5% z „na czysto po PIT i zdrowotnej" danego miesiąca (tylko gdy dodatnie),
+//  • 5% z końcowej gotówki po wszystkich kosztach i podatkach, po odjęciu
+//    zleceń Żeni objętych już prowizją 12% (tylko gdy podstawa jest dodatnia),
 //  • 600 zł za auta (3 × 200 zł, na sztywno co miesiąc, z rozpisaniem tablic).
 
 import { WorkspaceData, MiesiącId, LOGISTYK_AUTA, ZlecenieLog } from "./types";
 import { podatkiMiesiaca } from "./tax";
 import { parseNum } from "./business-logic";
+import { calculateLogisticsProfitShare } from "./logistyk-calculation";
 
 // Logistyk rozliczany dopiero od sierpnia 2026 (wcześniej go nie było).
 export const LOGISTYK_START_MONTH = 8;
@@ -34,9 +36,10 @@ export interface RozliczenieLogistyka {
   perAuto: LogistykAutoRozliczenie[];
   zleceniaReczne: ZlecenieLog[];
   zleceniaNettoRazem: number;
+  zleceniaZeniNetto: number;
   prowizja12: number;
-  naCzysto: number; // na czysto po PIT i zdrowotnej (cały miesiąc)
-  podstawa5: number; // na czysto MINUS netto zleceń (żeby nie liczyć zleceń podwójnie)
+  naCzysto: number; // końcowa gotówka po wszystkich kosztach i podatkach
+  podstawa5: number; // na czysto MINUS netto zleceń Żeni objętych już prowizją 12%
   prowizja5: number;
   autaBonus: number; // 600
   razem: number;
@@ -59,13 +62,15 @@ export function obliczLogistyka(data: WorkspaceData, miesiac: MiesiącId): Rozli
 
   const zleceniaNettoRazem = r2(reczne.reduce((s, z) => s + parseNum(z.wartoscNetto), 0) + zeniNetto);
 
-  // 5% liczymy z „na czysto" POMNIEJSZONEGO o netto zleceń — bo od zleceń logistyk
-  // dostaje już 12%, a te same zlecenia wchodzą do „na czysto" (nie liczymy ich
-  // drugi raz). Dolicza się TYLKO do auta kierowcy (Żenia); Damian i Artur to
-  // admini, ich auta dostają jedynie 12% + 200.
-  const naCzysto = podatkiMiesiaca(data, miesiac).zyskPoPodatkach;
-  const podstawa5 = r2(Math.max(0, naCzysto - zleceniaNettoRazem));
-  const prowizja5 = r2(podstawa5 * LOGISTYK_PROWIZJA_ZYSK);
+  // Kwota „na czysto" musi odpowiadać końcowemu wynikowi widocznemu w panelu,
+  // czyli uwzględniać również VAT. Odejmujemy tylko zlecenia Żeni, bo to one są
+  // częścią faktur budujących ten wynik i jednocześnie dostały już prowizję 12%.
+  const naCzysto = podatkiMiesiaca(data, miesiac).cashflowPoPodatkach;
+  const { base: podstawa5, commission: prowizja5 } = calculateLogisticsProfitShare(
+    naCzysto,
+    zeniNetto,
+    LOGISTYK_PROWIZJA_ZYSK
+  );
 
   const perAuto: LogistykAutoRozliczenie[] = LOGISTYK_AUTA.map((auto) => {
     const zAuta = reczne.filter((z) => z.plate === auto.plate);
@@ -99,6 +104,7 @@ export function obliczLogistyka(data: WorkspaceData, miesiac: MiesiącId): Rozli
     perAuto,
     zleceniaReczne: reczne,
     zleceniaNettoRazem,
+    zleceniaZeniNetto: zeniNetto,
     prowizja12,
     naCzysto,
     podstawa5,
