@@ -9,7 +9,7 @@ import { podatkiMiesiaca } from "./tax";
 import { parseNum } from "./business-logic";
 import { calculateLogisticsProfitShare } from "./logistyk-calculation";
 import {
-  extractAutomaticLogisticsOrders,
+  extractAutomaticLogisticsOrderResult,
   splitManualOrderDuplicates,
 } from "./logistyk-orders";
 
@@ -41,6 +41,7 @@ export interface RozliczenieLogistyka {
   zleceniaReczne: ZlecenieLog[];
   zleceniaReczneDoRozliczenia: ZlecenieLog[];
   zleceniaAutomatyczne: ZlecenieLog[];
+  wykluczoneDodatkiAutomatyczne: ZlecenieLog[];
   pominieteDuplikatyReczne: ZlecenieLog[];
   zleceniaNettoRazem: number;
   zleceniaZeniNetto: number;
@@ -55,7 +56,13 @@ export interface RozliczenieLogistyka {
 export function obliczLogistyka(data: WorkspaceData, miesiac: MiesiącId): RozliczenieLogistyka {
   const dane = data.miesiace?.[miesiac];
   const reczne = (dane?.zleceniaLog ?? []).filter((z) => parseNum(z.wartoscNetto) > 0);
-  const automatyczne = extractAutomaticLogisticsOrders(dane?.faktury ?? []);
+  const automaticResult = extractAutomaticLogisticsOrderResult(dane?.faktury ?? []);
+  const automatyczne = automaticResult.included;
+  const wykluczoneDodatkiAutomatyczne = automaticResult.excluded;
+  const wszystkieAutomatyczneKandydaty = [
+    ...automatyczne,
+    ...wykluczoneDodatkiAutomatyczne,
+  ];
   const {
     included: reczneDoRozliczenia,
     duplicates: pominieteDuplikatyReczne,
@@ -70,10 +77,13 @@ export function obliczLogistyka(data: WorkspaceData, miesiac: MiesiącId): Rozli
     const zeniZPozycji = automatyczne.filter(
       (order) => order.sourceInvoiceId === f.id && order.plate === AUTO_ZENI
     );
-    zeniNetto += zeniZPozycji.length > 0
+    const zeniKandydaci = wszystkieAutomatyczneKandydaty.filter(
+      (order) => order.sourceInvoiceId === f.id && order.plate === AUTO_ZENI
+    );
+    zeniNetto += zeniKandydaci.length > 0
       ? zeniZPozycji.reduce((sum, order) => sum + parseNum(order.wartoscNetto), 0)
       : parseNum(pi.zleceniaNetto);
-    zeniLiczba += zeniZPozycji.length > 0 ? zeniZPozycji.length : parseNum(pi.ileZlecen);
+    zeniLiczba += zeniKandydaci.length > 0 ? zeniZPozycji.length : parseNum(pi.ileZlecen);
   }
   zeniNetto = r2(zeniNetto);
 
@@ -131,6 +141,7 @@ export function obliczLogistyka(data: WorkspaceData, miesiac: MiesiącId): Rozli
     zleceniaReczne: reczne,
     zleceniaReczneDoRozliczenia: reczneDoRozliczenia,
     zleceniaAutomatyczne: automatyczne,
+    wykluczoneDodatkiAutomatyczne,
     pominieteDuplikatyReczne,
     zleceniaNettoRazem,
     zleceniaZeniNetto: zeniNetto,

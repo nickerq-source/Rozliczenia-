@@ -69,6 +69,7 @@ export interface PDFImportDiagnosticRow {
   km: number;
   cost: number;
   notes: string;
+  additionalDescription?: string;
   status: string;
   invitationId: string | null;
   vehicleOwner: PDFCarUsageType;
@@ -392,6 +393,9 @@ export interface ZlecenieLog {
   source?: "manual" | "pdf";
   sourceInvoiceId?: string;
   sourceOrderNumber?: string;
+  sourceNotes?: string;
+  sourceDescription?: string;
+  sourceFileName?: string;
 }
 
 /** Kanał notatki: wewnętrzny (tylko admini) lub wspólny wątek z kierowcą */

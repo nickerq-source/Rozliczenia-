@@ -16,6 +16,7 @@ import { Card, CardTitle } from "../ui/Card";
 import { IconPackage, IconUsers, IconX, IconPlus } from "../ui/icons";
 import { cn } from "@/lib/utils";
 import { LogistykProwizja5Breakdown } from "../LogistykProwizja5Breakdown";
+import { LogistykPdfOrderRow } from "../LogistykPdfOrderRow";
 
 function todayInMonth(miesiac: MiesiącId): string {
   const now = new Date();
@@ -162,34 +163,22 @@ export function ZleceniaTab({
           </CardTitle>
         </div>
         <p className="mb-2 text-[11px] text-dim">
-          Zlecenia Artura i Żeni są pobierane z pozycji PDF. Kwota pochodzi z kosztu potwierdzonego,
-          a opis z pola „Uwagi”.
+          Zlecenia Artura i Żeni są pobierane z pozycji PDF. Rozwiń pozycję, aby zobaczyć pełny opis.
         </p>
+        {rozliczenie.wykluczoneDodatkiAutomatyczne.length > 0 && (
+          <p className="mb-2 rounded-xl border border-amber-brand/35 bg-amber-brand/10 px-3 py-2 text-[11px] text-amber-brand">
+            Pominięto {rozliczenie.wykluczoneDodatkiAutomatyczne.length} pozycji oznaczonych jako
+            „dodatek” lub „niedziela”. Nie są liczone do prowizji ze zleceń.
+          </p>
+        )}
         {rozliczenie.zleceniaAutomatyczne.length === 0 ? (
           <p className="rounded-xl border border-line bg-surface2/60 px-3 py-6 text-center text-sm text-dim">
             Brak pozycji z uwagami w zaimportowanych fakturach.
           </p>
         ) : (
-          <div className="divide-y divide-line/50">
+          <div>
             {rozliczenie.zleceniaAutomatyczne.map((z) => (
-              <div key={z.id} className="flex items-center gap-3 py-2">
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm text-ink">
-                    <span className="tabular-nums">{ddmm(z.data)}</span> · {z.kierowca}{" "}
-                    <span className="text-dim">({z.plate})</span>
-                  </p>
-                  <p className="break-words text-[11px] text-dim">
-                    {z.opis}
-                    {z.sourceOrderNumber ? ` · ${z.sourceOrderNumber}` : ""}
-                  </p>
-                </div>
-                <div className="shrink-0 text-right">
-                  <span className="block tabular-nums text-sm font-bold text-white">
-                    {formatZl(z.wartoscNetto)}
-                  </span>
-                  <span className="text-[10px] font-bold uppercase text-green-400">PDF</span>
-                </div>
-              </div>
+              <LogistykPdfOrderRow key={z.id} order={z} />
             ))}
           </div>
         )}

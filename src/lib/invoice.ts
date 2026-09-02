@@ -1,6 +1,7 @@
 // Parsing PDF faktur transportowych Żabki — najpierw rekordy, potem filtrowanie.
 
 import { KIEROWCA, TYP_TRANSPORTU, VAT } from "./config";
+import { extractAdditionalDescription } from "./invoice-additional-description";
 
 // ─── POMOCNICZE ───────────────────────────────────────────────────────────────
 
@@ -107,6 +108,7 @@ export interface InvoiceRecord {
   palletPlaces: number;
   weight: number;
   notes: string;
+  additionalDescription: string;
   confirmedCost: number;
   lineCost: number;
   distributionCost: number;
@@ -142,6 +144,7 @@ export interface InvoiceDiagnosticRow {
   km: number;
   cost: number;
   notes: string;
+  additionalDescription?: string;
   status: string;
   invitationId: string | null;
   vehicleOwner: InvoiceCarUsageType;
@@ -355,6 +358,7 @@ function parseRecordBlock(block: string[]): InvoiceRecord | null {
       palletPlaces: 0,
       weight: 0,
       notes: "",
+      additionalDescription: "",
       confirmedCost: 0,
       lineCost: 0,
       distributionCost: 0,
@@ -381,6 +385,7 @@ function parseRecordBlock(block: string[]): InvoiceRecord | null {
   const { route, driverName } = splitRouteDriver(beforeType, continuationLines);
   const afterDate = main.slice(dateMatch.index + dateMatch[0].length);
   const parsed = parseAfterDate(afterDate);
+  const additionalDescription = extractAdditionalDescription(block, driverName);
   const needsReview = parsed.warnings.length > 0 || !driverName || !parsed.status;
 
   return {
@@ -393,6 +398,7 @@ function parseRecordBlock(block: string[]): InvoiceRecord | null {
     palletPlaces: parsed.palletPlaces,
     weight: parsed.weight,
     notes: parsed.notes,
+    additionalDescription,
     confirmedCost: parsed.confirmedCost,
     lineCost: parsed.lineCost,
     distributionCost: parsed.distributionCost,
@@ -582,6 +588,7 @@ function diagnosticRow(
     km: row.distanceKm,
     cost: row.confirmedCost,
     notes: row.notes,
+    additionalDescription: row.additionalDescription || undefined,
     status: row.status,
     invitationId: row.invitationId,
     vehicleOwner: vehicle?.vehicleOwner ?? row.vehicleOwner,

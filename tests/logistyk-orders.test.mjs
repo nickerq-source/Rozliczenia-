@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  extractAutomaticLogisticsOrderResult,
   extractAutomaticLogisticsOrders,
   splitManualOrderDuplicates,
 } from "../src/lib/logistyk-orders.ts";
@@ -37,7 +38,8 @@ const invoice = {
         route: "KRAKÓW",
         km: 10,
         cost: 248,
-        notes: "PITIANIN",
+        notes: "02.08",
+        additionalDescription: "odbiór przyborów 3mpl +km",
         status: "",
         invitationId: null,
         vehicleOwner: "unknown",
@@ -53,6 +55,39 @@ const invoice = {
         km: 10,
         cost: 300.04,
         notes: "Odbiór kosza",
+        additionalDescription: "1mp odbiór kosza z akcyzy + KM",
+        status: "",
+        invitationId: null,
+        vehicleOwner: "unknown",
+        isAdditional: true,
+        reason: "",
+      },
+      {
+        orderNumber: "ART-DODATEK",
+        date: "2026-08-07",
+        driverName: "ARTUR SZADY",
+        vehicleType: "4/10",
+        route: "KRAKÓW",
+        km: 0,
+        cost: 500,
+        notes: "DODATEK",
+        additionalDescription: "dodatek za pracę",
+        status: "",
+        invitationId: null,
+        vehicleOwner: "unknown",
+        isAdditional: true,
+        reason: "",
+      },
+      {
+        orderNumber: "ZEN-NIEDZIELA",
+        date: "2026-08-08",
+        driverName: "YEVHENII PITIANIN",
+        vehicleType: "4/10",
+        route: "KRAKÓW",
+        km: 0,
+        cost: 450,
+        notes: "",
+        additionalDescription: "premia za niedzielę",
         status: "",
         invitationId: null,
         vehicleOwner: "unknown",
@@ -95,17 +130,41 @@ test("tworzy z PDF zlecenia Żeni i Artura z kwotą oraz opisem z Uwag", () => {
         plate: "KK9848Y",
         kierowca: "Żenia",
         wartoscNetto: 248,
-        opis: "PITIANIN",
+        opis: "odbiór przyborów 3mpl +km",
       },
       {
         data: "2026-08-07",
         plate: "KK2063A",
         kierowca: "Artur",
         wartoscNetto: 300.04,
-        opis: "Odbiór kosza",
+        opis: "1mp odbiór kosza z akcyzy + KM",
       },
     ]
   );
+});
+
+test("wyklucza z prowizji pozycje opisane jako dodatek albo niedziela", () => {
+  const result = extractAutomaticLogisticsOrderResult([invoice]);
+
+  assert.deepEqual(result.included.map((order) => order.sourceOrderNumber), ["ZEN-1", "ART-1"]);
+  assert.deepEqual(
+    result.excluded.map((order) => order.sourceOrderNumber),
+    ["ART-DODATEK", "ZEN-NIEDZIELA"]
+  );
+});
+
+test("stary skrót daty nie jest pokazywany drugi raz jako opis", () => {
+  const oldInvoice = structuredClone(invoice);
+  oldInvoice.pdfImport.sourceRows = [{
+    ...oldInvoice.pdfImport.sourceRows[0],
+    orderNumber: "ZEN-DATE",
+    notes: "04.08",
+    additionalDescription: undefined,
+  }];
+
+  const [order] = extractAutomaticLogisticsOrders([oldInvoice]);
+  assert.equal(order.opis, "Zlecenie ZEN-DATE");
+  assert.equal(order.sourceNotes, "04.08");
 });
 
 test("ręczna kopia pozycji PDF nie wchodzi drugi raz do rozliczenia", () => {

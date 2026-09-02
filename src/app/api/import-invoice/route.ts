@@ -21,6 +21,7 @@ function sourceRowsFromResult(result: ReturnType<typeof parseInvoicePDF>) {
     km: row.distanceKm,
     cost: row.confirmedCost,
     notes: row.notes,
+    additionalDescription: row.additionalDescription || undefined,
     status: row.status,
     invitationId: row.invitationId,
     vehicleOwner: row.vehicleOwner,
