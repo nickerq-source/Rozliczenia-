@@ -130,8 +130,12 @@ export interface FakturaWeek {
   id: string;
   label: string; // etykieta porządkowa, np. "Faktura 1"
   kwota: number;
-  /** Dodatkowy przychód netto z tej faktury przypisany Żeni; podlega VAT i podatkowi dochodowemu. */
+  /** @deprecated Migrowane do osobnego rekordu rodzaju "premiowana". */
   premiowanaKwotaNetto?: number;
+  /** Faktura premiowana jest jedną, osobną pozycją na końcu listy miesiąca. */
+  rodzaj?: "standardowa" | "premiowana";
+  /** Opis dodatkowego przychodu przypisanego do faktury premiowanej. */
+  opisPremiowanej?: string;
   /** Kalendarzowy tydzień miesiąca (indeks 0-based). Pozwala przechowywać kilka faktur dla tego samego tygodnia. */
   weekIndex?: number;
   pdfImport?: PDFImportData; // zaimportowane dane z PDF

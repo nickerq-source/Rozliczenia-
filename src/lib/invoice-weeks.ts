@@ -1,6 +1,7 @@
 import { getWeeksOfMonth, findBestWeekForRange } from "./dates";
 import type { FakturaWeek, MiesiącId } from "./types";
 import { orderAndNumberInvoiceSlots } from "./invoice-ordering";
+import { splitAndMigratePremiumInvoice } from "./invoice-premium";
 
 function isValidWeekIndex(value: unknown, weekCount: number): value is number {
   return Number.isInteger(value) && Number(value) >= 0 && Number(value) < weekCount;
@@ -41,8 +42,12 @@ export function normalizeMonthInvoices(
 ): FakturaWeek[] {
   const weeks = getWeeksOfMonth(miesiac);
   const usedIds = new Set<string>();
+  const { regularInvoices, premiumInvoice } = splitAndMigratePremiumInvoice(
+    savedInvoices ?? [],
+    miesiac
+  );
 
-  const normalized = (savedInvoices ?? []).map((invoice, arrayIndex) => {
+  const normalized = regularInvoices.map((invoice, arrayIndex) => {
     const weekIndex = getInvoiceWeekIndex(invoice, arrayIndex, miesiac);
     const customRange = invoice.customRange ?? null;
     const baseId = invoice.id || `w${miesiac}-${weekIndex}-legacy-${arrayIndex}`;
@@ -78,7 +83,7 @@ export function normalizeMonthInvoices(
     });
   }
 
-  return orderAndNumberInvoiceSlots(
+  const regularNormalized = orderAndNumberInvoiceSlots(
     normalized.map((invoice) => ({
       ...invoice,
       empty: isEmptyInvoiceSlot(invoice),
@@ -90,9 +95,12 @@ export function normalizeMonthInvoices(
       void sourceOrder;
       return { ...invoice, label: displayLabel };
     });
+
+  return [...regularNormalized, premiumInvoice];
 }
 
 export function isEmptyInvoiceSlot(invoice: FakturaWeek): boolean {
+  if (invoice.rodzaj === "premiowana") return false;
   return !invoice.pdfImport
     && Number(invoice.kwota ?? 0) === 0
     && Number(invoice.premiowanaKwotaNetto ?? 0) === 0;

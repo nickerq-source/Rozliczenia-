@@ -92,6 +92,14 @@ export function ZarobekTab({
     () => normalizeMonthInvoices(dane.faktury, miesiac),
     [dane.faktury, miesiac]
   );
+  const fakturyStandardowe = useMemo(
+    () => faktury.filter((faktura) => faktura.rodzaj !== "premiowana"),
+    [faktury]
+  );
+  const fakturaPremiowana = useMemo(
+    () => faktury.find((faktura) => faktura.rodzaj === "premiowana") ?? null,
+    [faktury]
+  );
 
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalState | null>(null);
@@ -103,6 +111,7 @@ export function ZarobekTab({
   const uploadIntent = useRef<{ fakturaId: string; replaceExisting: boolean } | null>(null);
   const notifiedInvoiceValues = useRef<Record<string, number>>({});
   const notifiedPremiumValues = useRef<Record<string, number>>({});
+  const premiumDescriptionBeforeEdit = useRef<Record<string, string>>({});
 
   // ─── WGRYWANIE PDF ─────────────────────────────────────────────────────────
 
@@ -469,33 +478,59 @@ export function ZarobekTab({
     });
   }
 
-  function setPremiowanaKwota(fakturaId: string, premiowanaKwotaNetto: number) {
+  function updatePremiumInvoice(
+    patch: Pick<Partial<FakturaWeek>, "kwota" | "opisPremiowanej">
+  ) {
     onUpdate((prev) => {
       const newFaktury = normalizeMonthInvoices(prev.faktury, miesiac);
-      const idx = newFaktury.findIndex((invoice) => invoice.id === fakturaId);
+      const idx = newFaktury.findIndex((invoice) => invoice.rodzaj === "premiowana");
       if (idx >= 0) {
         newFaktury[idx] = {
           ...newFaktury[idx],
-          premiowanaKwotaNetto: Math.max(0, premiowanaKwotaNetto),
+          ...patch,
+          label: "Faktura premiowana",
+          rodzaj: "premiowana",
+          amountMode: "netto",
         };
       }
       return { ...prev, faktury: normalizeMonthInvoices(newFaktury, miesiac) };
     });
   }
 
-  function notifyPremiumInvoice(fakturaId: string, kwota: number) {
+  function notifyPremiumInvoice(kwota: number) {
+    if (!fakturaPremiowana) return;
     const normalized = Math.max(0, kwota);
-    if (notifiedPremiumValues.current[fakturaId] === normalized) return;
-    notifiedPremiumValues.current[fakturaId] = normalized;
+    if (notifiedPremiumValues.current[fakturaPremiowana.id] === normalized) return;
+    notifiedPremiumValues.current[fakturaPremiowana.id] = normalized;
 
     logChange({
       workspaceId: token,
       userName,
       action: "faktura_kwota_premiowana",
       entity: "invoice",
-      entityId: fakturaId,
-      newValue: { premiowanaKwotaNetto: normalized },
-      description: `${userName} ustawił premiowaną kwotę Żeni: ${formatZl(normalized)} netto`,
+      entityId: fakturaPremiowana.id,
+      newValue: { kwotaNetto: normalized },
+      description: `${userName} ustawił fakturę premiowaną: ${formatZl(normalized)} netto`,
+      url: `/admin?miesiac=${miesiac}&zakladka=zarobek`,
+    });
+  }
+
+  function notifyPremiumDescription(description: string) {
+    if (!fakturaPremiowana) return;
+    const normalized = description.trim();
+    const previous = premiumDescriptionBeforeEdit.current[fakturaPremiowana.id] ?? "";
+    if (previous === normalized) return;
+    premiumDescriptionBeforeEdit.current[fakturaPremiowana.id] = normalized;
+
+    logChange({
+      workspaceId: token,
+      userName,
+      action: "faktura_premiowana_opis",
+      entity: "invoice",
+      entityId: fakturaPremiowana.id,
+      oldValue: { opis: previous },
+      newValue: { opis: normalized },
+      description: `${userName} zmienił opis faktury premiowanej`,
       url: `/admin?miesiac=${miesiac}&zakladka=zarobek`,
     });
   }
@@ -569,6 +604,9 @@ export function ZarobekTab({
   }
 
   const sumaFaktur = obliczPrzychod(faktury, ustawienia);
+  const kwotyFakturyPremiowanej = fakturaPremiowana
+    ? calculateInvoiceAmounts(fakturaPremiowana, ustawienia)
+    : null;
 
   return (
     <>
@@ -621,7 +659,7 @@ export function ZarobekTab({
         </div>
 
         <div className="space-y-3">
-          {faktury.map((faktura) => (
+          {fakturyStandardowe.map((faktura) => (
             <div
               key={faktura.id}
               className="rounded-2xl border border-line border-l-4 border-l-amber-brand bg-surface p-4 space-y-3"
@@ -700,35 +738,6 @@ export function ZarobekTab({
                   </span>
                 </div>
               )}
-
-              <div className="rounded-xl border border-line bg-surface2 p-3">
-                <label className="block text-xs font-semibold text-ink">
-                  Premiowane faktury - kwota Żeni (netto)
-                </label>
-                <p className="mb-2 mt-0.5 text-[10px] leading-relaxed text-dim">
-                  Dodatkowy przychód z tej faktury. Zwiększa VAT, podatek dochodowy i przychód miesiąca.
-                </p>
-                <div className="relative">
-                  <NumInput
-                    value={faktura.premiowanaKwotaNetto ?? 0}
-                    onChange={(val) => setPremiowanaKwota(faktura.id, val)}
-                    onBlur={(e) => notifyPremiumInvoice(faktura.id, parseNum(e.currentTarget.value))}
-                    placeholder="0,00"
-                    className="!pr-12"
-                  />
-                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-dim">
-                    zł
-                  </span>
-                </div>
-                {(faktura.premiowanaKwotaNetto ?? 0) > 0 && (
-                  <div className="mt-2 flex items-center justify-between gap-3 border-t border-line pt-2 text-xs">
-                    <span className="text-dim">Łącznie z kwotą premiowaną</span>
-                    <span className="font-bold tabular-nums text-green-300">
-                      {formatZl(calculateInvoiceAmounts(faktura, ustawienia).brutto)} brutto
-                    </span>
-                  </div>
-                )}
-              </div>
 
               {/* Status faktury + data wystawienia + termin płatności */}
               <div className="flex items-center gap-2 flex-wrap text-xs">
@@ -838,6 +847,63 @@ export function ZarobekTab({
               )}
             </div>
           ))}
+
+          {fakturaPremiowana && (
+            <div className="space-y-3 rounded-2xl border border-amber-brand/60 border-l-4 border-l-amber-brand bg-amber-brand/10 p-4">
+              <div>
+                <p className="text-[15px] font-bold leading-tight text-amber-brand">
+                  Faktura premiowana
+                </p>
+                <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-dim">
+                  Dodatkowy przychód Żeni · kwota netto
+                </p>
+              </div>
+
+              <label className="block text-xs font-semibold text-ink">
+                Kwota netto
+                <div className="relative mt-1">
+                  <NumInput
+                    value={fakturaPremiowana.kwota}
+                    onChange={(kwota) => updatePremiumInvoice({ kwota: Math.max(0, kwota) })}
+                    onBlur={(e) => notifyPremiumInvoice(parseNum(e.currentTarget.value))}
+                    placeholder="0,00"
+                    className="!py-3 !pr-12 !text-xl"
+                  />
+                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-dim">
+                    zł
+                  </span>
+                </div>
+              </label>
+
+              <label className="block text-xs font-semibold text-ink">
+                Opis
+                <textarea
+                  value={fakturaPremiowana.opisPremiowanej ?? ""}
+                  onFocus={(e) => {
+                    premiumDescriptionBeforeEdit.current[fakturaPremiowana.id] = e.currentTarget.value.trim();
+                  }}
+                  onChange={(e) => updatePremiumInvoice({ opisPremiowanej: e.target.value })}
+                  onBlur={(e) => notifyPremiumDescription(e.currentTarget.value)}
+                  rows={3}
+                  placeholder="np. premia Żeni za dodatkowy okres"
+                  className="mt-1 w-full resize-y rounded-[10px] border border-line bg-input px-3 py-2.5 text-sm text-ink placeholder:text-dim/50 focus:border-amber-brand focus:outline-none focus:ring-2 focus:ring-amber-brand/20"
+                />
+              </label>
+
+              {kwotyFakturyPremiowanej && kwotyFakturyPremiowanej.netto > 0 && (
+                <div className="grid grid-cols-2 gap-2 border-t border-amber-brand/25 pt-3 text-xs">
+                  <div className="flex items-center justify-between gap-2 text-dim">
+                    <span>VAT</span>
+                    <span className="tabular-nums text-ink">{formatZl(kwotyFakturyPremiowanej.vat)}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 text-dim">
+                    <span>Brutto</span>
+                    <span className="tabular-nums font-bold text-green-300">{formatZl(kwotyFakturyPremiowanej.brutto)}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Suma */}

@@ -41,7 +41,7 @@ test("faktura ręczna netto i import PDF dają wspólną sumę brutto", () => {
   assert.equal(sumInvoiceGross([manual, imported], salesSettings), 3_105.07);
 });
 
-test("premiowana kwota Żeni zwiększa netto, VAT i brutto faktury", () => {
+test("starsza premiowana kwota Żeni nadal zwiększa netto, VAT i brutto faktury", () => {
   const invoice = {
     id: "premium",
     label: "Faktura 1",
@@ -54,6 +54,23 @@ test("premiowana kwota Żeni zwiększa netto, VAT i brutto faktury", () => {
     netto: 1_200,
     vat: 276,
     brutto: 1_476,
+  });
+});
+
+test("osobna faktura premiowana jest liczona jako przychód netto z VAT", () => {
+  const invoice = {
+    id: "premium-8",
+    label: "Faktura premiowana",
+    kwota: 200,
+    rodzaj: "premiowana",
+    amountMode: "netto",
+    opisPremiowanej: "Premia Żeni",
+  };
+
+  assert.deepEqual(calculateInvoiceAmounts(invoice, salesSettings), {
+    netto: 200,
+    vat: 46,
+    brutto: 246,
   });
 });
 

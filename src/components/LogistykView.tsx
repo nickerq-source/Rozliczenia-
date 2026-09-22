@@ -208,16 +208,27 @@ function MiesiacCard({ m }: { m: RozliczenieLogistyka }) {
           <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-green-400">
             Automatycznie z faktur
           </p>
-          {m.wykluczoneDodatkiAutomatyczne.length > 0 && (
-            <p className="mb-1 rounded-lg border border-amber-brand/35 bg-amber-brand/10 px-2 py-1.5 text-[10px] text-amber-brand">
-              Pominięto {m.wykluczoneDodatkiAutomatyczne.length} pozycji „dodatek/niedziela”.
-            </p>
-          )}
           <div>
             {m.zleceniaAutomatyczne.map((z) => (
               <LogistykPdfOrderRow key={z.id} order={z} />
             ))}
           </div>
+
+          {m.wykluczoneDodatkiAutomatyczne.length > 0 && (
+            <div className="mt-3 rounded-xl border border-amber-brand/35 bg-amber-brand/5 px-3 py-2">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-amber-brand">
+                Odrzucone z PDF ({m.wykluczoneDodatkiAutomatyczne.length})
+              </p>
+              <p className="mt-1 text-[10px] leading-relaxed text-dim">
+                Te pozycje nie są liczone jako zlecenia. Rozwiń wpis, aby zobaczyć pełny opis i powód odrzucenia.
+              </p>
+              <div className="mt-1">
+                {m.wykluczoneDodatkiAutomatyczne.map((order) => (
+                  <LogistykPdfOrderRow key={order.id} order={order} variant="rejected" />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
