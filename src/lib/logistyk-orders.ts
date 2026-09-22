@@ -65,6 +65,8 @@ function addonExclusionReason(row: PDFImportDiagnosticRow): string | null {
   );
   const hasAddon = /\bDODATEK\b/.test(text);
   const hasSunday = /\bNIEDZIEL[A-Z]*\b/.test(text);
+  const hasMandate = /\bMANDAT[A-Z]*\b/.test(text);
+  if (hasMandate) return "Opis zawiera słowo „mandat” — to rozliczenie, nie zlecenie";
   if (hasAddon && hasSunday) return "Opis zawiera słowa „dodatek” i „niedziela”";
   if (hasAddon) return "Opis zawiera słowo „dodatek”";
   if (hasSunday) return "Opis zawiera odmianę słowa „niedziela”";

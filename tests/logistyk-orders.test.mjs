@@ -95,6 +95,22 @@ const invoice = {
         reason: "",
       },
       {
+        orderNumber: "ZEN-MANDAT",
+        date: "2026-08-08",
+        driverName: "YEVHENII PITIANIN",
+        vehicleType: "4/10",
+        route: "KRAKÓW",
+        km: 0,
+        cost: 50,
+        notes: "MANDAT KARNY",
+        additionalDescription: "zwrot za mandat karny z 31.08",
+        status: "",
+        invitationId: null,
+        vehicleOwner: "unknown",
+        isAdditional: true,
+        reason: "",
+      },
+      {
         orderNumber: "NORMAL-1",
         date: "2026-08-07",
         driverName: "ARTUR SZADY",
@@ -149,10 +165,14 @@ test("wyklucza z prowizji pozycje opisane jako dodatek albo niedziela", () => {
   assert.deepEqual(result.included.map((order) => order.sourceOrderNumber), ["ZEN-1", "ART-1"]);
   assert.deepEqual(
     result.excluded.map((order) => order.sourceOrderNumber),
-    ["ART-DODATEK", "ZEN-NIEDZIELA"]
+    ["ART-DODATEK", "ZEN-MANDAT", "ZEN-NIEDZIELA"]
   );
   assert.equal(result.excluded[0].sourceExclusionReason, "Opis zawiera słowo „dodatek”");
-  assert.equal(result.excluded[1].sourceExclusionReason, "Opis zawiera odmianę słowa „niedziela”");
+  assert.equal(
+    result.excluded[1].sourceExclusionReason,
+    "Opis zawiera słowo „mandat” — to rozliczenie, nie zlecenie"
+  );
+  assert.equal(result.excluded[2].sourceExclusionReason, "Opis zawiera odmianę słowa „niedziela”");
 });
 
 test("ręczne przywrócenie odrzuconej pozycji wchodzi do rozliczenia", () => {

@@ -16,6 +16,9 @@
     "test:logistyk-orders": "node --experimental-strip-types --test tests/logistyk-orders.test.mjs",
     "test:logistyk-settings": "node --experimental-strip-types --test tests/logistyk-settings.test.mjs",
     "test:invoice-description": "node --experimental-strip-types --test tests/invoice-additional-description.test.mjs",
+    "test:invoice-parser": "node --experimental-strip-types --test tests/invoice-parser.test.mjs",
+    "test:invoice-weeks": "node --experimental-strip-types --test tests/invoice-weeks.test.mjs",
+    "test:monthly-income-tax": "node --experimental-strip-types --test tests/monthly-income-tax.test.mjs",
     "test:accounting": "node --experimental-strip-types --test tests/accounting-consistency.test.mjs"
   },
   "dependencies": {

@@ -41,6 +41,22 @@ test("faktura ręczna netto i import PDF dają wspólną sumę brutto", () => {
   assert.equal(sumInvoiceGross([manual, imported], salesSettings), 3_105.07);
 });
 
+test("premiowana kwota Żeni zwiększa netto, VAT i brutto faktury", () => {
+  const invoice = {
+    id: "premium",
+    label: "Faktura 1",
+    kwota: 1_230,
+    amountMode: "brutto",
+    premiowanaKwotaNetto: 200,
+  };
+
+  assert.deepEqual(calculateInvoiceAmounts(invoice, salesSettings), {
+    netto: 1_200,
+    vat: 276,
+    brutto: 1_476,
+  });
+});
+
 test("nadwyżka VAT przechodzi na kolejny miesiąc i pomniejsza zapłatę", () => {
   const june = calculateVatSettlement({
     outputVat: 100,

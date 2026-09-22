@@ -2,6 +2,7 @@
 
 import { KIEROWCA, TYP_TRANSPORTU, VAT } from "./config";
 import { extractAdditionalDescription } from "./invoice-additional-description";
+import { splitRouteDriver } from "./invoice-driver-identity";
 
 // ─── POMOCNICZE ───────────────────────────────────────────────────────────────
 
@@ -214,52 +215,6 @@ export function extractInvoiceNumber(text: string): string | null {
 const ORDER_RE = /^\s*(\d{2,6}\/\d{2}\/\d{2}CLKR2)\b/i;
 const VEHICLE_RE = /\b\d+\/\d+\b/;
 const ISO_RE = /\b\d{4}-\d{2}-\d{2}\b/g;
-
-function extractContinuationSurname(lines: string[], znane: Set<string> = new Set()): string | null {
-  for (const line of lines.slice(0, 3)) {
-    // Nazwisko po przecinku, np. "/D KRAKÓW, PITIANIN". Pomijamy słowa już znane
-    // z głównej linii (miasto/imię), bo nazwisko to to INNE słowo.
-    for (const m of line.matchAll(/,\s*([A-Za-zĄĆĘŁŃÓŚŹŻąćęłńóśźż-]{2,})\b/g)) {
-      const cand = m[1].toUpperCase();
-      if (!znane.has(cand)) return cand;
-    }
-    // Znacznik /D lub /I, np. "/I PITIANIN przewóz na" albo "/D KRAKÓW PITIANIN"
-    // (bywa BEZ przecinka). Z tokenów WERSALIKAMI bierzemy ten, który nie jest
-    // miastem/imieniem z głównej linii — inaczej łapało miasto (KRAKÓW) jako nazwisko.
-    const marker = line.match(/^\/[A-Za-z]\b\s*(.*)$/);
-    if (marker) {
-      const caps = [...marker[1].matchAll(/\b([A-ZĄĆĘŁŃÓŚŹŻ]{2,})\b/g)].map((c) => c[1].toUpperCase());
-      const surname = caps.find((c) => !znane.has(c));
-      if (surname) return surname;
-    }
-  }
-  return null;
-}
-
-function splitRouteDriver(beforeType: string, continuationLines: string[]): { route: string; driverName: string } {
-  const cleaned = beforeType.replace(/[,]+/g, " ").replace(/\s+/g, " ").trim();
-  const tokens = cleaned.split(" ").filter(Boolean);
-  if (tokens.length === 0) return { route: "", driverName: "" };
-
-  const znane = new Set(tokens.map((t) => t.toUpperCase()));
-  const continuationSurname = extractContinuationSurname(continuationLines, znane);
-  if (continuationSurname && tokens.length >= 1) {
-    const firstName = tokens[tokens.length - 1];
-    return {
-      route: tokens.slice(0, -1).join(" "),
-      driverName: `${firstName} ${continuationSurname}`.replace(/\s+/g, " ").trim(),
-    };
-  }
-
-  if (tokens.length >= 2) {
-    return {
-      route: tokens.slice(0, -2).join(" "),
-      driverName: tokens.slice(-2).join(" "),
-    };
-  }
-
-  return { route: "", driverName: tokens[0] };
-}
 
 function parseAfterDate(afterDate: string): {
   distanceKm: number;

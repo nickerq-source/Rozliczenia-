@@ -31,6 +31,7 @@ import {
   isEmptyInvoiceSlot,
   normalizeMonthInvoices,
 } from "@/lib/invoice-weeks";
+import { calculateInvoiceAmounts } from "@/lib/invoice-amounts";
 
 interface Props {
   miesiac: MiesiącId;
@@ -101,6 +102,7 @@ export function ZarobekTab({
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const uploadIntent = useRef<{ fakturaId: string; replaceExisting: boolean } | null>(null);
   const notifiedInvoiceValues = useRef<Record<string, number>>({});
+  const notifiedPremiumValues = useRef<Record<string, number>>({});
 
   // ─── WGRYWANIE PDF ─────────────────────────────────────────────────────────
 
@@ -467,6 +469,37 @@ export function ZarobekTab({
     });
   }
 
+  function setPremiowanaKwota(fakturaId: string, premiowanaKwotaNetto: number) {
+    onUpdate((prev) => {
+      const newFaktury = normalizeMonthInvoices(prev.faktury, miesiac);
+      const idx = newFaktury.findIndex((invoice) => invoice.id === fakturaId);
+      if (idx >= 0) {
+        newFaktury[idx] = {
+          ...newFaktury[idx],
+          premiowanaKwotaNetto: Math.max(0, premiowanaKwotaNetto),
+        };
+      }
+      return { ...prev, faktury: normalizeMonthInvoices(newFaktury, miesiac) };
+    });
+  }
+
+  function notifyPremiumInvoice(fakturaId: string, kwota: number) {
+    const normalized = Math.max(0, kwota);
+    if (notifiedPremiumValues.current[fakturaId] === normalized) return;
+    notifiedPremiumValues.current[fakturaId] = normalized;
+
+    logChange({
+      workspaceId: token,
+      userName,
+      action: "faktura_kwota_premiowana",
+      entity: "invoice",
+      entityId: fakturaId,
+      newValue: { premiowanaKwotaNetto: normalized },
+      description: `${userName} ustawił premiowaną kwotę Żeni: ${formatZl(normalized)} netto`,
+      url: `/admin?miesiac=${miesiac}&zakladka=zarobek`,
+    });
+  }
+
   // ─── STATUS FAKTURY ────────────────────────────────────────────────────────
 
   function setStatus(fakturaId: string, status: InvoiceStatus) {
@@ -536,19 +569,6 @@ export function ZarobekTab({
   }
 
   const sumaFaktur = obliczPrzychod(faktury, ustawienia);
-  const invoiceCountByWeek = new Map<number, number>();
-  const invoicePositionById = new Map<string, number>();
-  for (const invoice of faktury) {
-    const weekIndex = invoice.weekIndex ?? 0;
-    invoiceCountByWeek.set(weekIndex, (invoiceCountByWeek.get(weekIndex) ?? 0) + 1);
-  }
-  const seenByWeek = new Map<number, number>();
-  for (const invoice of faktury) {
-    const weekIndex = invoice.weekIndex ?? 0;
-    const position = (seenByWeek.get(weekIndex) ?? 0) + 1;
-    seenByWeek.set(weekIndex, position);
-    invoicePositionById.set(invoice.id, position);
-  }
 
   return (
     <>
@@ -612,6 +632,14 @@ export function ZarobekTab({
                   <p className="text-[15px] font-bold text-white leading-tight">
                     {faktura.label}
                   </p>
+                  {faktura.pdfImport?.zakresOd && faktura.pdfImport?.zakresDo && (
+                    <p className="mt-1 text-xs font-semibold text-amber-brand">
+                      {formatRangeShort(
+                        faktura.pdfImport.zakresOd,
+                        faktura.pdfImport.zakresDo
+                      )}
+                    </p>
+                  )}
                   <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-dim">
                     {faktura.pdfImport
                       ? "Kwota brutto z PDF"
@@ -619,11 +647,6 @@ export function ZarobekTab({
                           faktura.amountMode ?? ustawienia.invoiceAmountMode
                         }`}
                   </p>
-                  {(invoiceCountByWeek.get(faktura.weekIndex ?? 0) ?? 0) > 1 && (
-                    <p className="mt-1 text-[11px] font-semibold text-amber-brand">
-                      Faktura {invoicePositionById.get(faktura.id)} z {invoiceCountByWeek.get(faktura.weekIndex ?? 0)} dla tego tygodnia
-                    </p>
-                  )}
                 </div>
                 <button
                   onClick={() => triggerFileInput(faktura.id)}
@@ -677,6 +700,35 @@ export function ZarobekTab({
                   </span>
                 </div>
               )}
+
+              <div className="rounded-xl border border-line bg-surface2 p-3">
+                <label className="block text-xs font-semibold text-ink">
+                  Premiowane faktury - kwota Żeni (netto)
+                </label>
+                <p className="mb-2 mt-0.5 text-[10px] leading-relaxed text-dim">
+                  Dodatkowy przychód z tej faktury. Zwiększa VAT, podatek dochodowy i przychód miesiąca.
+                </p>
+                <div className="relative">
+                  <NumInput
+                    value={faktura.premiowanaKwotaNetto ?? 0}
+                    onChange={(val) => setPremiowanaKwota(faktura.id, val)}
+                    onBlur={(e) => notifyPremiumInvoice(faktura.id, parseNum(e.currentTarget.value))}
+                    placeholder="0,00"
+                    className="!pr-12"
+                  />
+                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-dim">
+                    zł
+                  </span>
+                </div>
+                {(faktura.premiowanaKwotaNetto ?? 0) > 0 && (
+                  <div className="mt-2 flex items-center justify-between gap-3 border-t border-line pt-2 text-xs">
+                    <span className="text-dim">Łącznie z kwotą premiowaną</span>
+                    <span className="font-bold tabular-nums text-green-300">
+                      {formatZl(calculateInvoiceAmounts(faktura, ustawienia).brutto)} brutto
+                    </span>
+                  </div>
+                )}
+              </div>
 
               {/* Status faktury + data wystawienia + termin płatności */}
               <div className="flex items-center gap-2 flex-wrap text-xs">

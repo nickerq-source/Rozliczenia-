@@ -34,34 +34,42 @@ export function calculateInvoiceAmounts(
   invoice: FakturaWeek,
   settings?: InvoiceAmountSettings
 ): InvoiceAmounts {
-  if (invoice.pdfImport && safeNumber(invoice.pdfImport.netto) > 0) {
-    const netto = round2(safeNumber(invoice.pdfImport.netto));
-    const fallbackRate = settings?.defaultSalesVatRate ?? DEFAULT_VAT_RATE;
-    const brutto = round2(
-      safeNumber(invoice.pdfImport.brutto) > 0
-        ? safeNumber(invoice.pdfImport.brutto)
-        : netto * (1 + fallbackRate)
-    );
-    return { netto, vat: round2(brutto - netto), brutto };
-  }
-
-  const amount = safeNumber(invoice.kwota);
-  if (amount <= 0) return { netto: 0, vat: 0, brutto: 0 };
-
   const vatRate = Math.max(
     0,
     safeNumber(invoice.vatRate ?? settings?.defaultSalesVatRate ?? DEFAULT_VAT_RATE)
   );
+  const premiumNet = round2(Math.max(0, safeNumber(invoice.premiowanaKwotaNetto)));
+  const premiumVat = round2(premiumNet * vatRate);
+
+  if (invoice.pdfImport && safeNumber(invoice.pdfImport.netto) > 0) {
+    const baseNet = round2(safeNumber(invoice.pdfImport.netto));
+    const baseGross = round2(
+      safeNumber(invoice.pdfImport.brutto) > 0
+        ? safeNumber(invoice.pdfImport.brutto)
+        : baseNet * (1 + vatRate)
+    );
+    const netto = round2(baseNet + premiumNet);
+    const vat = round2(baseGross - baseNet + premiumVat);
+    return { netto, vat, brutto: round2(netto + vat) };
+  }
+
+  const amount = safeNumber(invoice.kwota);
   const amountMode =
     invoice.amountMode ?? settings?.invoiceAmountMode ?? DEFAULT_AMOUNT_MODE;
 
-  if (amountMode === "brutto") {
-    const brutto = round2(amount);
-    const netto = round2(brutto / (1 + vatRate));
-    return { netto, vat: round2(brutto - netto), brutto };
+  if (amount <= 0) {
+    return { netto: premiumNet, vat: premiumVat, brutto: round2(premiumNet + premiumVat) };
   }
 
-  const netto = round2(amount);
+  if (amountMode === "brutto") {
+    const baseGross = round2(amount);
+    const baseNet = round2(baseGross / (1 + vatRate));
+    const netto = round2(baseNet + premiumNet);
+    const vat = round2(baseGross - baseNet + premiumVat);
+    return { netto, vat, brutto: round2(netto + vat) };
+  }
+
+  const netto = round2(amount + premiumNet);
   const vat = round2(netto * vatRate);
   return { netto, vat, brutto: round2(netto + vat) };
 }

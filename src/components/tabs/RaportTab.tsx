@@ -175,8 +175,8 @@ export function RaportTab({ data }: Props) {
           kmTotal += imp.sumaKm;
           kolkaTotal += imp.ileKolek;
         }
-        if ((saved.kwota ?? 0) > 0) {
-          const invoiceGross = calculateInvoiceAmounts(saved, u).brutto;
+        const invoiceGross = calculateInvoiceAmounts(saved, u).brutto;
+        if (invoiceGross > 0) {
           ranking.push({
             id: saved.id,
             label: saved.customRange

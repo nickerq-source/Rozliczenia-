@@ -138,6 +138,33 @@ export function PodsumowanieTab({
   // Wypłata do ręki = wynagrodzenie (dniówki + premia) − potrącenia kierowcy.
   const obciazeniaSuma = wynik.potraceniaKierowcy;
   const doWyplaty = wynik.wynagrodzenieDoWyplaty;
+
+  function setMonthlyIncomeTaxRate(ratePercent: number | null) {
+    if (!onUpdate) return;
+    const previous = dane.podatekDochodowyStawkaMiesieczna ?? null;
+    const next = ratePercent === null
+      ? null
+      : Math.min(100, Math.max(0, Math.round(ratePercent * 100) / 100));
+    if (previous === next) return;
+
+    onUpdate((prev) => ({
+      ...prev,
+      podatekDochodowyStawkaMiesieczna: next,
+    }));
+    logChange({
+      workspaceId: token,
+      userName,
+      action: "podatek_dochodowy_stawka_miesieczna",
+      entity: "month",
+      entityId: String(miesiac),
+      oldValue: { stawkaProcent: previous },
+      newValue: { stawkaProcent: next },
+      description: next === null
+        ? `${userName} włączył automatyczne liczenie podatku dochodowego`
+        : `${userName} ustawił podatek dochodowy na ${next}% dla miesiąca`,
+      url: `/admin?miesiac=${miesiac}&zakladka=podsumowanie`,
+    });
+  }
   const kosztyEksport = useMemo(() => {
     if (!ustawienia) return [];
     type EksportRow = {
@@ -562,7 +589,11 @@ export function PodsumowanieTab({
             </div>
             {podatki.pitMiesiac === 0 && wyjasnieniePodatku && (
               <p className="rounded-lg border border-line bg-surface2 px-2.5 py-2 text-[10px] leading-relaxed text-dim">
-                {wyjasnieniePodatku.powod === "strata"
+                {podatki.pitTryb === "reczna_stawka"
+                  ? podatki.dochod > 0
+                    ? `0 zł — ręczna stawka ${podatki.pitStawkaMiesiecznaProcent}% od dodatniego dochodu daje po zaokrągleniu 0 zł.`
+                    : `0 zł — ręczna stawka ${podatki.pitStawkaMiesiecznaProcent}% jest aktywna, ale nie ma dodatniego dochodu podatkowego.`
+                  : wyjasnieniePodatku.powod === "strata"
                   ? `0 zł — nadal pozostaje ${formatZl(wyjasnieniePodatku.pozostalaStrata)} straty podatkowej do rozliczenia.`
                   : wyjasnieniePodatku.powod === "kwota_wolna"
                     ? `0 zł — dochód mieści się w kwocie wolnej; pozostało ${formatZl(wyjasnieniePodatku.pozostalaKwotaWolna)} kwoty wolnej.`
@@ -712,6 +743,8 @@ export function PodsumowanieTab({
           taxFreeAmount={taxFreeAmountForModule}
           incomeTaxScope={ustawienia?.incomeTaxScope}
           wynik={wynik}
+          monthlyIncomeTaxRatePercent={dane.podatekDochodowyStawkaMiesieczna ?? null}
+          onMonthlyIncomeTaxRateChange={onUpdate ? setMonthlyIncomeTaxRate : undefined}
         />
       )}
 

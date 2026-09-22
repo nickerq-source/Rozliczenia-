@@ -128,8 +128,10 @@ export type InvoiceStatus =
 
 export interface FakturaWeek {
   id: string;
-  label: string; // "Faktura DD.MM–DD.MM.2026"
+  label: string; // etykieta porządkowa, np. "Faktura 1"
   kwota: number;
+  /** Dodatkowy przychód netto z tej faktury przypisany Żeni; podlega VAT i podatkowi dochodowemu. */
+  premiowanaKwotaNetto?: number;
   /** Kalendarzowy tydzień miesiąca (indeks 0-based). Pozwala przechowywać kilka faktur dla tego samego tygodnia. */
   weekIndex?: number;
   pdfImport?: PDFImportData; // zaimportowane dane z PDF
@@ -368,6 +370,8 @@ export interface DaneMiesiaca {
   zleceniaLog?: ZlecenieLog[]; // zlecenia wpisywane ręcznie (dla rozliczenia logistyka)
   fakturyZlecenLog?: FakturaZlecenLog[]; // osobne faktury zleceń, np. faktury Damiana
   logistykUstawienia?: LogistykUstawienia; // stawki i włączniki rozliczenia dla miesiąca
+  /** Ręczna stawka podatku dochodowego dla miesiąca w procentach; brak = automatycznie wg ustawień. */
+  podatekDochodowyStawkaMiesieczna?: number | null;
 }
 
 export interface LogistykUstawienia {

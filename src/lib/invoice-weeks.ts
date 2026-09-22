@@ -1,5 +1,6 @@
-import { getWeeksOfMonth, findBestWeekForRange, formatRangeLabel } from "@/lib/dates";
-import { FakturaWeek, MiesiącId } from "@/lib/types";
+import { getWeeksOfMonth, findBestWeekForRange } from "./dates";
+import type { FakturaWeek, MiesiącId } from "./types";
+import { orderAndNumberInvoiceSlots } from "./invoice-ordering";
 
 function isValidWeekIndex(value: unknown, weekCount: number): value is number {
   return Number.isInteger(value) && Number(value) >= 0 && Number(value) < weekCount;
@@ -55,9 +56,7 @@ export function normalizeMonthInvoices(
       id,
       weekIndex,
       customRange,
-      label: customRange
-        ? formatRangeLabel(customRange.od, customRange.do)
-        : weeks[weekIndex].label,
+      label: invoice.label,
       __order: arrayIndex,
     };
   });
@@ -72,23 +71,31 @@ export function normalizeMonthInvoices(
     normalized.push({
       id,
       weekIndex,
-      label: weeks[weekIndex].label,
+      label: "",
       kwota: 0,
       customRange: null,
       __order: Number.MAX_SAFE_INTEGER,
     });
   }
 
-  return normalized
-    .sort((a, b) => (a.weekIndex ?? 0) - (b.weekIndex ?? 0) || a.__order - b.__order)
-    .map(({ __order, ...invoice }) => {
+  return orderAndNumberInvoiceSlots(
+    normalized.map((invoice) => ({
+      ...invoice,
+      empty: isEmptyInvoiceSlot(invoice),
+      sourceOrder: invoice.__order,
+    }))
+  ).map(({ __order, empty, sourceOrder, displayLabel, ...invoice }) => {
       void __order;
-      return invoice;
+      void empty;
+      void sourceOrder;
+      return { ...invoice, label: displayLabel };
     });
 }
 
 export function isEmptyInvoiceSlot(invoice: FakturaWeek): boolean {
-  return !invoice.pdfImport && Number(invoice.kwota ?? 0) === 0;
+  return !invoice.pdfImport
+    && Number(invoice.kwota ?? 0) === 0
+    && Number(invoice.premiowanaKwotaNetto ?? 0) === 0;
 }
 
 export function createAdditionalInvoiceId(miesiac: MiesiącId, weekIndex: number): string {

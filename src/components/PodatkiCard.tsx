@@ -4,7 +4,7 @@
 // Widok prosty (domyślny) odpowiada po ludzku: ile do zapłaty i ile zostaje.
 // Szczegóły podatkowe pokazują pełne rozbicie VAT, podatku dochodowego i zdrowotnej.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PodatkiMiesiaca } from "@/lib/tax";
 import { formatZl } from "@/lib/business-logic";
 import { MiesiącId, WynikMiesiaca } from "@/lib/types";
@@ -87,11 +87,25 @@ function WierszWyjasnienia({
 function WyjasnienieZerowegoPodatku({
   wyjasnienie,
   miesiac,
+  manualRatePercent,
 }: {
   wyjasnienie: WyjasnieniePodatkuMiesiaca;
   miesiac: MiesiącId;
+  manualRatePercent?: number | null;
 }) {
   if (wyjasnienie.podatekMiesiaca > 0) return null;
+
+  if (manualRatePercent !== null && manualRatePercent !== undefined) {
+    return (
+      <div className="mt-2 rounded-xl border border-line bg-surface2 p-3">
+        <p className="text-[11px] leading-relaxed text-dim">
+          {wyjasnienie.dochodMiesiaca > 0
+            ? `Ręczna stawka ${manualRatePercent}% od ${formatZl(wyjasnienie.dochodMiesiaca)} dodatniego dochodu daje ${formatZl(wyjasnienie.podatekMiesiaca)} podatku za ten miesiąc.`
+            : `Ręczna stawka ${manualRatePercent}% jest aktywna, ale w tym miesiącu nie ma dodatniego dochodu podatkowego.`}
+        </p>
+      </div>
+    );
+  }
 
   if (wyjasnienie.powod === "strata") {
     return (
@@ -220,14 +234,26 @@ export function PodatkiCard({
   taxFreeAmount = 30000,
   incomeTaxScope = "company_division",
   wynik,
+  monthlyIncomeTaxRatePercent = null,
+  onMonthlyIncomeTaxRateChange,
 }: {
   p: PodatkiMiesiaca;
   taxForm: "skala" | "liniowy";
   taxFreeAmount?: number;
   incomeTaxScope?: "company_division" | "standalone";
   wynik: WynikMiesiaca;
+  monthlyIncomeTaxRatePercent?: number | null;
+  onMonthlyIncomeTaxRateChange?: (ratePercent: number | null) => void;
 }) {
   const [szczegoly, setSzczegoly] = useState(false);
+  const [rateDraft, setRateDraft] = useState(monthlyIncomeTaxRatePercent ?? 12);
+  const manualRateEnabled = monthlyIncomeTaxRatePercent !== null;
+
+  useEffect(() => {
+    if (monthlyIncomeTaxRatePercent !== null) {
+      setRateDraft(monthlyIncomeTaxRatePercent);
+    }
+  }, [monthlyIncomeTaxRatePercent]);
 
   const nadwyzka = p.vatDoZaplaty < 0;
   const strata = p.dochod < 0;
@@ -284,11 +310,15 @@ export function PodatkiCard({
     },
     pit_ytd: {
       label: aktualneDaneLabel,
-      text: `Podatek dochodowy wyliczony narastająco: ${formatZl(p.pitYtd)}.`,
+      text: p.pitTryb === "reczna_stawka"
+        ? `Po zastosowaniu ręcznej stawki ${p.pitStawkaMiesiecznaProcent}% podatek dochodowy naliczony od początku okresu wynosi ${formatZl(p.pitYtd)}.`
+        : `Podatek dochodowy wyliczony narastająco: ${formatZl(p.pitYtd)}.`,
     },
     pit_miesiac: {
       label: aktualneDaneLabel,
-      text: `${formatZl(p.pitYtd)} podatku narastająco − ${formatZl(p.pitZaplaconyPrzed)} zaliczek naliczonych wcześniej = ${formatZl(p.pitMiesiac)} do zapłaty za ten miesiąc.`,
+      text: p.pitTryb === "reczna_stawka"
+        ? `${formatZl(Math.max(0, p.dochod))} dodatniego dochodu × ${p.pitStawkaMiesiecznaProcent}% = ${formatZl(p.pitMiesiac)} podatku dochodowego za ten miesiąc.`
+        : `${formatZl(p.pitYtd)} podatku narastająco − ${formatZl(p.pitZaplaconyPrzed)} zaliczek naliczonych wcześniej = ${formatZl(p.pitMiesiac)} do zapłaty za ten miesiąc.`,
     },
     zdrowotna: {
       label: aktualneDaneLabel,
@@ -325,6 +355,76 @@ export function PodatkiCard({
       <p className="mb-3 text-[11px] text-dim/60">
         Wyliczenia są szacunkowe. Ostateczne rozliczenie potwierdza księgowa.
       </p>
+
+      {onMonthlyIncomeTaxRateChange && (
+        <div className="mb-3 rounded-xl border border-line bg-surface2 p-3">
+          <label className="flex min-h-10 cursor-pointer items-center gap-3">
+            <input
+              type="checkbox"
+              checked={manualRateEnabled}
+              onChange={(event) => {
+                onMonthlyIncomeTaxRateChange(event.target.checked ? rateDraft : null);
+              }}
+              className="h-5 w-5 accent-amber-500"
+            />
+            <span>
+              <span className="block text-sm font-bold text-ink">
+                Ręczna stawka podatku dochodowego dla tego miesiąca
+              </span>
+              <span className="block text-[10px] leading-relaxed text-dim">
+                Włącz, gdy próg podatkowy wynika z całej firmy i automatyczne wyliczenie PapiTrans nie wystarcza.
+              </span>
+            </span>
+          </label>
+          {manualRateEnabled && (
+            <div className="mt-3 border-t border-line pt-3">
+              <div className="mb-2 grid grid-cols-3 gap-2">
+                {[12, 24, 32].map((rate) => (
+                  <button
+                    key={rate}
+                    type="button"
+                    onClick={() => {
+                      setRateDraft(rate);
+                      onMonthlyIncomeTaxRateChange(rate);
+                    }}
+                    className={cn(
+                      "min-h-10 rounded-lg border text-sm font-bold",
+                      monthlyIncomeTaxRatePercent === rate
+                        ? "border-amber-brand bg-amber-brand text-black"
+                        : "border-line bg-input text-ink"
+                    )}
+                  >
+                    {rate}%
+                  </button>
+                ))}
+              </div>
+              <label className="block text-xs text-dim">
+                Inna stawka procentowa
+                <div className="relative mt-1">
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    max={100}
+                    step="0.01"
+                    value={rateDraft}
+                    onChange={(event) => setRateDraft(Number(event.target.value))}
+                    onBlur={() => onMonthlyIncomeTaxRateChange(rateDraft)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") event.currentTarget.blur();
+                    }}
+                    className="w-full rounded-[10px] border border-line bg-input px-3 py-2.5 pr-10 text-right text-[15px] tabular-nums text-ink"
+                  />
+                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-dim">%</span>
+                </div>
+              </label>
+              <p className="mt-2 text-[10px] leading-relaxed text-dim">
+                Podatek za miesiąc jest liczony od dodatniego dochodu podatkowego według tej stawki. Wszystkie kwoty końcowe aktualizują się razem z nim.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── WIDOK PROSTY ─────────────────────────────────────────────── */}
       <p className="mb-2 text-xs font-bold uppercase tracking-wider text-amber-brand">
@@ -399,7 +499,9 @@ export function PodatkiCard({
           <div className="flex items-center justify-between gap-3 py-1 text-sm">
             <span className="text-dim">Forma opodatkowania</span>
             <span className="text-right font-bold text-ink">
-              {taxForm === "skala"
+              {p.pitTryb === "reczna_stawka"
+                ? `Ręczna stawka ${p.pitStawkaMiesiecznaProcent}%`
+                : taxForm === "skala"
                 ? incomeTaxScope === "company_division"
                   ? "Skala bez kwoty wolnej (12% / 32%)"
                   : "Skala 12% / 32%"
@@ -412,14 +514,20 @@ export function PodatkiCard({
             klasa={p.pitMiesiac > 0 ? "text-red-300" : "text-green-300"}
             term="pit_miesiac"
           />
-          <WyjasnienieZerowegoPodatku wyjasnienie={wyjasnieniePodatku} miesiac={p.miesiac} />
+          <WyjasnienieZerowegoPodatku
+            wyjasnienie={wyjasnieniePodatku}
+            miesiac={p.miesiac}
+            manualRatePercent={p.pitTryb === "reczna_stawka" ? p.pitStawkaMiesiecznaProcent : null}
+          />
           <Wiersz
             label="Rezerwa na zdrowotną właściciela"
             value={p.zdrowotna}
             term="zdrowotna"
           />
           <p className="mt-2 text-[11px] leading-relaxed text-dim">
-            {taxForm === "skala"
+            {p.pitTryb === "reczna_stawka"
+              ? `Dla tego miesiąca zastosowano ręczną stawkę ${p.pitStawkaMiesiecznaProcent}% od dodatniego dochodu podatkowego.`
+              : taxForm === "skala"
               ? incomeTaxScope === "company_division"
                 ? "PapiTrans jest częścią tej samej firmy, dlatego kalkulator nie stosuje ponownie kwoty wolnej ani kwoty zmniejszającej. Liczy 12% od pierwszej złotówki dochodu do 120 000 zł, a 32% tylko od nadwyżki ponad próg."
                 : "Na skali podatkowej podatek dochodowy i składka zdrowotna są liczone od dochodu. Składki zdrowotnej nie odejmuje się przed obliczeniem podatku dochodowego."
@@ -583,7 +691,13 @@ export function PodatkiCard({
             klasa={p.dochodYtd < 0 ? "text-red-300" : "text-ink"}
             term="wynik_ytd"
           />
-          <Wiersz label="Podatek dochodowy wyliczony od czerwca" value={p.pitYtd} term="pit_ytd" />
+          <Wiersz
+            label={p.pitTryb === "reczna_stawka"
+              ? "Podatek dochodowy narastająco po ręcznej stawce"
+              : "Podatek dochodowy wyliczony od czerwca"}
+            value={p.pitYtd}
+            term="pit_ytd"
+          />
           <Wiersz label="Podatek dochodowy do zapłaty za ten miesiąc" value={p.pitMiesiac} klasa="text-red-300" bold term="pit_miesiac" />
 
           {/* Zdrowotna */}

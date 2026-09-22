@@ -28,6 +28,9 @@ import {
 } from "./invoice-amounts";
 import { calculateVatSettlement } from "./vat-settlement";
 import { calculateOperatingResult } from "./operating-result";
+import {
+  resolveMonthlyIncomeTax,
+} from "./monthly-income-tax";
 
 // ─── USTAWIENIA DOMYŚLNE ─────────────────────────────────────────────────────
 
@@ -297,6 +300,8 @@ export interface PodatkiMiesiaca {
   pitYtd: number;
   pitZaplaconyPrzed: number;
   pitMiesiac: number;
+  pitTryb: "automatyczny" | "reczna_stawka";
+  pitStawkaMiesiecznaProcent: number | null;
   // Zdrowotna
   zdrowotna: number;
   // Zysk
@@ -430,8 +435,15 @@ export function podatkiRoku(data: WorkspaceData): PodatkiMiesiaca[] {
     const dochodYtdPrzed = dochodYtd;
     const pitZaplaconyPrzed = pitZaplaconyYtd;
     dochodYtd = round2(dochodYtd + p.dochod);
-    const pitNarastajaco = pitYtd(Math.max(0, dochodYtd), u);
-    const pitMiesiac = Math.max(0, round2(pitNarastajaco - pitZaplaconyYtd));
+    const automatycznyPitNarastajaco = pitYtd(Math.max(0, dochodYtd), u);
+    const resolvedIncomeTax = resolveMonthlyIncomeTax({
+      taxableIncome: p.dochod,
+      manualRatePercent: dane.podatekDochodowyStawkaMiesieczna,
+      automaticCumulativeTax: automatycznyPitNarastajaco,
+      previouslyCalculatedTax: pitZaplaconyYtd,
+    });
+    const pitMiesiac = resolvedIncomeTax.currentMonthTax;
+    const pitNarastajaco = resolvedIncomeTax.cumulativeTax;
     pitZaplaconyYtd = round2(pitZaplaconyYtd + pitMiesiac);
 
     const zdrowotna = p.aktywny ? zdrowotnaMiesiaca(p.dochod, u) : 0;
@@ -476,6 +488,8 @@ export function podatkiRoku(data: WorkspaceData): PodatkiMiesiaca[] {
       pitYtd: pitNarastajaco,
       pitZaplaconyPrzed,
       pitMiesiac,
+      pitTryb: resolvedIncomeTax.mode,
+      pitStawkaMiesiecznaProcent: resolvedIncomeTax.ratePercent,
       zdrowotna,
       zyskPrzedPodatkami: p.zyskPrzedPodatkami,
       zyskPoPodatkach: finalCash.afterIncomeTaxAndHealth,

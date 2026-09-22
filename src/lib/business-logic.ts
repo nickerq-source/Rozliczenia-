@@ -327,7 +327,7 @@ export function domyslneDaneMiesiaca(miesiac: number): DaneMiesiaca {
   const weeks = getWeeksOfMonth(miesiac);
   const faktury: FakturaWeek[] = weeks.map((w, i) => ({
     id: `w${miesiac}-${i}`,
-    label: w.label,
+    label: `Faktura ${i + 1}`,
     kwota: 0,
     weekIndex: i,
   }));
