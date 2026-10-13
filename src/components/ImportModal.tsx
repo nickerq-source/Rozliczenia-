@@ -7,83 +7,14 @@ import { KIEROWCA, TYP_TRANSPORTU, VAT } from "@/lib/config";
 import { formatZl } from "@/lib/business-logic";
 import { cn } from "@/lib/utils";
 import { useAppBackLayer } from "@/lib/mobile-navigation";
-import type { PDFManualAddition, PDFManualAdditionType } from "@/lib/types";
+import type { PDFManualAddition, PDFManualAdditionType, PDFRecordOverride, PDFImportDiagnosticRow } from "@/lib/types";
+import { recalculateInvoiceImport as calculateFilteredResult, type InvoicePreview } from "@/lib/invoice-import";
+import { grossMoney, invoiceDate, isAdditionalInvoiceRow, orderKey, sumMoney } from "@/lib/invoice-settlement";
+import { InvoiceRowCorrection, type InvoiceCorrection } from "./InvoiceRowCorrection";
 
-interface ImportFilterInfo {
-  driverName: string;
-  vehicleType: string;
-  dateFrom: string | null;
-  dateTo: string | null;
-  // Legacy fields kept only for old saved imports. The UI no longer filters by vehicle.
-  settlementVehiclePlate?: string | null;
-  settlementVehicleMode?: "none" | "plate";
-}
-
-interface RecordOverride {
-  transportOrderId: string;
-  includeInSettlement: boolean;
-  exclusionReason?: string;
-  manuallyOverridden: boolean;
-  vehiclePlate?: string;
-}
-
-interface ImportDiagnosticRow {
-  orderNumber: string;
-  date: string | null;
-  driverName: string;
-  vehicleType: string;
-  route: string;
-  km: number;
-  cost: number;
-  notes: string;
-  status: string;
-  invitationId: string | null;
-  isAdditional?: boolean;
-  reason: string;
-  rawText?: string;
-  // Legacy fields may exist in old JSON, but are intentionally not displayed.
-  vehicleOwner: "driver_car" | "company_car" | "replacement_car" | "unknown";
-  vehiclePlate?: string | null;
-  vehicleRuleReason?: string;
-  manuallyOverridden?: boolean;
-}
-
-interface FilteredResult {
-  filters?: ImportFilterInfo;
-  ileKolek: number;
-  ileZlecen?: number;
-  kolkaNetto?: number;
-  kolkaBrutto?: number;
-  zleceniaNetto?: number;
-  zleceniaBrutto?: number;
-  sumaKm: number;
-  netto: number;
-  brutto: number;
-  sredniaKm: number;
-  sredniaNetto: number;
-  sredniaBrutto: number;
-  zakresOd: string | null;
-  zakresDo: string | null;
-  includedRows?: ImportDiagnosticRow[];
-  rejectedRows?: ImportDiagnosticRow[];
-  sourceRows?: ImportDiagnosticRow[];
-  recordOverrides?: RecordOverride[];
-  invoiceImportDateFrom?: string | null;
-  invoiceImportDateTo?: string | null;
-  manualDateRangeSelected?: boolean;
-  komentarz?: string;
-  dodatkiReczne?: PDFManualAddition[];
-  courseNetto?: number;
-  courseBrutto?: number;
-  manualAdditionsNetto?: number;
-  manualAdditionsBrutto?: number;
-  totalNetto?: number;
-  totalBrutto?: number;
-  // Legacy fields kept for type compatibility with older saved imports.
-  vehicleAssignmentRules?: unknown[];
-  settlementVehiclePlate?: string | null;
-  settlementVehicleMode?: "none" | "plate";
-}
+type RecordOverride = PDFRecordOverride;
+type ImportDiagnosticRow = PDFImportDiagnosticRow;
+type FilteredResult = InvoicePreview;
 
 export interface ImportModalProps {
   mode?: "preview" | "confirm";
@@ -151,7 +82,7 @@ function makeId(): string {
 function sourceRowsOf(filtered: FilteredResult): ImportDiagnosticRow[] {
   return filtered.sourceRows && filtered.sourceRows.length > 0
     ? filtered.sourceRows
-    : [...(filtered.includedRows ?? []), ...(filtered.rejectedRows ?? [])];
+    : [...(filtered.includedRows ?? []), ...(filtered.rejectedRows ?? []), ...(filtered.reviewRows ?? [])];
 }
 
 function defaultRangeForRows(
@@ -203,152 +134,37 @@ function Row({ label, value, accent = false }: { label: string; value: string; a
   );
 }
 
-function calculateFilteredResult(
-  base: FilteredResult,
-  params: {
-    dateFrom: string | null;
-    dateTo: string | null;
-    overrides: RecordOverride[];
-    manualDateRangeSelected: boolean;
-    comment: string;
-    additions: PDFManualAddition[];
-  }
-): FilteredResult {
-  const sourceRows = sourceRowsOf(base);
-  if (sourceRows.length === 0) return base;
-
-  const driverName = base.filters?.driverName || KIEROWCA;
-  const vehicleType = base.filters?.vehicleType || TYP_TRANSPORTU;
-  const includedRows: ImportDiagnosticRow[] = [];
-  const rejectedRows: ImportDiagnosticRow[] = [];
-  const dateRejectReason = params.comment.trim()
-    ? "Poza wybranym zakresem dat — patrz komentarz do rozliczenia."
-    : "poza wybranym zakresem dat";
-
-  for (const row of sourceRows) {
-    const reasons: string[] = [];
-    if (!row.date) reasons.push("brak daty");
-    if (row.cost <= 0) reasons.push("brak kwoty");
-    if (normalizeText(row.driverName) !== normalizeText(driverName)) reasons.push("inny kierowca");
-    if (normalizeText(row.vehicleType) !== normalizeText(vehicleType)) reasons.push("inny typ transportu");
-    if (params.dateFrom && row.date && row.date < params.dateFrom) reasons.push(dateRejectReason);
-    if (params.dateTo && row.date && row.date > params.dateTo) reasons.push(dateRejectReason);
-
-    const override = params.overrides.find((o) => o.transportOrderId === row.orderNumber);
-    const nextRow: ImportDiagnosticRow = {
-      ...row,
-      vehicleOwner: row.vehicleOwner ?? "unknown",
-      manuallyOverridden: !!override || row.manuallyOverridden,
-    };
-
-    if (override && !override.includeInSettlement) {
-      reasons.push(override.exclusionReason || "ręcznie wykluczone");
-    }
-
-    const uniqueReasons = Array.from(new Set(reasons));
-    if (uniqueReasons.length === 0) {
-      includedRows.push({
-        ...nextRow,
-        reason: row.isAdditional
-          ? "zgodny kierowca, typ i zakres dat; zlecenie z uwagą"
-          : "zgodny kierowca, typ i zakres dat",
-      });
-    } else {
-      rejectedRows.push({ ...nextRow, reason: uniqueReasons.join(", ") });
-    }
-  }
-
-  const totalRows = includedRows.length;
-  const zleceniaRows = includedRows.filter((row) => row.isAdditional || !!row.notes.trim());
-  const kolkaRows = includedRows.filter((row) => !(row.isAdditional || !!row.notes.trim()));
-  const ileZlecen = zleceniaRows.length;
-  const ileKolek = kolkaRows.length;
-  const sumaKm = includedRows.reduce((sum, row) => sum + row.km, 0);
-  const kolkaNetto = round2(kolkaRows.reduce((sum, row) => sum + row.cost, 0));
-  const zleceniaNetto = round2(zleceniaRows.reduce((sum, row) => sum + row.cost, 0));
-  const kolkaBrutto = round2(kolkaNetto * (1 + VAT));
-  const zleceniaBrutto = round2(zleceniaNetto * (1 + VAT));
-  const courseNetto = round2(includedRows.reduce((sum, row) => sum + row.cost, 0));
-  const courseBrutto = round2(courseNetto * (1 + VAT));
-  const invoiceAdditions = params.additions.filter((addition) => addition.addToInvoice);
-  const manualAdditionsNetto = round2(invoiceAdditions.reduce((sum, addition) => sum + addition.netto, 0));
-  const manualAdditionsBrutto = round2(invoiceAdditions.reduce((sum, addition) => sum + addition.brutto, 0));
-  const totalNetto = round2(courseNetto + manualAdditionsNetto);
-  const totalBrutto = round2(courseBrutto + manualAdditionsBrutto);
-  const dates = includedRows.map((row) => row.date).filter((date): date is string => !!date).sort();
-
-  return {
-    ...base,
-    filters: {
-      driverName,
-      vehicleType,
-      dateFrom: params.dateFrom,
-      dateTo: params.dateTo,
-      settlementVehicleMode: "none",
-      settlementVehiclePlate: null,
-    },
-    invoiceImportDateFrom: params.dateFrom,
-    invoiceImportDateTo: params.dateTo,
-    manualDateRangeSelected: params.manualDateRangeSelected,
-    settlementVehicleMode: "none",
-    settlementVehiclePlate: null,
-    recordOverrides: params.overrides,
-    komentarz: params.comment,
-    dodatkiReczne: params.additions,
-    courseNetto,
-    courseBrutto,
-    manualAdditionsNetto,
-    manualAdditionsBrutto,
-    totalNetto,
-    totalBrutto,
-    ileKolek,
-    ileZlecen,
-    kolkaNetto,
-    kolkaBrutto,
-    zleceniaNetto,
-    zleceniaBrutto,
-    sumaKm,
-    netto: totalNetto,
-    brutto: totalBrutto,
-    sredniaKm: totalRows > 0 ? round2(sumaKm / totalRows) : 0,
-    // Średnie liczymy tylko od kursów, żeby dodatki ręczne nie udawały kółek.
-    sredniaNetto: totalRows > 0 ? round2(courseNetto / totalRows) : 0,
-    sredniaBrutto: totalRows > 0 ? round2(courseBrutto / totalRows) : 0,
-    zakresOd: dates[0] ?? params.dateFrom,
-    zakresDo: dates[dates.length - 1] ?? params.dateTo,
-    includedRows,
-    rejectedRows,
-    sourceRows,
-  };
-}
 
 function DiagnosticCard({
   row,
   rejected = false,
   onExclude,
   onRestore,
+  onCorrect,
 }: {
   row: ImportDiagnosticRow;
   rejected?: boolean;
   onExclude?: (row: ImportDiagnosticRow) => void;
   onRestore?: (row: ImportDiagnosticRow) => void;
+  onCorrect: (row: ImportDiagnosticRow, correction: InvoiceCorrection) => void;
 }) {
+  const [editing, setEditing] = useState(false);
   return (
     <div
       className={cn(
-        "rounded-xl border p-3 text-xs space-y-1",
-        rejected ? "border-red-500/25 bg-red-950/15" : "border-emerald-500/25 bg-emerald-950/15"
+        "rounded-lg border p-3 text-xs space-y-1 break-words",
+        row.needsReview ? "border-amber-500/40 bg-amber-950/15" : rejected ? "border-red-500/25 bg-red-950/15" : "border-emerald-500/25 bg-emerald-950/15"
       )}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="font-bold text-white truncate">{row.orderNumber}</p>
+          <p className="font-bold text-white break-all">{row.orderNumber}</p>
           <p className="text-zinc-500 truncate">{row.route || "bez trasy"}</p>
         </div>
         <span className="shrink-0 text-zinc-300 tabular-nums">{isoToDisplay(row.date)}</span>
       </div>
       <div className="grid grid-cols-2 gap-2 text-zinc-400">
-        <span className="truncate">{row.driverName || "brak kierowcy"}</span>
+        <span>{row.driverName || "brak kierowcy"}</span>
         <span className="text-right">{row.vehicleType || "brak typu"}</span>
         <span>{row.km} km</span>
         <span className="text-right font-semibold text-white">{formatZl(row.cost)}</span>
@@ -362,6 +178,7 @@ function DiagnosticCard({
         {row.reason}
       </p>
       <div className="flex flex-wrap gap-1 pt-1">
+        <button type="button" onClick={() => setEditing(value => !value)} className="rounded-lg border border-line px-2 py-2 text-amber-300">Popraw dane</button>
         {onExclude && !rejected && (
           <button
             type="button"
@@ -381,6 +198,13 @@ function DiagnosticCard({
           </button>
         )}
       </div>
+      {row.source && <details className="pt-2 text-zinc-400">
+        <summary className="cursor-pointer">Odczytane komórki, strona {row.source.page}</summary>
+        <dl className="mt-2 space-y-1">
+          {[["Kierowca", "driver"], ["Transport", "vehicle"], ["Data załadunku", "date"], ["Koszt potwierdzony", "cost"], ["Uwagi", "notes"]].map(([label, key]) => <div key={key}><dt className="font-bold">{label}</dt><dd>{row.source?.cells[key] || "brak"}</dd></div>)}
+        </dl>
+      </details>}
+      {editing && <InvoiceRowCorrection row={row} onCancel={() => setEditing(false)} onSave={correction => { onCorrect(row, correction); setEditing(false); }} />}
     </div>
   );
 }
@@ -463,6 +287,8 @@ export function ImportModal({
   const noMatch = filtered === null;
   const includedRows = currentFiltered?.includedRows ?? [];
   const rejectedRows = currentFiltered?.rejectedRows ?? [];
+  const reviewRows = currentFiltered?.reviewRows ?? [];
+  const documentCheck = currentFiltered?.documentCheck;
   const shorterThanFullRange =
     !!filtered &&
     manualDateRangeSelected &&
@@ -545,8 +371,9 @@ export function ImportModal({
     );
     if (reason === null) return;
     setRecordOverrides((prev) => [
-      ...prev.filter((override) => override.transportOrderId !== row.orderNumber),
+      ...prev.filter((override) => orderKey(override.transportOrderId) !== orderKey(row.orderNumber)),
       {
+        ...prev.find(override => orderKey(override.transportOrderId) === orderKey(row.orderNumber)),
         transportOrderId: row.orderNumber,
         includeInSettlement: false,
         exclusionReason: reason.trim() || "ręcznie wykluczone",
@@ -556,7 +383,22 @@ export function ImportModal({
   }
 
   function restoreRow(row: ImportDiagnosticRow) {
-    setRecordOverrides((prev) => prev.filter((override) => override.transportOrderId !== row.orderNumber));
+    setRecordOverrides((prev) => prev.map(override => orderKey(override.transportOrderId) === orderKey(row.orderNumber)
+      ? { ...override, includeInSettlement: true, exclusionReason: undefined } : override));
+  }
+
+  function correctRow(row: ImportDiagnosticRow, correction: InvoiceCorrection) {
+    setRecordOverrides(prev => [...prev.filter(override => orderKey(override.transportOrderId) !== orderKey(row.orderNumber)),
+      { transportOrderId: row.orderNumber, includeInSettlement: true, manuallyOverridden: true, correction, reviewConfirmed: true }]);
+  }
+
+  function confirmImport() {
+    if ((dateFrom && !invoiceDate(dateFrom)) || (dateTo && !invoiceDate(dateTo)) || (dateFrom && dateTo && dateFrom > dateTo)) {
+      alert("Popraw zakres dat przed zapisem."); return;
+    }
+    if ((reviewRows.length > 0 || (documentCheck && !documentCheck.matched)) &&
+      !window.confirm(`Import wymaga sprawdzenia. Niepewnych pozycji: ${reviewRows.length}. Nie zostaną doliczone do zarobku. Zapisać częściowy wynik z ostrzeżeniami?`)) return;
+    onConfirm(currentFiltered);
   }
 
   return (
@@ -650,40 +492,57 @@ export function ImportModal({
 
               <section className="space-y-1">
                 <p className="text-xs font-bold uppercase tracking-wide text-amber-400">Podsumowanie</p>
+                {!currentFiltered?.parserVersion && <p className="text-xs text-amber-300">Starszy import bez kontroli kolumn. Wgraj ponownie oryginalny PDF, aby zweryfikować zapisane kwoty.</p>}
                 {(() => {
                   // Rozbicie kółka/zlecenia — dla starych importów bez zapisanych
                   // sum liczymy je z pozycji uwzględnionych.
                   const rows = currentFiltered?.includedRows ?? [];
-                  const jestZlecenie = (r: ImportDiagnosticRow) => !!r.isAdditional || !!(r.notes ?? "").trim();
+                  const jestZlecenie = isAdditionalInvoiceRow;
                   const zlecRows = rows.filter(jestZlecenie);
                   const kolkaNetto =
                     currentFiltered?.kolkaNetto ??
-                    round2(rows.filter((r) => !jestZlecenie(r)).reduce((s, r) => s + r.cost, 0));
+                    sumMoney(rows.filter((r) => !jestZlecenie(r)).map(r => r.cost));
                   const zleceniaNetto =
-                    currentFiltered?.zleceniaNetto ?? round2(zlecRows.reduce((s, r) => s + r.cost, 0));
-                  const kolkaBrutto = currentFiltered?.kolkaBrutto ?? round2(kolkaNetto * (1 + VAT));
-                  const zleceniaBrutto = currentFiltered?.zleceniaBrutto ?? round2(zleceniaNetto * (1 + VAT));
+                    currentFiltered?.zleceniaNetto ?? sumMoney(zlecRows.map(r => r.cost));
+                  const kolkaBrutto = currentFiltered?.kolkaBrutto ?? grossMoney(kolkaNetto, currentFiltered?.vatRate ?? VAT);
+                  const zleceniaBrutto = currentFiltered?.zleceniaBrutto ?? grossMoney(zleceniaNetto, currentFiltered?.vatRate ?? VAT);
                   const ileZlecen = currentFiltered?.ileZlecen ?? zlecRows.length;
                   return (
                     <>
-                      <Row label="Kółka (trasy)" value={String(currentFiltered?.ileKolek ?? 0)} />
+                      <Row label="Kółka /D" value={String(currentFiltered?.ileKolek ?? 0)} />
                       <Row label="Kółka netto" value={formatZl(kolkaNetto)} />
                       <Row label="Kółka brutto" value={formatZl(kolkaBrutto)} />
-                      <Row label="Zlecenia (z uwagą)" value={String(ileZlecen)} />
+                      <Row label="Zlecenia /I" value={String(ileZlecen)} />
                       <Row label="Zlecenia netto" value={formatZl(zleceniaNetto)} />
                       <Row label="Zlecenia brutto" value={formatZl(zleceniaBrutto)} />
+                      {!!currentFiltered?.vatRoundingDifference && <Row label="Różnica zaokrągleń VAT" value={formatZl(currentFiltered.vatRoundingDifference)} />}
                     </>
                   );
                 })()}
                 <Row label="Suma km" value={`${currentFiltered?.sumaKm ?? 0} km`} />
+                <Row label="VAT rozliczenia" value={`${Math.round((currentFiltered?.vatRate ?? VAT) * 100)}%`} />
                 <Row label="Suma z kursów netto" value={formatZl(currentFiltered?.courseNetto ?? currentFiltered?.netto ?? 0)} />
                 <Row label="Suma z kursów brutto" value={formatZl(currentFiltered?.courseBrutto ?? currentFiltered?.brutto ?? 0)} />
                 <Row label="Dodatki ręczne netto" value={formatZl(currentFiltered?.manualAdditionsNetto ?? 0)} />
                 <Row label="Dodatki ręczne brutto" value={formatZl(currentFiltered?.manualAdditionsBrutto ?? 0)} />
                 <Row label="Razem netto" value={formatZl(currentFiltered?.totalNetto ?? currentFiltered?.netto ?? 0)} />
                 <Row label="Razem brutto" value={formatZl(currentFiltered?.totalBrutto ?? currentFiltered?.brutto ?? 0)} accent />
-                <Row label="Średnia netto/kółko" value={formatZl(currentFiltered?.sredniaNetto ?? 0)} />
-                <Row label="Średnia brutto/kółko" value={formatZl(currentFiltered?.sredniaBrutto ?? 0)} />
+                <Row label="Średnia netto/pozycję" value={formatZl(currentFiltered?.sredniaNetto ?? 0)} />
+                <Row label="Średnia brutto/pozycję" value={formatZl(currentFiltered?.sredniaBrutto ?? 0)} />
+              </section>
+
+              {documentCheck && <section className={cn("border-y border-line py-3 text-xs space-y-2", documentCheck.matched ? "text-emerald-300" : "text-amber-300")}>
+                <p className="font-bold">Kontrola całego PDF (wszyscy kierowcy)</p>
+                <p>{documentCheck.rowCount} pozycji: {formatZl(documentCheck.parsedNetCents / 100)} netto</p>
+                <p>Suma w dokumencie: {documentCheck.declaredNetCents === null ? "nieodczytana" : formatZl(documentCheck.declaredNetCents / 100)}</p>
+                <p>{documentCheck.matched ? "Sumy zgodne co do grosza." : `Sprawdź dokument. Różnica: ${documentCheck.differenceCents === null ? "nieustalona" : formatZl(documentCheck.differenceCents / 100)}`}</p>
+                {documentCheck.warnings.map(warning => <p key={warning}>{warning}</p>)}
+              </section>}
+
+              <section className="space-y-2">
+                <p className="text-xs font-bold text-amber-300">Do sprawdzenia ({reviewRows.length})</p>
+                {reviewRows.length > 0 && <p className="text-xs text-amber-200">Te pozycje nie zwiększają zarobku do czasu korekty.</p>}
+                {reviewRows.map((row, index) => <DiagnosticCard key={`review-${row.orderNumber}-${index}`} row={row} onExclude={excludeRow} onCorrect={correctRow} />)}
               </section>
 
               <section className="space-y-2">
@@ -711,7 +570,7 @@ export function ImportModal({
                           </div>
                           <button
                             type="button"
-                            onClick={() => setManualAdditions((prev) => prev.filter((item) => item.id !== addition.id))}
+                            onClick={() => { if (window.confirm("Usunąć ten dodatek?")) setManualAdditions((prev) => prev.filter((item) => item.id !== addition.id)); }}
                             className="text-red-300 hover:text-red-200"
                           >
                             ×
@@ -855,6 +714,7 @@ export function ImportModal({
                         key={`in-${row.orderNumber}-${row.date}`}
                         row={row}
                         onExclude={excludeRow}
+                        onCorrect={correctRow}
                       />
                     ))
                   ) : (
@@ -881,6 +741,7 @@ export function ImportModal({
                           row={row}
                           rejected
                           onRestore={restoreRow}
+                          onCorrect={correctRow}
                         />
                       ))
                     ) : (
@@ -925,7 +786,7 @@ export function ImportModal({
         ) : isPreview ? (
           <div className="px-5 pb-5 flex flex-col gap-2 shrink-0">
             <button
-              onClick={() => onConfirm(currentFiltered)}
+              onClick={confirmImport}
               className="w-full py-2.5 rounded-xl bg-amber-brand text-amber-ink font-bold text-sm hover:bg-[#e09420] transition-colors"
             >
               Zapisz zmiany
@@ -960,7 +821,7 @@ export function ImportModal({
               Anuluj
             </button>
             <button
-              onClick={() => onConfirm(currentFiltered)}
+              onClick={confirmImport}
               className="flex-1 py-2.5 rounded-xl bg-amber-brand text-amber-ink font-bold text-sm hover:bg-[#e09420] transition-colors"
             >
               Zapisz do tygodnia

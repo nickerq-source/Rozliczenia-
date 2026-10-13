@@ -5,6 +5,7 @@ import type {
   PDFImportDiagnosticRow,
   ZlecenieLog,
 } from "./types";
+import { applyInvoiceCorrection, isAdditionalInvoiceRow, orderKey } from "./invoice-settlement";
 
 const ARTUR = { plate: "KK2063A", kierowca: "Artur" } as const;
 const ZENIA = { plate: "KK9848Y", kierowca: "Żenia" } as const;
@@ -23,6 +24,12 @@ function resolveAuto(row: PDFImportDiagnosticRow): AutomaticDriver | null {
   const driver = normalize(row.driverName);
   const route = normalize(row.route);
 
+  if (row.source) {
+    if (driver === "YEVHENII PITIANIN") return ZENIA;
+    if (driver === "ARTUR SZADY") return ARTUR;
+    return null;
+  }
+
   if (driver.includes("YEVHENII") && driver.includes("PITIANIN")) return ZENIA;
   if (driver.includes("ARTUR") && driver.includes("SZADY")) return ARTUR;
 
@@ -40,7 +47,7 @@ function inSelectedRange(pdf: PDFImportData, date: string): boolean {
 }
 
 function automaticId(invoiceId: string, row: PDFImportDiagnosticRow): string {
-  const orderNumber = normalize(row.orderNumber).replace(/[^A-Z0-9]/g, "");
+  const orderNumber = orderKey(row.orderNumber).replace(/[^A-Z0-9]/g, "");
   return orderNumber
     ? `pdf:${orderNumber}`
     : `pdf:${invoiceId}:${row.date}:${Math.round(Number(row.cost) * 100)}`;
@@ -106,6 +113,7 @@ export interface AutomaticLogisticsOrdersResult {
 }
 
 function isOrderRow(row: PDFImportDiagnosticRow): boolean {
+  if (row.source || row.orderKind) return isAdditionalInvoiceRow(row);
   const notes = String(row.notes ?? "").trim();
   const description = String(row.additionalDescription ?? "").trim();
   return row.isAdditional === true || notes.length > 0 || description.length > 0;
@@ -117,10 +125,11 @@ function registerOrder(
   sourceInvoiceId: string,
   sourceFileName: string | undefined,
   row: PDFImportDiagnosticRow,
-  auto: AutomaticDriver
+  auto: AutomaticDriver,
+  manualReason?: string
 ) {
   const order = buildAutomaticOrder(sourceInvoiceId, sourceFileName, row, auto);
-  const exclusionReason = addonExclusionReason(row);
+  const exclusionReason = manualReason || (row.needsReview ? "Odczyt PDF wymaga sprawdzenia" : addonExclusionReason(row));
   if (exclusionReason) {
     excludedById.set(order.id, { ...order, sourceExclusionReason: exclusionReason });
     includedById.delete(order.id);
@@ -138,12 +147,15 @@ export function extractAutomaticLogisticsOrderResult(
   const excludedById = new Map<string, ZlecenieLog>();
 
   for (const invoice of invoices) {
-    for (const row of invoice.pdfImport?.sourceRows ?? []) {
+    for (const original of invoice.pdfImport?.sourceRows ?? []) {
+      const row = applyInvoiceCorrection(original, invoice.pdfImport?.recordOverrides ?? []);
+      const override = invoice.pdfImport?.recordOverrides?.find(item => orderKey(item.transportOrderId) === orderKey(row.orderNumber));
       const date = row.date ?? "";
       const amount = Number(row.cost);
       const auto = resolveAuto(row);
       if (!isOrderRow(row) || !date || !Number.isFinite(amount) || amount <= 0 || !auto) continue;
       if (!invoice.pdfImport || !inSelectedRange(invoice.pdfImport, date)) continue;
+      const typeMismatch = row.source && invoice.pdfImport.filters?.vehicleType && row.vehicleType !== invoice.pdfImport.filters.vehicleType;
 
       registerOrder(
         includedById,
@@ -151,14 +163,18 @@ export function extractAutomaticLogisticsOrderResult(
         invoice.id,
         invoice.pdfImport.nazwaPliku,
         row,
-        auto
+        auto,
+        override && !override.includeInSettlement ? override.exclusionReason || "Ręcznie wykluczono"
+          : typeMismatch ? "Inny typ transportu niż wybrany w rozliczeniu PDF" : undefined
       );
     }
   }
 
   for (const invoice of dedicatedInvoices) {
     const auto = { plate: invoice.plate, kierowca: invoice.kierowca };
-    for (const row of invoice.pdfImport.sourceRows ?? []) {
+    for (const original of invoice.pdfImport.sourceRows ?? []) {
+      const row = applyInvoiceCorrection(original, invoice.pdfImport.recordOverrides ?? []);
+      const override = invoice.pdfImport.recordOverrides?.find(item => orderKey(item.transportOrderId) === orderKey(row.orderNumber));
       const date = row.date ?? "";
       const amount = Number(row.cost);
       if (!isOrderRow(row) || !date || !Number.isFinite(amount) || amount <= 0) continue;
@@ -170,7 +186,8 @@ export function extractAutomaticLogisticsOrderResult(
         invoice.id,
         invoice.nazwaPliku,
         row,
-        auto
+        auto,
+        override && !override.includeInSettlement ? override.exclusionReason || "Ręcznie wykluczono" : undefined
       );
     }
   }

@@ -36,6 +36,25 @@ export interface PDFRecordOverride {
   includeInSettlement: boolean;
   exclusionReason?: string;
   manuallyOverridden: boolean;
+  correction?: Pick<PDFImportDiagnosticRow, "driverName" | "vehicleType" | "date" | "cost" | "km" | "orderKind">;
+  reviewConfirmed?: boolean;
+}
+
+export interface PDFDocumentCheck {
+  declaredNetCents: number | null;
+  parsedNetCents: number;
+  differenceCents: number | null;
+  rowCount: number;
+  matched: boolean;
+  warnings: string[];
+}
+
+export interface PDFImportAudit {
+  parserVersion?: string;
+  vatRate?: number;
+  documentCheck?: PDFDocumentCheck;
+  reviewRows?: PDFImportDiagnosticRow[];
+  vatRoundingDifference?: number;
 }
 
 export type PDFManualAdditionType =
@@ -79,9 +98,13 @@ export interface PDFImportDiagnosticRow {
   isAdditional?: boolean;
   reason: string;
   rawText?: string;
+  orderKind?: "D" | "I" | null;
+  needsReview?: boolean;
+  parseWarnings?: string[];
+  source?: { page: number; cells: Record<string, string> };
 }
 
-export interface PDFImportData {
+export interface PDFImportData extends PDFImportAudit {
   nazwaPliku: string;
   numerFaktury: string | null;
   filters?: PDFImportFilter;

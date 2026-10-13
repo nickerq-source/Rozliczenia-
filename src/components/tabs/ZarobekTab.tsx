@@ -32,6 +32,7 @@ import {
   normalizeMonthInvoices,
 } from "@/lib/invoice-weeks";
 import { calculateInvoiceAmounts } from "@/lib/invoice-amounts";
+import { findInvoiceImportConflict, recalculateInvoiceImport, savedInvoicePreview, saveInvoicePreview } from "@/lib/invoice-import";
 
 interface Props {
   miesiac: MiesiącId;
@@ -178,7 +179,7 @@ export function ZarobekTab({
         return;
       }
 
-      const filteredFromApi = json.filtered
+      let filteredFromApi: ImportModalProps["filtered"] = json.filtered
         ? {
             ...json.filtered,
             invoiceImportDateFrom: importDateFrom || json.filtered.invoiceImportDateFrom || json.filtered.filters?.dateFrom,
@@ -192,23 +193,36 @@ export function ZarobekTab({
       const intent = uploadIntent.current?.fakturaId === fakturaId
         ? uploadIntent.current
         : { fakturaId, replaceExisting: false };
-      const preferredTarget = intent.replaceExisting
+      const duplicate = filteredFromApi ? findInvoiceImportConflict(fakturyStandardowe, json.invoiceNumber ?? null, filteredFromApi,
+        intent.replaceExisting ? fakturaId : undefined) : undefined;
+      if (duplicate && duplicate.pdfImport?.numerFaktury !== json.invoiceNumber) {
+        alert("Te zlecenia są już rozliczone w innej fakturze. Sprawdź zapisane pozycje przed ponownym importem."); return;
+      }
+      const previous = duplicate?.pdfImport ?? (intent.replaceExisting ? clicked?.pdfImport : undefined);
+      if (filteredFromApi && previous && previous.numerFaktury === json.invoiceNumber) {
+        filteredFromApi = recalculateInvoiceImport(filteredFromApi, {
+          dateFrom: filteredFromApi.filters?.dateFrom ?? null, dateTo: filteredFromApi.filters?.dateTo ?? null,
+          overrides: previous.recordOverrides ?? [], manualDateRangeSelected: filteredFromApi.manualDateRangeSelected ?? false,
+          comment: previous.komentarz ?? "", additions: previous.dodatkiReczne ?? [],
+        });
+      }
+      const preferredTarget = duplicate ?? (intent.replaceExisting
         ? clicked
-        : clicked && clicked.weekIndex === target.idx && !clicked.pdfImport
+        : clicked && clicked.weekIndex === target.idx && isEmptyInvoiceSlot(clicked)
           ? clicked
-          : faktury.find((invoice) => invoice.weekIndex === target.idx && isEmptyInvoiceSlot(invoice));
+          : faktury.find((invoice) => invoice.weekIndex === target.idx && isEmptyInvoiceSlot(invoice)));
 
       setModal({
         mode: "confirm",
-        fakturaId,
+        fakturaId: duplicate?.id ?? fakturaId,
         fileName: file.name,
         invoiceNumber: json.invoiceNumber ?? null,
         filtered: filteredFromApi,
-        message: json.message,
-        isOverwrite: intent.replaceExisting && !!clicked?.pdfImport,
+        message: duplicate ? "Ten PDF jest już rozliczony. Zapis zaktualizuje istniejącą fakturę bez dodawania drugiej kopii. Zachowano komentarz, dodatki i korekty administratora." : json.message,
+        isOverwrite: !!duplicate || (intent.replaceExisting && !!clicked?.pdfImport),
         targetIdx: target.idx,
         targetRecordId: preferredTarget?.id ?? null,
-        replaceExisting: intent.replaceExisting,
+        replaceExisting: !!duplicate || intent.replaceExisting,
         targetLabel: target.label,
         targetWeekNumber: target.idx + 1,
         monthName: POLSKIE_MIESIACE[miesiac],
@@ -234,43 +248,14 @@ export function ZarobekTab({
     const clickedIdx = faktury.findIndex((f) => f.id === modal!.fakturaId);
     const clicked = faktury[clickedIdx];
     const target = resolveTargetWeek(filtered, clicked?.weekIndex ?? modal!.targetIdx);
+    const conflict = findInvoiceImportConflict(fakturyStandardowe, invoiceNumber, filtered,
+      isPreviewUpdate || modal!.replaceExisting ? modal!.fakturaId : undefined);
+    if (conflict) {
+      alert("Zlecenia z tego zakresu są już zapisane. Otwórz istniejącą fakturę, aby ją poprawić."); return;
+    }
+    if (!isPreviewUpdate && modal!.replaceExisting && !window.confirm("Zastąpić dotychczasowy import tym odczytem?")) return;
 
-    const pdfImport: PDFImportData = {
-      nazwaPliku: fileName,
-      numerFaktury: invoiceNumber,
-      filters: filtered.filters,
-      invoiceImportDateFrom: filtered.invoiceImportDateFrom ?? filtered.filters?.dateFrom ?? filtered.zakresOd,
-      invoiceImportDateTo: filtered.invoiceImportDateTo ?? filtered.filters?.dateTo ?? filtered.zakresDo,
-      manualDateRangeSelected: filtered.manualDateRangeSelected ?? false,
-      settlementVehiclePlate: null,
-      settlementVehicleMode: "none",
-      recordOverrides: filtered.recordOverrides,
-      komentarz: filtered.komentarz?.trim() || undefined,
-      dodatkiReczne: filtered.dodatkiReczne ?? [],
-      courseNetto: filtered.courseNetto ?? filtered.netto,
-      courseBrutto: filtered.courseBrutto ?? filtered.brutto,
-      manualAdditionsNetto: filtered.manualAdditionsNetto ?? 0,
-      manualAdditionsBrutto: filtered.manualAdditionsBrutto ?? 0,
-      totalNetto: filtered.totalNetto ?? filtered.netto,
-      totalBrutto: filtered.totalBrutto ?? filtered.brutto,
-      ileKolek: filtered.ileKolek,
-      ileZlecen: filtered.ileZlecen,
-      kolkaNetto: filtered.kolkaNetto,
-      kolkaBrutto: filtered.kolkaBrutto,
-      zleceniaNetto: filtered.zleceniaNetto,
-      zleceniaBrutto: filtered.zleceniaBrutto,
-      sumaKm: filtered.sumaKm,
-      netto: filtered.netto,
-      brutto: filtered.brutto,
-      sredniaKm: filtered.sredniaKm,
-      sredniaNetto: filtered.sredniaNetto,
-      sredniaBrutto: filtered.sredniaBrutto,
-      zakresOd: filtered.zakresOd,
-      zakresDo: filtered.zakresDo,
-      pozycjeUwzglednione: filtered.includedRows,
-      pozycjeOdrzucone: filtered.rejectedRows,
-      sourceRows: filtered.sourceRows,
-    };
+    const pdfImport: PDFImportData = saveInvoicePreview(filtered, fileName, invoiceNumber);
 
     const preferred = modal!.targetRecordId
       ? faktury.find((invoice) => invoice.id === modal!.targetRecordId)
@@ -280,7 +265,7 @@ export function ZarobekTab({
     );
     const canReusePreferred = preferred
       && preferred.weekIndex === target.idx
-      && !preferred.pdfImport;
+      && isEmptyInvoiceSlot(preferred);
     const destinationId = isPreviewUpdate || modal!.replaceExisting
       ? modal!.fakturaId
       : canReusePreferred
@@ -306,6 +291,8 @@ export function ZarobekTab({
         weekIndex: target.idx,
         label: target.label,
         kwota: filtered.brutto,
+        amountMode: "brutto",
+        vatRate: filtered.vatRate ?? 0.23,
         pdfImport,
         customRange: target.customRange,
       };
@@ -330,6 +317,10 @@ export function ZarobekTab({
         week: target.idx + 1,
         includedRows: filtered.includedRows?.length ?? 0,
         rejectedRows: filtered.rejectedRows?.length ?? 0,
+        reviewRows: filtered.reviewRows?.length ?? 0,
+        parserVersion: filtered.parserVersion,
+        documentCheck: filtered.documentCheck,
+        recordOverrides: filtered.recordOverrides,
         comment: pdfImport.komentarz,
         manualAdditionsBrutto: pdfImport.manualAdditionsBrutto ?? 0,
       },
@@ -392,37 +383,7 @@ export function ZarobekTab({
       fakturaId: f.id,
       fileName: imp.nazwaPliku,
       invoiceNumber: imp.numerFaktury,
-      filtered: {
-        ileKolek: imp.ileKolek,
-        ileZlecen: imp.ileZlecen,
-        sumaKm: imp.sumaKm,
-        netto: imp.netto,
-        brutto: imp.brutto,
-        sredniaKm: imp.sredniaKm,
-        sredniaNetto: imp.sredniaNetto,
-        sredniaBrutto: imp.sredniaBrutto,
-        zakresOd: imp.zakresOd,
-        zakresDo: imp.zakresDo,
-        filters: imp.filters,
-        includedRows: imp.pozycjeUwzglednione,
-        rejectedRows: imp.pozycjeOdrzucone,
-        sourceRows: imp.sourceRows,
-        vehicleAssignmentRules: imp.vehicleAssignmentRules,
-        recordOverrides: imp.recordOverrides,
-        settlementVehiclePlate: imp.settlementVehiclePlate,
-        settlementVehicleMode: imp.settlementVehicleMode,
-        invoiceImportDateFrom: imp.invoiceImportDateFrom,
-        invoiceImportDateTo: imp.invoiceImportDateTo,
-        manualDateRangeSelected: imp.manualDateRangeSelected,
-        komentarz: imp.komentarz,
-        dodatkiReczne: imp.dodatkiReczne,
-        courseNetto: imp.courseNetto,
-        courseBrutto: imp.courseBrutto,
-        manualAdditionsNetto: imp.manualAdditionsNetto,
-        manualAdditionsBrutto: imp.manualAdditionsBrutto,
-        totalNetto: imp.totalNetto,
-        totalBrutto: imp.totalBrutto,
-      },
+      filtered: savedInvoicePreview(imp),
       isOverwrite: false,
       targetIdx: weekIndex,
       targetRecordId: f.id,

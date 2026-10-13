@@ -1,4 +1,6 @@
-// Parsing PDF faktur transportowych Żabki — najpierw rekordy, potem filtrowanie.
+// Legacy flat-text parser, retained for reproducing historical import defects.
+// Production imports use invoice-pdf.ts -> invoice-table.ts -> invoice-settlement.ts.
+// Do not use this module to calculate new invoices: flattened text has no column boundaries.
 
 import { KIEROWCA, TYP_TRANSPORTU, VAT } from "./config";
 import { extractAdditionalDescription } from "./invoice-additional-description";

@@ -1,11 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import {
+import { createRequire } from "node:module";
+const require = createRequire(import.meta.url);
+require("./helpers/register-ts.cjs");
+const {
   extractAutomaticLogisticsOrderResult,
   extractAutomaticLogisticsOrders,
   splitManualOrderDuplicates,
-} from "../src/lib/logistyk-orders.ts";
+} = require("../src/lib/logistyk-orders.ts");
 
 const invoice = {
   id: "w8-1",

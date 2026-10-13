@@ -8,6 +8,8 @@ import type {
   PDFImportDiagnosticRow,
 } from "@/lib/types";
 import { formatZl } from "@/lib/business-logic";
+import { applyInvoiceCorrection, checkInvoiceDocument, grossMoney, isAdditionalInvoiceRow, orderKey, sumMoney } from "@/lib/invoice-settlement";
+import { InvoiceRowCorrection, type InvoiceCorrection } from "./InvoiceRowCorrection";
 import { Card, CardTitle } from "./ui/Card";
 import {
   IconChevronDown,
@@ -38,7 +40,7 @@ interface InvoicePreview {
 const r2 = (value: number) => Math.round(value * 100) / 100;
 
 function isOrderRow(row: PDFImportDiagnosticRow): boolean {
-  return row.isAdditional === true
+  return isAdditionalInvoiceRow(row) && !row.needsReview
     && Boolean(row.date)
     && Number.isFinite(Number(row.cost))
     && Number(row.cost) > 0;
@@ -65,6 +67,7 @@ export function LogistykInvoicesPanel({
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
   const [preview, setPreview] = useState<InvoicePreview | null>(null);
+  const [editingOrder, setEditingOrder] = useState<string | null>(null);
 
   const invoiceNumbers = useMemo(
     () => new Set(invoices.map((invoice) => invoice.numerFaktury?.trim()).filter(Boolean)),
@@ -90,7 +93,7 @@ export function LogistykInvoicesPanel({
       if (!json.filtered) throw new Error(json.message || "W fakturze nie znaleziono pozycji.");
 
       const rows = (json.filtered.sourceRows ?? []).filter(isOrderRow);
-      if (rows.length === 0) {
+      if (rows.length === 0 && !(json.filtered.reviewRows?.length)) {
         throw new Error("W fakturze nie znaleziono zleceń z opisem lub oznaczeniem /I.");
       }
       if (json.invoiceNumber && invoiceNumbers.has(json.invoiceNumber.trim())) {
@@ -116,13 +119,20 @@ export function LogistykInvoicesPanel({
 
   function savePreview() {
     if (!preview) return;
-    const netto = r2(preview.rows.reduce((sum, row) => sum + Number(row.cost), 0));
+    if ((preview.filtered.reviewRows?.length || (preview.filtered.documentCheck && !preview.filtered.documentCheck.matched)) &&
+      !window.confirm("PDF wymaga sprawdzenia. Zapisać tylko poprawnie odczytane zlecenia, zachowując niepewne pozycje do kontroli?")) return;
+    const netto = sumMoney(preview.rows.map(row => row.cost));
     const sumaKm = r2(preview.rows.reduce((sum, row) => sum + Number(row.km || 0), 0));
     const dates = preview.rows.map((row) => row.date).filter((date): date is string => Boolean(date)).sort();
-    const brutto = r2(netto * 1.23);
+    const brutto = grossMoney(netto, preview.filtered.vatRate ?? 0.23);
     const pdfImport: PDFImportData = {
       nazwaPliku: preview.fileName,
       numerFaktury: preview.invoiceNumber,
+      parserVersion: preview.filtered.parserVersion,
+      vatRate: preview.filtered.vatRate,
+      documentCheck: preview.filtered.documentCheck,
+      reviewRows: preview.filtered.reviewRows,
+      recordOverrides: preview.filtered.recordOverrides,
       filters: preview.filtered.filters,
       invoiceImportDateFrom: dates[0] ?? null,
       invoiceImportDateTo: dates.at(-1) ?? null,
@@ -142,7 +152,7 @@ export function LogistykInvoicesPanel({
       zakresDo: dates.at(-1) ?? null,
       pozycjeUwzglednione: preview.rows,
       pozycjeOdrzucone: [],
-      sourceRows: preview.rows,
+      sourceRows: preview.filtered.sourceRows,
     };
 
     onAdd({
@@ -155,6 +165,20 @@ export function LogistykInvoicesPanel({
       pdfImport,
     });
     setPreview(null);
+  }
+
+  function correctRow(row: PDFImportDiagnosticRow, correction: InvoiceCorrection) {
+    setPreview(prev => {
+      if (!prev) return prev;
+      const overrides = [...(prev.filtered.recordOverrides ?? []).filter(item => orderKey(item.transportOrderId) !== orderKey(row.orderNumber)),
+        { transportOrderId: row.orderNumber, includeInSettlement: true, manuallyOverridden: true, correction, reviewConfirmed: true }];
+      const effective = (prev.filtered.sourceRows ?? []).map(item => applyInvoiceCorrection(item, overrides));
+      const check = prev.filtered.documentCheck;
+      return { ...prev, rows: effective.filter(isOrderRow), filtered: { ...prev.filtered, recordOverrides: overrides,
+        reviewRows: effective.filter(item => item.needsReview),
+        documentCheck: check ? checkInvoiceDocument(effective, check.declaredNetCents, check.warnings) : undefined } };
+    });
+    setEditingOrder(null);
   }
 
   function remove(invoice: FakturaZlecenLog) {
@@ -217,10 +241,20 @@ export function LogistykInvoicesPanel({
               </div>
             ))}
           </div>
+          {(preview.filtered.reviewRows?.length ?? 0) > 0 && <section className="mt-3 space-y-2 text-xs text-amber-300">
+            <p className="font-bold">Do sprawdzenia ({preview.filtered.reviewRows?.length})</p>
+            {preview.filtered.reviewRows?.map((row, index) => <div key={`${row.orderNumber}-${index}`} className="border-t border-line py-2">
+              <p>{row.orderNumber}: {row.reason}</p>
+              {editingOrder === row.orderNumber
+                ? <InvoiceRowCorrection row={row} onCancel={() => setEditingOrder(null)} onSave={correction => correctRow(row, correction)} />
+                : <button type="button" className="py-2 font-bold" onClick={() => setEditingOrder(row.orderNumber)}>Popraw dane</button>}
+            </div>)}
+          </section>}
+          {preview.filtered.documentCheck && !preview.filtered.documentCheck.matched && <p className="mt-3 text-xs text-amber-300">Uwaga: suma wszystkich pozycji nie została potwierdzona z sumą kontrolną PDF.</p>}
           <div className="mt-3 flex items-center justify-between text-sm font-bold">
             <span className="text-white">Razem netto</span>
             <span className="tabular-nums text-amber-brand">
-              {formatZl(preview.rows.reduce((sum, row) => sum + Number(row.cost), 0))}
+              {formatZl(sumMoney(preview.rows.map(row => row.cost)))}
             </span>
           </div>
           <div className="mt-3 grid grid-cols-2 gap-2">
@@ -249,7 +283,7 @@ export function LogistykInvoicesPanel({
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-bold text-white">{invoice.numerFaktury || invoice.nazwaPliku}</p>
                     <p className="text-[10px] text-dim">
-                      {invoice.pdfImport.sourceRows?.length ?? 0} zleceń · {formatZl(invoice.pdfImport.zleceniaNetto ?? invoice.pdfImport.netto)} netto
+                      {invoice.pdfImport.ileZlecen ?? 0} zleceń · {formatZl(invoice.pdfImport.zleceniaNetto ?? invoice.pdfImport.netto)} netto
                     </p>
                   </div>
                   <button
@@ -265,10 +299,11 @@ export function LogistykInvoicesPanel({
                   </button>
                 </summary>
                 <div className="ml-6 mt-2 divide-y divide-line/40 border-t border-line/50">
-                  {(invoice.pdfImport.sourceRows ?? []).map((row, index) => (
+                  {(invoice.pdfImport.sourceRows ?? []).map(row => applyInvoiceCorrection(row, invoice.pdfImport.recordOverrides ?? []))
+                    .filter(row => isAdditionalInvoiceRow(row) || row.needsReview).map((row, index) => (
                     <div key={`${row.orderNumber}-${row.date}-${index}`} className="grid grid-cols-[auto_minmax(0,1fr)_auto] gap-2 py-2 text-[11px]">
                       <span className="tabular-nums text-dim">{row.date}</span>
-                      <span className="break-words text-ink">{orderDescription(row)}</span>
+                      <span className="break-words text-ink">{orderDescription(row)}{row.needsReview && <span className="block text-amber-300">Do sprawdzenia, nie doliczono</span>}</span>
                       <span className="tabular-nums font-bold text-white">{formatZl(row.cost)}</span>
                     </div>
                   ))}
