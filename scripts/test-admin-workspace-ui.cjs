@@ -69,7 +69,7 @@ const runtime = require('next/dist/compiled/webpack/webpack'); runtime.init();
         assert.equal(new URL(page.url()).searchParams.get('kierowca'), id);
         assert.equal(await switcher().getByRole('button', { name, exact: true }).getAttribute('aria-current'), 'page');
       };
-      const driverView = async label => width < 640 ? page.getByLabel('Dział kierowcy', { exact: true }).selectOption({ label }) : driver().getByRole('button', { name: label, exact: true }).click();
+      const driverView = async label => driver().getByRole('button', { name: label, exact: true }).click();
       const layout = async label => {
         const overflow = await page.evaluate(() => Array.from(document.querySelectorAll('main *')).filter(el => {
           if (el.closest('.overflow-x-auto,.scrollbar-none')) return false;
@@ -90,7 +90,17 @@ const runtime = require('next/dist/compiled/webpack/webpack'); runtime.init();
       await page.getByRole('heading', { name: 'Koszty firmy', exact: true }).waitFor();
       await layout('company-costs');
       await menu().getByRole('button', { name: 'Kierowcy', exact: true }).click();
+      const choices = page.getByRole('region', { name: 'Wybierz kierowcę' });
+      assert.equal(await choices.getByRole('button').count(), 2);
+      await layout('driver-choices');
       await page.getByRole('button', { name: 'Rafał Gustab', exact: true }).click();
+      assert.equal(await page.getByRole('combobox', { name: 'Dział kierowcy', exact: true }).count(), 0);
+      assert.equal(await driver().getByRole('button').count(), 7);
+      for (const tile of await driver().getByRole('button').all()) {
+        assert.equal(await tile.isVisible(), true);
+        const box = await tile.boundingBox();
+        assert.ok(box.height >= 72 && box.width >= 120, 'named driver section tiles have stable touch targets');
+      }
       const beforeSwitching = JSON.stringify(state);
       const writesBeforeSwitching = writes.length;
       assert.equal(await switcher().getByRole('button').count(), 2);
@@ -101,6 +111,7 @@ const runtime = require('next/dist/compiled/webpack/webpack'); runtime.init();
       else assert.ok(switcherBox.y + switcherBox.height <= profileBox.y, 'mobile switcher stays above the profile');
       await layout('driver-switcher');
       await switchDriver('Yevhenii Pitianin', 'zenia');
+      assert.equal(await driver().getByRole('button').count(), 6);
       assert.equal(new URL(page.url()).searchParams.get('widok'), 'koszty');
       assert.equal(new URL(page.url()).searchParams.get('miesiac'), '11');
       await page.goBack();
@@ -140,6 +151,13 @@ const runtime = require('next/dist/compiled/webpack/webpack'); runtime.init();
       await page.getByRole('table', { name: 'Dni pracy kierowcy' }).getByText('180,00 zł', { exact: true }).waitFor();
       assert.equal(state.miesiace[11].rafal.days[0].courses, 2);
       await page.reload(); await page.getByRole('table').getByText('180,00 zł', { exact: true }).waitFor(); await layout('rafal-pay');
+      const dayCard = page.getByTestId('rafal-day-2026-11-03');
+      await dayCard.screenshot({ path: path.join(out, `${width}-rafal-day.png`) });
+      if (width < 640) {
+        const courseBox = await dayCard.getByLabel('Kursy 2026-11-03', { exact: true }).boundingBox();
+        const statusBox = await dayCard.getByLabel('Status 2026-11-03', { exact: true }).boundingBox();
+        assert.ok(courseBox.y >= statusBox.y + statusBox.height && courseBox.width > statusBox.width, 'mobile courses occupy the full row, like Zenia');
+      }
       await driverView('Samochód i działalność');
       await page.getByText('Dane i przypisanie pojazdu', { exact: true }).click();
       await page.getByLabel('Nazwa pojazdu', { exact: true }).fill('Auto Rafała');
@@ -275,7 +293,7 @@ const runtime = require('next/dist/compiled/webpack/webpack'); runtime.init();
       await page.getByRole('button', { name: 'Rafał Gustab', exact: true }).click();
       await driverView('Dni i wypłata');
       await page.getByRole('button', { name: 'Gru', exact: true }).click();
-      await page.getByRole('heading', { name: 'Grudzień 2026', exact: true }).waitFor();
+      await page.getByText('Grudzień 2026', { exact: true }).waitFor();
       assert.equal(await page.getByRole('table').getByRole('row', { includeHidden: true }).count(), 32);
       assert.equal(await salaryRow('Zarobione z dni i kursów').innerText(), '0,00 zł');
       assert.equal(await salaryRow('Łączny koszt z podatkiem i składkami').innerText(), '5790,28 zł');
@@ -285,7 +303,7 @@ const runtime = require('next/dist/compiled/webpack/webpack'); runtime.init();
       assert.equal(new URL(page.url()).searchParams.get('widok'), 'wyplata');
       await page.getByLabel('Kursy 2026-12-31', { exact: true }).fill('3');
       await page.getByRole('button', { name: 'Lis', exact: true }).click();
-      await page.getByRole('heading', { name: 'Listopad 2026', exact: true }).waitFor();
+      await page.getByText('Listopad 2026', { exact: true }).waitFor();
       assert.equal(await salaryRow('Razem do wypłaty').innerText(), '5140,75 zł');
       await page.getByRole('button', { name: 'Gru', exact: true }).click();
       await page.getByText('Niezapisane dni: 1', { exact: false }).waitFor();

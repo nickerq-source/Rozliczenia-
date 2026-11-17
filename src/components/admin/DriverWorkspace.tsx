@@ -14,7 +14,13 @@ import { Payroll } from "../admin-preview/FleetPanel";
 import { RafalWorkCalendar } from "./RafalWorkCalendar";
 import { PodsumowanieTab } from "../tabs/PodsumowanieTab";
 import { logChange } from "@/lib/audit";
+import { IconCalendar, IconCar, IconChartBar, IconGasStation, IconMoneybag, IconNotes, IconPaperclip } from "../ui/icons";
 import "../admin-preview/admin-preview.css";
+
+const sectionIcons = {
+  koszty: IconMoneybag, wyplata: IconCalendar, tankowanie: IconGasStation,
+  samochod: IconCar, statystyki: IconChartBar, faktury: IconPaperclip, umowa: IconNotes,
+} satisfies Record<DriverView, typeof IconCalendar>;
 
 type Props = {
   data: WorkspaceData; month: MiesiącId; driver: DriverId; view: DriverView; onView: (view: DriverView) => void;
@@ -40,13 +46,15 @@ export function DriverWorkspace({ data, month, driver, view, onView, token, user
   const row = (label: string, value: number) => <div className="flex justify-between gap-4 border-b border-line py-3 text-sm"><span className="text-dim">{label}</span><strong className="shrink-0 tabular-nums">{formatZl(value)}</strong></div>;
   return <section aria-label={`Profil: ${DRIVER_NAMES[driver]}`}>
     <h1 className="mb-4 text-xl font-bold">{DRIVER_NAMES[driver]}</h1>
-    <label className="mb-4 block text-xs text-dim sm:hidden">Dział kierowcy
-      <select aria-label="Dział kierowcy" value={view} onChange={e => onView(e.target.value as DriverView)} className="mt-2 w-full min-h-[44px] rounded-lg border border-line bg-surface px-3 text-sm font-bold text-ink">
-        {DRIVER_VIEWS.filter(([id]) => driver === "rafal" || id !== "umowa").map(([id, label]) => <option key={id} value={id}>{label}</option>)}
-      </select>
-    </label>
-    <nav aria-label="Działy kierowcy" className="mb-4 hidden flex-wrap gap-2 sm:flex">
-      {DRIVER_VIEWS.filter(([id]) => driver === "rafal" || id !== "umowa").map(([id, label]) => <button key={id} aria-current={view === id ? "page" : undefined} onClick={() => onView(id)} className={`min-h-[40px] rounded-lg border px-3 py-2 text-xs font-bold ${view === id ? 'border-amber-brand text-amber-brand bg-amber-brand/10' : 'border-line text-dim bg-surface'}`}>{label}</button>)}
+    <nav aria-label="Działy kierowcy" className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-3">
+      {DRIVER_VIEWS.filter(([id]) => driver === "rafal" || id !== "umowa").map(([id, label]) => {
+        const Icon = sectionIcons[id];
+        return <button key={id} type="button" aria-current={view === id ? "page" : undefined} onClick={() => onView(id)}
+          className={`flex min-h-[72px] min-w-0 items-center gap-2 rounded-lg border px-3 py-3 text-left text-xs font-bold leading-5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-brand ${view === id ? 'border-amber-brand text-amber-brand bg-surface2' : 'border-line text-ink bg-surface hover:border-dim'}`}>
+          <Icon size={20} aria-hidden="true" className={`shrink-0 ${view === id ? 'text-amber-brand' : 'text-dim'}`} />
+          <span className="min-w-0 break-words">{label}</span>
+        </button>;
+      })}
     </nav>
     <fieldset disabled={busy || !!all.zamkniety?.locked}>
     {view === "koszty" && <div className="bg-surface px-4 py-2">

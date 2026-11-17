@@ -9,9 +9,9 @@ import { formatZl } from "@/lib/business-logic";
 import { getDniMiesiaca, getDayOfWeek, isNiedziela, isSobota, nazwaSkrotDnia, POLSKIE_MIESIACE } from "@/lib/dates";
 import { IconCheck, IconNotes, IconX } from "../ui/icons";
 
-const statuses: [FleetDay["status"], string][] = [
-  ["praca", "Praca"], ["praca_zlecenia", "Praca + zlecenia"], ["urlop", "Urlop płatny"],
-  ["postojowe", "Postojowe · 50 zł"], ["wolne", "Wolne"],
+const statuses: [FleetDay["status"], string, string][] = [
+  ["praca", "P", "Praca"], ["praca_zlecenia", "P+Z", "Praca + zlecenia"], ["urlop", "U", "Urlop płatny"],
+  ["postojowe", "PS", "Postojowe"], ["wolne", "W", "Wolne"],
 ];
 const emptyDay = (date: string): FleetDay => ({ date, status: "praca", courses: 0, ordersNet: null, leaveNet: null, note: "" });
 const money = (value: string) => value === "" ? null : Number(value.replace(",", "."));
@@ -90,15 +90,17 @@ export function RafalWorkCalendar({ month, dane, token, busy, save }: {
   const row = (label: string, value: number) => <div className="pv-row"><span>{label}</span><strong>{formatZl(value)}</strong></div>;
 
   return <form className="rf-calendar" onSubmit={e => { e.preventDefault(); void submit(); }} aria-label="Dni i wypłata Rafała">
-    <div className="pv-section-heading"><h2>{POLSKIE_MIESIACE[month]} 2026</h2>{saveButton}</div>
-    <p role="status" className="pv-muted">{!ready ? "Wczytywanie dni…" : saving ? "Zapisywanie dni…" : pending ? `Niezapisane dni: ${pending}` : "Wszystkie zmiany zapisane"} · Kurs: 90 zł netto</p>
+    <div className="rf-heading"><div><h2>Wypłata kierowcy</h2><p>{POLSKIE_MIESIACE[month]} 2026</p></div>{saveButton}</div>
+    <p className="rf-rates">Kółko: <strong>90 zł netto</strong> · Postojowe: <strong>50 zł netto</strong></p>
+    <div className="rf-legend">{statuses.map(([id, short, label]) => <span key={id}><b data-status={id}>{short}</b> {label}</span>)}</div>
+    <p role="status" className="rf-save-status">{!ready ? "Wczytywanie dni…" : saving ? "Zapisywanie dni…" : pending ? `Niezapisane dni: ${pending}` : "Wszystkie zmiany zapisane"}</p>
     {dane.zamkniety?.locked && <p className="pv-notice">Miesiąc zamknięty. Edycja jest zablokowana.</p>}
     {(error || conflictText) && <p role="alert">{error || conflictText}</p>}
     {invalidDays && <p role="alert">Sprawdź kursy (0–100) i kwoty z dokładnością do grosza. Błędne dni nie są uwzględnione w podglądzie sumy.</p>}
     {storageError && <p role="alert">{storageError}</p>}
     <fieldset disabled={disabled}>
       <div role="table" aria-label="Dni pracy kierowcy">
-        <div className="rf-columns" role="row"><span role="columnheader">Dzień</span><span role="columnheader">Status</span><span role="columnheader">Kursy</span><span role="columnheader">Dniówka</span></div>
+        <div className="rf-columns" role="row"><span role="columnheader">Dzień</span><span role="columnheader">Typ dnia</span><span role="columnheader">Kółka</span><span role="columnheader">Dniówka</span></div>
         {dates.map((date, index) => {
           const entry = displayed.find(day => day.date === date);
           const day = entry ?? emptyDay(date);
@@ -107,11 +109,11 @@ export function RafalWorkCalendar({ month, dane, token, busy, save }: {
           const noteOpen = notes[date] ?? !!day.note;
           return <div key={date}>
             {index > 0 && getDayOfWeek(date) === 1 && <div className="rf-week">Tydzień {Math.floor((index + (getDayOfWeek(dates[0]) + 6) % 7) / 7) + 1}</div>}
-            <div role="row" data-testid={`rafal-day-${date}`} className={`rf-day ${isNiedziela(date) ? "rf-sunday" : isSobota(date) ? "rf-saturday" : ""} ${drafts[date] ? "rf-dirty" : ""}`}>
-              <div role="rowheader" className="rf-date"><strong>{date.slice(8)}</strong> <span>{nazwaSkrotDnia(date)}</span></div>
-              <div role="cell" className="rf-status"><span className="rf-input-label">Status</span><select aria-label={`Status ${date}`} value={entry?.status ?? ""} onChange={e => change(date, { status: e.target.value as FleetDay["status"] })}><option value="" disabled>Brak wpisu</option>{statuses.map(([id, label]) => <option key={id} value={id}>{label}</option>)}</select></div>
-              <div role="cell" className="rf-courses"><span className="rf-input-label">Kursy</span>{working ? <input aria-label={`Kursy ${date}`} type="number" inputMode="numeric" min="0" max="100" step="1" placeholder="0" value={day.courses || ""} onChange={e => change(date, { courses: Number(e.target.value) })} /> : <span>—</span>}</div>
-              <div role="cell" className="rf-amount"><strong>{daily === null ? entry ? "Brak kwoty" : "—" : formatZl(daily)}</strong><button type="button" className="rf-note-button" aria-label={`Komentarz ${date}`} title={`Komentarz ${date}`} aria-expanded={noteOpen} onClick={() => setNotes(prev => ({ ...prev, [date]: !noteOpen }))}><IconNotes size={16} /></button></div>
+            <div role="row" data-testid={`rafal-day-${date}`} className={`rf-day ${isNiedziela(date) ? "rf-sunday" : isSobota(date) ? "rf-saturday" : ""} ${daily && daily > 0 ? "rf-active" : ""} ${drafts[date] ? "rf-dirty" : ""}`}>
+              <div role="rowheader" className="rf-date"><strong>{Number(date.slice(8))}</strong> <span>{nazwaSkrotDnia(date)}</span></div>
+              <div role="cell" className="rf-status"><select aria-label={`Status ${date}`} title={statuses.find(([id]) => id === entry?.status)?.[2] ?? "Typ dnia"} data-status={entry?.status} value={entry?.status ?? ""} onChange={e => change(date, { status: e.target.value as FleetDay["status"] })}><option value="" disabled>Brak wpisu</option>{statuses.map(([id, short, label]) => <option key={id} value={id}>{entry?.status === id ? short : `${short} · ${label}`}</option>)}</select></div>
+              <div role="cell" className="rf-courses"><span className="rf-input-label">Kółka</span>{working ? <input aria-label={`Kursy ${date}`} type="number" inputMode="numeric" min="0" max="100" step="1" placeholder="0" value={day.courses || ""} onChange={e => change(date, { courses: Number(e.target.value) })} /> : <span className="rf-day-off" data-status={day.status}>{statuses.find(([id]) => id === day.status)?.[1]}</span>}</div>
+              <div role="cell" className="rf-amount"><div><span className="rf-input-label">Dniówka</span><strong>{daily === null ? entry ? "Brak kwoty" : "—" : formatZl(daily)}</strong></div><button type="button" className="rf-note-button" aria-label={`Komentarz ${date}`} title={`Komentarz ${date}`} aria-expanded={noteOpen} onClick={() => setNotes(prev => ({ ...prev, [date]: !noteOpen }))}><IconNotes size={16} /></button></div>
               {(day.status === "praca_zlecenia" || day.status === "urlop" || noteOpen) && <div role="cell" className="rf-extra">
                 {day.status === "praca_zlecenia" && <label>Zlecenia netto (zł)<input aria-label={`Zlecenia ${date}`} inputMode="decimal" type="number" min="0" max="10000000" step="0.01" value={day.ordersNet ?? ""} onChange={e => change(date, { ordersNet: money(e.target.value) })} /></label>}
                 {day.status === "urlop" && <label>Urlop netto z listy płac (zł)<input aria-label={`Urlop ${date}`} inputMode="decimal" type="number" min="0" max="10000000" step="0.01" value={day.leaveNet ?? ""} onChange={e => change(date, { leaveNet: money(e.target.value) })} /></label>}

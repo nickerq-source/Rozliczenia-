@@ -2466,7 +2466,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
                 {separator}
                 <div
                   className={cn(
-                    "space-y-3 rounded-2xl border border-line/70 bg-surface2/55 p-3 sm:hidden",
+                    "space-y-3 rounded-lg border border-line/70 bg-surface2/55 p-3 sm:hidden",
                     sporny && "ring-1 ring-amber-brand",
                     aktywna && sob && "border-green-500/35",
                     aktywna && nie && "border-yellow-500/35"
@@ -2479,7 +2479,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
                       : undefined
                   }
                 >
-                  <div className="flex items-start justify-between gap-3">
+                  <div className="grid grid-cols-[minmax(0,1fr)_104px] items-start gap-3">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <span className={cn("text-xl font-extrabold tabular-nums", aktywna && (sob || nie) ? "text-white" : "text-ink")}>
@@ -2498,17 +2498,17 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
                         value={typDnia}
                         onChange={(e) => setDayType(iso, e.target.value as DayType)}
                         title="Typ dnia"
-                        className={cn("mt-2 min-h-[38px] rounded-full border px-3 py-1.5 text-sm font-extrabold", meta.chipCls)}
+                        className={cn("mt-2 min-h-[44px] w-full min-w-0 rounded-lg border px-2 py-1.5 text-base font-extrabold", meta.chipCls)}
                       >
                         {TYPY_DNIA.map((t) => (
-                          <option key={t.id} value={t.id}>{t.krotki} — {t.label}</option>
+                          <option key={t.id} value={t.id}>{typDnia === t.id ? t.krotki : `${t.krotki} — ${t.label}`}</option>
                         ))}
                       </select>
                     </div>
                     <div className="text-right">
                       <p className="text-[10px] font-bold uppercase tracking-wider text-white/55">Dniówka</p>
                       {info?.dniowka ? (
-                        <p className="tabular-nums text-xl font-extrabold text-white">
+                        <p className="tabular-nums break-words text-base font-extrabold text-white">
                           {formatZlCaly(info.dniowka)}
                         </p>
                       ) : (

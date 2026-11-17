@@ -23,12 +23,15 @@ export function AdminChoices({ location, onChange }: Props) {
   const root = location.area === "start";
   return <section className="py-4" aria-label={root ? "Wybierz dział" : "Wybierz kierowcę"}>
     <h1 className="mb-5 text-xl font-bold">{root ? "PapiTrans" : "Kierowcy"}</h1>
-    <div className="grid gap-4 sm:grid-cols-2">
+    <div className={`grid gap-3 ${root ? 'sm:grid-cols-2' : 'grid-cols-2'}`}>
       {root ? <>
         <button className="flex min-h-[132px] items-center gap-4 rounded-lg border border-amber-brand/60 bg-surface px-5 py-6 text-left text-xl font-bold" onClick={() => onChange({ ...location, area: "firma", tab: "podsumowanie" })}><IconChartBar size={30} className="shrink-0 text-amber-brand" />Menu główne</button>
         <button className="flex min-h-[132px] items-center gap-4 rounded-lg border border-green-500/50 bg-surface px-5 py-6 text-left text-xl font-bold" onClick={() => onChange({ ...location, area: "kierowcy", driver: undefined })}><IconUsers size={30} className="shrink-0 text-green-300" />Kierowcy</button>
       </> : (Object.entries(DRIVER_NAMES) as ["zenia" | "rafal", string][]).map(([driver, name]) =>
-        <button key={driver} className="flex min-h-[112px] items-center gap-3 rounded-lg border border-line bg-surface px-4 py-6 text-left text-lg font-bold" onClick={() => onChange({ ...location, driver, view: "koszty" })}><IconUsers size={24} className="shrink-0 text-amber-brand" /><span>{name}</span></button>)}
+        <button key={driver} className="group flex min-h-[144px] min-w-0 flex-col items-start justify-between gap-4 rounded-lg border border-line bg-surface px-4 py-5 text-left font-bold transition-colors hover:border-amber-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-brand" onClick={() => onChange({ ...location, driver, view: "koszty" })}>
+          <IconUsers size={24} aria-hidden="true" className={`shrink-0 ${driver === 'rafal' ? 'text-green-300' : 'text-amber-brand'}`} />
+          <span className="text-base leading-6 break-words">{name}</span>
+        </button>)}
     </div>
   </section>;
 }

@@ -51,6 +51,27 @@ summary into his days/pay view. Existing components and backend role checks are 
 
 ## Navigation and recovery
 
+### Mobile driver sections and calendar (2026-11-17)
+
+Driver sections now use named icon tiles at every viewport, rather than a native
+select on phones. The driver chooser displays two tiles side by side; the existing
+left/above-profile switcher remains. No section or action was removed.
+
+Rafal's calendar follows Zenia's layout: day and status, courses, daily amount,
+week dividers and weekend accents. On phones courses use the full row. Status
+codes have a visible legend; comments, orders and paid leave retain their fields.
+Zenia's mobile amount column has a stable width to avoid squeezing the daily pay.
+The change is presentation-only: rates, payroll activation, monthly draft recovery,
+batch save, conflict checks, locked months, audit and undo are unchanged.
+
+Verification: 134 local regression tests, lint, TypeScript and production build
+passed. The synthetic workspace UI suite passed at 320/390/1280 px, including
+tile touch targets, 30/31-day calendars, save/failure/conflict/recovery, statuses,
+comments, company reconciliation and month-preserving driver switches. Screenshots
+were inspected. A read-only check of production confirmed November and December
+survive driver switches and the company summary/cost/tax views reconcile both
+drivers. No real financial records were changed during that check.
+
 Driver profiles now keep both driver choices visible. At widths of 1024 px and
 up they form a sticky left sidebar; on phones and smaller tablets the same two
 buttons appear above the profile without squeezing its forms. Company navigation
