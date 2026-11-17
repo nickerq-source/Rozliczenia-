@@ -1,0 +1,43 @@
+.paper {
+  position: relative;
+  isolation: isolate;
+  border: 1px solid transparent;
+}
+
+/* Only the stock has an irregular silhouette, never the controls or their focus rings. */
+.paper::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  pointer-events: none;
+  background: url("./login-paper.webp") center / 100% 100% no-repeat;
+  filter: drop-shadow(0 9px 15px rgb(0 0 0 / 42%));
+}
+
+.imprint {
+  width: fit-content;
+  margin: 0;
+  font-size: 44px;
+  line-height: 1.03;
+  font-weight: 900;
+  font-style: italic;
+  letter-spacing: 0;
+  color: #9cca9b;
+  text-shadow: .6px .8px #476347, 1.6px 2px #15291c;
+  transform: rotate(-2deg);
+  mask-image: url("./dry-ink.svg");
+  mask-size: 93px 41px;
+  mask-repeat: repeat;
+}
+
+.imprint > span {
+  display: inline-block;
+  transform: translateY(1px) rotate(1.4deg);
+}
+
+@media (forced-colors: active) {
+  .paper { border-color: CanvasText; background: Canvas; }
+  .paper::before { display: none; }
+  .imprint { mask-image: none; color: CanvasText; text-shadow: none; }
+}

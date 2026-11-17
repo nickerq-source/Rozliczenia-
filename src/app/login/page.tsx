@@ -3,12 +3,15 @@
 // Ekran logowania — Supabase Auth (email + hasło, bez publicznej rejestracji)
 
 import { useState, useEffect } from "react";
+import localFont from "next/font/local";
+import styles from "./login.module.css";
 import { getBrowserSupabase } from "@/lib/supabase-browser";
 import { IconTruck, IconAlertTriangle, IconLoader } from "@/components/ui/icons";
 
 // Logowanie nazwą konta (bez @) — wewnętrznie mapowane na syntetyczny email
 const LOGIN_DOMAIN = "papitrans.local";
 const LAST_LOGIN_KEY = "papitrans_last_login";
+const imprintFace = localFont({ src: "./alegreya-sc-latin-900-italic.woff2", weight: "900", style: "italic", display: "swap" });
 
 // Aliasy nazw kont, gdy email w Auth różni się od loginu (np. literówka papa/papi)
 const LOGIN_ALIASES: Record<string, string> = {
@@ -91,13 +94,13 @@ export default function LoginPage() {
         {/* Logo */}
         <div className="flex flex-col items-center mb-6">
           <IconTruck size={36} className="text-amber-brand mb-2" />
-          <span className="logo-gem text-[32px] leading-none">PapiTrans</span>
+          <h1 className={`${imprintFace.className} ${styles.imprint}`}>Papi<span>Trans</span></h1>
           <span className="logo-subtitle text-[11px] mt-1">El Jefe de la Ruta</span>
         </div>
 
         <form
           onSubmit={handleLogin}
-          className="bg-surface rounded-2xl border border-line p-5 space-y-3 shadow-2xl"
+          className={`${styles.paper} p-5 space-y-3`}
         >
           <div>
             <label className="block text-xs text-dim mb-1">Konto</label>
