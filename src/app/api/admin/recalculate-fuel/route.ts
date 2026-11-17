@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
   const admin = getAdminSupabase();
   const { data: workspace, error } = await admin
     .from("workspaces")
-    .select("data")
+    .select("data, updated_at")
     .eq("id", profile.workspace_id)
     .single();
   if (error || !workspace) {
@@ -80,7 +80,8 @@ export async function POST(request: NextRequest) {
   const { error: saveError } = await admin
     .from("workspaces")
     .update({ data: recalculation.data, updated_at: new Date().toISOString() })
-    .eq("id", profile.workspace_id);
+    .eq("id", profile.workspace_id).eq("updated_at", workspace.updated_at).select("id").single();
+  if (saveError?.code === "PGRST116") return NextResponse.json({ error: "Dane zmieniły się podczas przeliczania. Spróbuj ponownie." }, { status: 409 });
   if (saveError) return NextResponse.json({ error: saveError.message, report }, { status: 503 });
 
   await admin.from("audit_log").insert({

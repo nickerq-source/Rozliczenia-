@@ -4,6 +4,7 @@ import { parseInvoiceTable } from "@/lib/invoice-table";
 import { invoiceDate } from "@/lib/invoice-settlement";
 import { KIEROWCA, TYP_TRANSPORTU, VAT } from "@/lib/config";
 import { getSessionProfile } from "@/lib/supabase-server";
+import { FLEET_DRIVERS } from "@/lib/driver-identity";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -17,6 +18,7 @@ export async function POST(req: NextRequest) {
   catch { return NextResponse.json({ error: "Nieprawidłowe żądanie (brak form-data)" }, { status: 400 }); }
   const file = formData.get("file");
   if (!(file instanceof File) || !file.size) return NextResponse.json({ error: "Brak pliku PDF" }, { status: 400 });
+  if (file.size > 15 * 1024 * 1024) return NextResponse.json({ error: "Maksymalny rozmiar PDF to 15 MB" }, { status: 413 });
   if (!file.name.toLowerCase().endsWith(".pdf")) return NextResponse.json({ error: "Plik musi być w formacie PDF" }, { status: 400 });
   const driverName = String(formData.get("driverName") ?? KIEROWCA).trim() || KIEROWCA;
   const vehicleType = String(formData.get("vehicleType") ?? TYP_TRANSPORTU).trim() || TYP_TRANSPORTU;
@@ -27,7 +29,8 @@ export async function POST(req: NextRequest) {
   }
   try {
     const pages = await extractInvoicePages(new Uint8Array(await file.arrayBuffer()));
-    const { invoiceNumber, ...filtered } = parseInvoiceTable(pages, { driverName, vehicleType, dateFrom, dateTo }, VAT);
+    const driverNames = formData.get("mode") === "fleet" ? [...FLEET_DRIVERS] : undefined;
+    const { invoiceNumber, ...filtered } = parseInvoiceTable(pages, { driverName, driverNames, vehicleType, dateFrom, dateTo }, VAT);
     if (process.env.NODE_ENV === "development") {
       console.table([
         ...filtered.includedRows.map(row => ({ ...row, decision: "uwzględniona" })),

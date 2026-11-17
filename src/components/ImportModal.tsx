@@ -11,12 +11,14 @@ import type { PDFManualAddition, PDFManualAdditionType, PDFRecordOverride, PDFIm
 import { recalculateInvoiceImport as calculateFilteredResult, type InvoicePreview } from "@/lib/invoice-import";
 import { grossMoney, invoiceDate, isAdditionalInvoiceRow, orderKey, sumMoney } from "@/lib/invoice-settlement";
 import { InvoiceRowCorrection, type InvoiceCorrection } from "./InvoiceRowCorrection";
+import { matchesInvoiceDriver } from "@/lib/driver-identity";
 
 type RecordOverride = PDFRecordOverride;
 type ImportDiagnosticRow = PDFImportDiagnosticRow;
 type FilteredResult = InvoicePreview;
 
 export interface ImportModalProps {
+  busy?: boolean;
   mode?: "preview" | "confirm";
   invoiceNumber: string | null;
   filtered: FilteredResult | null;
@@ -88,12 +90,13 @@ function sourceRowsOf(filtered: FilteredResult): ImportDiagnosticRow[] {
 function defaultRangeForRows(
   rows: ImportDiagnosticRow[],
   driverName: string,
-  vehicleType: string
+  vehicleType: string,
+  driverNames?: string[]
 ): { from: string; to: string } {
   const dates = rows
     .filter(
       (row) =>
-        normalizeText(row.driverName) === normalizeText(driverName) &&
+        matchesInvoiceDriver(row.driverName, { driverName, driverNames }) &&
         normalizeText(row.vehicleType) === normalizeText(vehicleType) &&
         !!row.date
     )
@@ -210,6 +213,7 @@ function DiagnosticCard({
 }
 
 export function ImportModal({
+  busy = false,
   mode = "confirm",
   invoiceNumber,
   filtered,
@@ -227,7 +231,7 @@ export function ImportModal({
   const driverName = filtered?.filters?.driverName || KIEROWCA;
   const vehicleType = filtered?.filters?.vehicleType || TYP_TRANSPORTU;
   const sourceRows = filtered ? sourceRowsOf(filtered) : [];
-  const fullRange = filtered ? defaultRangeForRows(sourceRows, driverName, vehicleType) : { from: "", to: "" };
+  const fullRange = filtered ? defaultRangeForRows(sourceRows, driverName, vehicleType, filtered.filters?.driverNames) : { from: "", to: "" };
 
   const [showRejected, setShowRejected] = useState(false);
   const [showAdditionForm, setShowAdditionForm] = useState(false);
@@ -257,7 +261,8 @@ export function ImportModal({
     const nextRange = defaultRangeForRows(
       nextSource,
       filtered.filters?.driverName || KIEROWCA,
-      filtered.filters?.vehicleType || TYP_TRANSPORTU
+      filtered.filters?.vehicleType || TYP_TRANSPORTU,
+      filtered.filters?.driverNames
     );
     setDateFrom(filtered.filters?.dateFrom ?? filtered.invoiceImportDateFrom ?? filtered.zakresOd ?? nextRange.from);
     setDateTo(filtered.filters?.dateTo ?? filtered.invoiceImportDateTo ?? filtered.zakresDo ?? nextRange.to);
@@ -393,6 +398,7 @@ export function ImportModal({
   }
 
   function confirmImport() {
+    if (busy) return;
     if ((dateFrom && !invoiceDate(dateFrom)) || (dateTo && !invoiceDate(dateTo)) || (dateFrom && dateTo && dateFrom > dateTo)) {
       alert("Popraw zakres dat przed zapisem."); return;
     }
@@ -441,7 +447,8 @@ export function ImportModal({
               <section className="space-y-2">
                 <p className="text-xs font-bold uppercase tracking-wide text-amber-400">Dane faktury</p>
                 <div className="text-xs text-zinc-500 space-y-0.5">
-                  <p>Kierowca: <span className="text-zinc-300">{driverName}</span></p>
+                  <p>Kierowcy: <span className="text-zinc-300">{filtered?.filters?.driverNames?.join(", ") || driverName}</span></p>
+                  {currentFiltered?.filters?.driverNames?.map(name => <Row key={name} label={`${name} · netto`} value={formatZl(sumMoney([...(currentFiltered.includedRows ?? []).filter(row => matchesInvoiceDriver(row.driverName, { driverName: name })).map(row => row.cost), ...(currentFiltered.dodatkiReczne ?? []).filter(a => a.addToInvoice && matchesInvoiceDriver(a.driverName, { driverName: name })).map(a => a.netto)]))} />)}
                   <p>Typ transportu: <span className="text-zinc-300">{vehicleType}</span></p>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
@@ -787,6 +794,7 @@ export function ImportModal({
           <div className="px-5 pb-5 flex flex-col gap-2 shrink-0">
             <button
               onClick={confirmImport}
+              disabled={busy}
               className="w-full py-2.5 rounded-xl bg-amber-brand text-amber-ink font-bold text-sm hover:bg-[#e09420] transition-colors"
             >
               Zapisz zmiany
@@ -822,9 +830,10 @@ export function ImportModal({
             </button>
             <button
               onClick={confirmImport}
+              disabled={busy}
               className="flex-1 py-2.5 rounded-xl bg-amber-brand text-amber-ink font-bold text-sm hover:bg-[#e09420] transition-colors"
             >
-              Zapisz do tygodnia
+              {busy ? "Zapisywanie…" : filtered?.filters?.driverNames?.length ? "Zapisz fakturę" : "Zapisz do tygodnia"}
             </button>
           </div>
         )}

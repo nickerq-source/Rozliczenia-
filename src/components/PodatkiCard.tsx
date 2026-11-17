@@ -261,12 +261,12 @@ export function PodatkiCard({
   const nadwyzkaVat = Math.max(0, -p.vatDoZaplaty);
   const sprzedazBrutto = p.sprzedazNetto + p.vatNalezny;
   // Łączne zobowiązania: podatki właściciela i firmy oraz stałe obciążenia pracownika.
-  const laczniePowinnoWyjsc = vatDoZaplatyDodatni + p.pitMiesiac + p.zdrowotna + p.obciazeniaPracownika;
+  const laczniePowinnoWyjsc = vatDoZaplatyDodatni + p.pitMiesiac + p.zdrowotna + p.obciazeniaPracownika + p.rafal.charges;
 
   const kosztyOperacyjne = wynik.kosztyOperacyjne;
   const kosztPracownika = wynik.wynagrodzenieDoWyplaty + wynik.obciazeniaPracownika;
   const kosztyZakupowe = wynik.paliwo + wynik.inne + wynik.leasing;
-  const kosztyZakupowePodatkowe = Math.max(0, p.kosztyPodatkowe - p.wynagrodzeniePodatkowe);
+  const kosztyZakupowePodatkowe = Math.max(0, p.kosztyPodatkowe - p.wynagrodzeniePodatkowe - p.rafal.taxCost);
   const oficjalneAktywne = p.wynagrodzeniePodatkowe !== wynik.wynagrodzeniePracownika || p.obciazeniaPracownika > 0;
   const oficjalnyBrutto = Math.max(0, p.wynagrodzeniePodatkowe - p.obciazeniaPracownika);
   const nieoficjalne = Math.max(0, wynik.wynagrodzeniePracownika - oficjalnyBrutto);
@@ -292,7 +292,7 @@ export function PodatkiCard({
     },
     koszty_pit: {
       label: aktualneDaneLabel,
-      text: `Paliwo brutto ${formatZl(wynik.paliwo)}, inne koszty brutto ${formatZl(wynik.inne)}, leasing brutto ${formatZl(wynik.leasing)}. Po rozliczeniu VAT podatkowa część zakupów wynosi ${formatZl(kosztyZakupowePodatkowe)}. Razem z kosztami pracownika ${formatZl(p.wynagrodzeniePodatkowe)} daje ${formatZl(p.kosztyPodatkowe)} kosztów uznanych do podatku dochodowego.`,
+      text: `Paliwo brutto ${formatZl(wynik.paliwo)}, inne koszty brutto ${formatZl(wynik.inne)}, leasing brutto ${formatZl(wynik.leasing)}. Po rozliczeniu VAT podatkowa część zakupów wynosi ${formatZl(kosztyZakupowePodatkowe)}. Razem z kosztami Żeni ${formatZl(p.wynagrodzeniePodatkowe)} i Rafała ${formatZl(p.rafal.taxCost)} daje ${formatZl(p.kosztyPodatkowe)} kosztów uznanych do podatku dochodowego.`,
     },
     dochod_pit: {
       label: aktualneDaneLabel,
@@ -326,7 +326,7 @@ export function PodatkiCard({
     },
     lacznie: {
       label: aktualneDaneLabel,
-      text: `${formatZl(vatDoZaplatyDodatni)} VAT + ${formatZl(p.pitMiesiac)} podatku dochodowego + ${formatZl(p.zdrowotna)} rezerwy na zdrowotną właściciela + ${formatZl(p.obciazeniaPracownika)} zobowiązań pracownika = ${formatZl(laczniePowinnoWyjsc)}.`,
+      text: `${formatZl(vatDoZaplatyDodatni)} VAT + ${formatZl(p.pitMiesiac)} podatku dochodowego + ${formatZl(p.zdrowotna)} rezerwy na zdrowotną właściciela + ${formatZl(p.obciazeniaPracownika + p.rafal.charges)} zobowiązań pracowników = ${formatZl(laczniePowinnoWyjsc)}.`,
     },
     wynik_po_podatkach: {
       label: aktualneDaneLabel,
@@ -334,7 +334,7 @@ export function PodatkiCard({
     },
     wynik_na_czysto: {
       label: aktualneDaneLabel,
-      text: `${formatZl(sprzedazBrutto)} przychodu brutto − ${formatZl(wynik.wynagrodzenieDoWyplaty)} wypłaty kierowcy po potrąceniach − ${formatZl(wynik.paliwo)} paliwa − ${formatZl(wynik.inne)} innych kosztów − ${formatZl(wynik.leasing)} leasingu − ${formatZl(laczniePowinnoWyjsc)} podatków i składek = ${formatZl(p.cashflowPoPodatkach)} realnie zostaje.`,
+      text: `${formatZl(sprzedazBrutto)} przychodu brutto − ${formatZl(wynik.wynagrodzenieDoWyplaty + p.rafal.payout)} wypłat kierowców − ${formatZl(wynik.paliwo)} paliwa − ${formatZl(wynik.inne)} innych kosztów − ${formatZl(wynik.leasing)} leasingu − ${formatZl(laczniePowinnoWyjsc)} podatków i składek = ${formatZl(p.cashflowPoPodatkach)} realnie zostaje.`,
     },
   };
   const taxSummary: TaxExampleData = {
@@ -462,7 +462,7 @@ export function PodatkiCard({
           <Wiersz label="Przychód netto" value={p.przychodNetto} />
           <Wiersz
             label="− Koszty pracownika uznane do podatku"
-            value={p.wynagrodzeniePodatkowe}
+            value={p.wynagrodzeniePodatkowe + p.rafal.taxCost}
           />
           <Wiersz
             label="− Koszty zakupowe uznane do podatku"
@@ -540,6 +540,7 @@ export function PodatkiCard({
           <p className="mb-1 text-xs font-bold text-green-300">4. Podsumowanie końcowe</p>
           <Wiersz label="Przychód brutto" value={sprzedazBrutto} />
           <Wiersz label="− Wypłata kierowcy po potrąceniach" value={wynik.wynagrodzenieDoWyplaty} />
+          {p.rafal.active && <Wiersz label="− Rafał · wynagrodzenie netto" value={p.rafal.payout} />}
           <Wiersz label="− Paliwo" value={wynik.paliwo} />
           <Wiersz label="− Inne koszty" value={wynik.inne} />
           <Wiersz label="− Leasing" value={wynik.leasing} />
@@ -573,8 +574,10 @@ export function PodatkiCard({
         {p.podatekDochodowyPracownika > 0 && <Wiersz label="Podatek dochodowy pracownika" value={p.podatekDochodowyPracownika} klasa="text-ink" />}
         {p.skladkaZdrowotnaPracownika > 0 && <Wiersz label="Składka zdrowotna pracownika" value={p.skladkaZdrowotnaPracownika} klasa="text-ink" />}
         {p.pozostaleSkladkiZusPracownika > 0 && <Wiersz label="Pozostałe składki ZUS pracownika" value={p.pozostaleSkladkiZusPracownika} klasa="text-ink" />}
-        <Wiersz label="RAZEM PODATKI I SKŁADKI" value={laczniePowinnoWyjsc} klasa="text-amber-brand" bold />
-        {vatDoZaplatyDodatni === 0 && p.pitMiesiac === 0 && p.obciazeniaPracownika === 0 && (
+        {p.rafal.active && <Wiersz label="Rafał · zobowiązania z listy płac" value={p.rafal.charges} />}
+        <Wiersz label="RAZEM PODATKI I ZOBOWIĄZANIA" value={laczniePowinnoWyjsc} klasa="text-amber-brand" bold />
+        {p.rafal.incomplete && <p className="text-amber-300 text-sm">Rafał: niepełna lub nieuzgodniona lista płac. Wynik jest szacunkowy.</p>}
+        {vatDoZaplatyDodatni === 0 && p.pitMiesiac === 0 && p.obciazeniaPracownika === 0 && p.rafal.charges === 0 && (
           <p className="mt-2 text-[11px] text-dim">
             W tym miesiącu nie wychodzi VAT ani podatek dochodowy do zapłaty. Do odłożenia zostaje rezerwa na zdrowotną właściciela: {formatZl(p.zdrowotna)}.
           </p>
@@ -622,6 +625,7 @@ export function PodatkiCard({
           {wynik.skladkaZdrowotnaPracownika > 0 && <Wiersz label="Składka zdrowotna pracownika" value={wynik.skladkaZdrowotnaPracownika} />}
           {wynik.pozostaleSkladkiZusPracownika > 0 && <Wiersz label="Pozostałe składki ZUS pracownika" value={wynik.pozostaleSkladkiZusPracownika} />}
           <Wiersz label="Razem koszt pracownika" value={kosztPracownika} bold />
+          {p.rafal.active && <><Wiersz label="Rafał · wynagrodzenie netto" value={p.rafal.payout} /><Wiersz label="Rafał · zobowiązania z listy płac" value={p.rafal.charges} /><Wiersz label="Razem koszty obu pracowników" value={kosztPracownika + p.rafal.total} bold /></>}
 
           {/* Koszty zakupowe — VAT tylko z dokumentów */}
           <p className="mb-1 mt-4 text-xs font-bold uppercase tracking-wider text-amber-brand">
@@ -678,6 +682,7 @@ export function PodatkiCard({
           </p>
           <Wiersz label="Przychód netto" value={p.przychodNetto} />
           <Wiersz label="Koszty pracownika uznane do dochodowego" value={p.wynagrodzeniePodatkowe} />
+          {p.rafal.active && <Wiersz label="Rafał · koszt podatkowy z listy płac" value={p.rafal.taxCost} />}
           <Wiersz label="Koszty zakupowe uznane do dochodowego" value={kosztyZakupowePodatkowe} />
           <Wiersz label="Razem koszty uznane do dochodowego" value={p.kosztyPodatkowe} term="koszty_pit" bold />
           {strata ? (

@@ -1,4 +1,5 @@
 import type { PDFDocumentCheck, PDFImportDiagnosticRow, PDFImportFilter, PDFRecordOverride } from "./types";
+import { matchesInvoiceDriver } from "./driver-identity";
 
 export const INVOICE_PARSER_VERSION = "zabka-columns-v2";
 
@@ -97,7 +98,7 @@ export function settleInvoiceRows(sourceRows: PDFImportDiagnosticRow[], filters:
       reviewRows.push({ ...row, needsReview: true, reason: [...new Set(problems)].join(", ") });
     } else {
       const reasons: string[] = [];
-      if (invoiceText(row.driverName) !== invoiceText(filters.driverName)) reasons.push("inny kierowca");
+      if (!matchesInvoiceDriver(row.driverName, filters)) reasons.push("inny kierowca");
       if (invoiceText(row.vehicleType) !== invoiceText(filters.vehicleType)) reasons.push("inny typ transportu");
       if (row.date && ((filters.dateFrom && row.date < filters.dateFrom) || (filters.dateTo && row.date > filters.dateTo))) reasons.push("poza wybranym zakresem dat");
       const diagnostic = { ...row, isAdditional: isAdditionalInvoiceRow(row), reason: reasons.length ? reasons.join(", ") : `zgodny kierowca, typ i data; /${isAdditionalInvoiceRow(row) ? "I" : "D"}${override?.correction ? "; korekta administratora" : ""}` };

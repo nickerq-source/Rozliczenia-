@@ -1,5 +1,6 @@
 import type { DaneMiesiaca, MiesiącId, WorkspaceData } from "./types";
 import { invoiceText, sumMoney } from "./invoice-settlement";
+import { fleetDayNet, type FleetDay } from "./fleet";
 import { domyslneDaneMiesiaca, obliczWynikMiesiaca } from "./business-logic";
 import { MIESIACE_ZAKRESU } from "./dates";
 import { getUstawienia, podatkiMiesiaca } from "./tax";
@@ -87,21 +88,9 @@ export function previewMonth(data: WorkspaceData, month: MiesiącId) {
   return { dane, settings, result: obliczWynikMiesiaca(month, dane, settings), tax: podatkiMiesiaca(data, month) };
 }
 
-export interface PreviewDay {
-  date: string;
-  status: "praca" | "praca_zlecenia" | "urlop" | "postojowe" | "wolne";
-  courses: number;
-  ordersNet: number | null;
-  leaveNet: number | null;
-  note: string;
-}
+export type PreviewDay = FleetDay;
 
 /** Trial net amounts only. Not a payroll engine and never an input to company accounting. */
 export function previewDayNet(day: PreviewDay): number | null {
-  if (day.status === "wolne") return 0;
-  if (day.status === "postojowe") return 50;
-  if (day.status === "urlop") return day.leaveNet;
-  const courses = Math.max(0, Math.trunc(day.courses)) * 90;
-  if (day.status === "praca_zlecenia" && day.ordersNet === null) return null;
-  return Math.round((courses + (day.status === "praca_zlecenia" ? day.ordersNet ?? 0 : 0)) * 100) / 100;
+  return fleetDayNet(day);
 }

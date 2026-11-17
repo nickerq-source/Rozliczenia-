@@ -87,7 +87,7 @@ interface Props {
   // Wszystkie miesiące — potrzebne do rozliczenia 50/50 narastająco
   wszystkieMiesiace?: Partial<Record<MiesiącId, DaneMiesiaca>>;
   vehicles?: FuelVehicleConfig[];
-  saveStatus?: "idle" | "saving" | "saved" | "error";
+  saveStatus?: import("@/hooks/useWorkspace").SaveStatus;
   // Id zgłoszenia z deep-linku powiadomienia — podświetlamy dzień
   focusZgloszenieId?: string | null;
   onMoveTankowanie?: (id: string, targetMonth: MiesiącId, patch: Partial<WpisTankowania>) => boolean;
@@ -750,7 +750,7 @@ function FuelStatsPanel({
   miesiac: MiesiącId;
   wszystkieMiesiace?: Partial<Record<MiesiącId, DaneMiesiaca>>;
   vehicles?: FuelVehicleConfig[];
-  saveStatus?: "idle" | "saving" | "saved" | "error";
+  saveStatus?: import("@/hooks/useWorkspace").SaveStatus;
 }) {
   const [kierowca, setKierowca] = useState("");
   const [stacja, setStacja] = useState("");
@@ -791,7 +791,7 @@ function FuelStatsPanel({
             statystyki zaktualizowane
           </span>
         )}
-        {saveStatus === "error" && (
+        {(saveStatus === "error" || saveStatus === "conflict") && (
           <span className="shrink-0 rounded-full border border-red-500/40 bg-red-soft px-2 py-1 text-[10px] font-bold text-red-300">
             błąd zapisu
           </span>
@@ -1963,6 +1963,10 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
     { label: "Podatek dochodowy pracownika", value: obciazeniaPracownika.podatekDochodowyPracownika, icon: <IconUsers size={16} /> },
     { label: "Składka zdrowotna pracownika", value: obciazeniaPracownika.skladkaZdrowotnaPracownika, icon: <IconUsers size={16} /> },
     { label: "Pozostałe składki ZUS pracownika", value: obciazeniaPracownika.pozostaleSkladkiZusPracownika, icon: <IconUsers size={16} /> },
+    ...(wynikKosztow.rafal.active ? [
+      { label: "Rafał · wynagrodzenie netto", value: wynikKosztow.rafal.payout, icon: <IconUsers size={16} /> },
+      { label: "Rafał · zobowiązania z listy płac", value: wynikKosztow.rafal.charges, icon: <IconUsers size={16} /> },
+    ] : []),
   ];
   const kosztyZakupoweRows = [
     { label: "Paliwo", value: sumaFuel, icon: <IconGasStation size={16} /> },
@@ -2008,6 +2012,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
   return (
     <div {...swipeHandlers} className="app-swipe-surface space-y-4">
       <KosztySectionSwitch active={widokKosztow} onChange={changeWidokKosztow} />
+      {wynikKosztow.rafal.incomplete && <p className="text-sm text-amber-300">Rafał: niepełna lub nieuzgodniona lista płac. Wynik jest szacunkowy.</p>}
 
       {showPodsumowanie && <Card className="!border-amber-brand/35">
         <div className="mb-4 flex items-start gap-3">

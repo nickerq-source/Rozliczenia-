@@ -295,7 +295,7 @@ export async function POST(req: NextRequest) {
   const admin = getAdminSupabase();
   const { data: ws, error } = await admin
     .from("workspaces")
-    .select("data")
+    .select("data, updated_at")
     .eq("id", profile.workspace_id)
     .single();
   if (error || !ws) {
@@ -409,7 +409,8 @@ export async function POST(req: NextRequest) {
   const { error: saveErr } = await admin
     .from("workspaces")
     .update({ data: nowaData, updated_at: new Date().toISOString() })
-    .eq("id", profile.workspace_id);
+    .eq("id", profile.workspace_id).eq("updated_at", ws.updated_at).select("id").single();
+  if (saveErr?.code === "PGRST116") return NextResponse.json({ error: "Dane zmienily sie podczas zapisu. Odswiez i sprobuj ponownie." }, { status: 409 });
   if (saveErr) {
     return NextResponse.json({ error: saveErr.message }, { status: 503 });
   }
@@ -477,7 +478,7 @@ export async function PATCH(req: NextRequest) {
   const admin = getAdminSupabase();
   const { data: ws, error } = await admin
     .from("workspaces")
-    .select("data")
+    .select("data, updated_at")
     .eq("id", profile.workspace_id)
     .single();
   if (error || !ws) return NextResponse.json({ error: "Workspace nie znaleziony" }, { status: 404 });
@@ -598,7 +599,8 @@ export async function PATCH(req: NextRequest) {
   const { error: saveErr } = await admin
     .from("workspaces")
     .update({ data: nowaData, updated_at: new Date().toISOString() })
-    .eq("id", profile.workspace_id);
+    .eq("id", profile.workspace_id).eq("updated_at", ws.updated_at).select("id").single();
+  if (saveErr?.code === "PGRST116") return NextResponse.json({ error: "Dane zmienily sie podczas zapisu. Odswiez i sprobuj ponownie." }, { status: 409 });
   if (saveErr) return NextResponse.json({ error: saveErr.message }, { status: 503 });
 
   const addedTacho = !!tachographAttachment || !!odometerAttachment;
@@ -633,7 +635,7 @@ export async function GET() {
   const admin = getAdminSupabase();
   const { data: ws, error } = await admin
     .from("workspaces")
-    .select("data")
+    .select("data, updated_at")
     .eq("id", profile.workspace_id)
     .single();
   if (error || !ws) {
@@ -750,7 +752,7 @@ export async function DELETE(req: NextRequest) {
   const admin = getAdminSupabase();
   const { data: ws, error } = await admin
     .from("workspaces")
-    .select("data")
+    .select("data, updated_at")
     .eq("id", profile.workspace_id)
     .single();
   if (error || !ws) {
@@ -782,7 +784,8 @@ export async function DELETE(req: NextRequest) {
   const { error: saveErr } = await admin
     .from("workspaces")
     .update({ data: nowaData, updated_at: new Date().toISOString() })
-    .eq("id", profile.workspace_id);
+    .eq("id", profile.workspace_id).eq("updated_at", ws.updated_at).select("id").single();
+  if (saveErr?.code === "PGRST116") return NextResponse.json({ error: "Dane zmienily sie podczas zapisu. Odswiez i sprobuj ponownie." }, { status: 409 });
   if (saveErr) {
     return NextResponse.json({ error: saveErr.message }, { status: 503 });
   }

@@ -1,4 +1,5 @@
 import type { PDFImportDiagnosticRow, PDFImportFilter } from "./types";
+import { matchesInvoiceDriver } from "./driver-identity";
 import { KIEROWCA, TYP_TRANSPORTU, VAT } from "./config";
 import { checkInvoiceDocument, INVOICE_PARSER_VERSION, invoiceDate, invoiceText, parseMoneyCents, settleInvoiceRows } from "./invoice-settlement";
 
@@ -83,8 +84,8 @@ export function parseInvoiceTable(pages: InvoicePDFPage[], options: Partial<PDFI
   if (invoiceNumbers.length > 1) warnings.push("PDF zawiera więcej niż jeden numer faktury");
   const driverName = options.driverName ?? KIEROWCA;
   const vehicleType = options.vehicleType ?? TYP_TRANSPORTU;
-  const dates = sourceRows.filter(row => invoiceText(row.driverName) === invoiceText(driverName) && row.vehicleType === vehicleType).flatMap(row => row.date ? [row.date] : []).sort();
-  const filters: PDFImportFilter = { driverName, vehicleType,
+  const dates = sourceRows.filter(row => matchesInvoiceDriver(row.driverName, { driverName, driverNames: options.driverNames }) && row.vehicleType === vehicleType).flatMap(row => row.date ? [row.date] : []).sort();
+  const filters: PDFImportFilter = { driverName, driverNames: options.driverNames, vehicleType,
     dateFrom: invoiceDate(options.dateFrom) ?? dates[0] ?? null,
     dateTo: invoiceDate(options.dateTo) ?? dates.at(-1) ?? null };
   return { invoiceNumber: invoiceNumbers.length === 1 ? invoiceNumbers[0] : null,

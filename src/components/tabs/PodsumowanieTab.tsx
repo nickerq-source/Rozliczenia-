@@ -501,6 +501,8 @@ export function PodsumowanieTab({
           {wynik.podatekDochodowyPracownika > 0 && <Row icon={<IconUsers size={18} />} label="Podatek dochodowy pracownika" value={wynik.podatekDochodowyPracownika} />}
           {wynik.skladkaZdrowotnaPracownika > 0 && <Row icon={<IconUsers size={18} />} label="Składka zdrowotna pracownika" value={wynik.skladkaZdrowotnaPracownika} />}
           {wynik.pozostaleSkladkiZusPracownika > 0 && <Row icon={<IconUsers size={18} />} label="Pozostałe składki ZUS pracownika" value={wynik.pozostaleSkladkiZusPracownika} />}
+          {wynik.rafal.active && <><Row icon={<IconUsers size={18} />} label="Rafał · wynagrodzenie netto" value={wynik.rafal.payout} /><Row icon={<IconUsers size={18} />} label="Rafał · zobowiązania z listy płac" value={wynik.rafal.charges} /></>}
+          {wynik.rafal.incomplete && <p className="text-sm text-amber-300">Rafał: lista płac wymaga uzupełnienia lub uzgodnienia. Wynik firmy jest szacunkowy.</p>}
           <p className="mt-1 text-[10px] leading-relaxed text-dim/70">
             Naliczone wynagrodzenie: {formatZl(wynik.wynagrodzeniePracownika)}
             {wynik.potraceniaKierowcy > 0
@@ -606,6 +608,7 @@ export function PodsumowanieTab({
               <span className="text-dim">Odłożyć na zdrowotną właściciela</span>
               <span className="tabular-nums text-red-300">{formatZl(podatki.zdrowotna)}</span>
             </div>
+            {podatki.rafal.active && <div className="flex justify-between gap-3"><span>Rafał · zobowiązania ujęte w kosztach</span><span>{formatZl(podatki.rafal.charges)}</span></div>}
             {podatki.obciazeniaPracownika > 0 && (
               <div className="flex justify-between border-t border-line pt-1">
                 <span className="text-dim">Obciążenia pracownika (ujęte w kosztach)</span>

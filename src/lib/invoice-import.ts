@@ -1,6 +1,6 @@
 import type { FakturaWeek, PDFImportAudit, PDFImportData, PDFImportDiagnosticRow, PDFImportFilter, PDFManualAddition, PDFRecordOverride } from "./types";
 import { KIEROWCA, TYP_TRANSPORTU, VAT } from "./config";
-import { applyInvoiceCorrection, checkInvoiceDocument, invoiceText, orderKey, settleInvoiceRows, sumMoney } from "./invoice-settlement";
+import { applyInvoiceCorrection, checkInvoiceDocument, orderKey, settleInvoiceRows, sumMoney } from "./invoice-settlement";
 
 export interface InvoicePreview extends PDFImportAudit {
   filters?: PDFImportFilter;
@@ -28,7 +28,7 @@ export function recalculateInvoiceImport(base: InvoicePreview, params: {
   const sourceRows = invoiceSourceRows(base);
   if (!sourceRows.length) return base;
   const result = settleInvoiceRows(sourceRows, {
-    driverName: base.filters?.driverName || KIEROWCA, vehicleType: base.filters?.vehicleType || TYP_TRANSPORTU,
+    driverName: base.filters?.driverName || KIEROWCA, driverNames: base.filters?.driverNames, vehicleType: base.filters?.vehicleType || TYP_TRANSPORTU,
     dateFrom: params.dateFrom, dateTo: params.dateTo, settlementVehicleMode: "none", settlementVehiclePlate: null,
   }, params.overrides, base.vatRate ?? VAT);
   const additions = params.additions.filter(addition => addition.addToInvoice);
@@ -61,9 +61,6 @@ export function findInvoiceImportConflict(invoices: FakturaWeek[], number: strin
   return invoices.find(invoice => {
     const saved = invoice.pdfImport;
     if (!saved || invoice.id === ignoreId) return false;
-    const sameScope = invoiceText(saved.filters?.driverName ?? KIEROWCA) === invoiceText(preview.filters?.driverName ?? KIEROWCA) &&
-      (saved.filters?.vehicleType ?? TYP_TRANSPORTU) === (preview.filters?.vehicleType ?? TYP_TRANSPORTU);
-    if (!sameScope) return false;
     const sameDocumentRange = number && saved.numerFaktury === number &&
       (saved.invoiceImportDateFrom ?? saved.filters?.dateFrom ?? saved.zakresOd) === (preview.invoiceImportDateFrom ?? preview.filters?.dateFrom ?? preview.zakresOd) &&
       (saved.invoiceImportDateTo ?? saved.filters?.dateTo ?? saved.zakresDo) === (preview.invoiceImportDateTo ?? preview.filters?.dateTo ?? preview.zakresDo);

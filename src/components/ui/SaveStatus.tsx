@@ -23,11 +23,11 @@ export function SaveStatusBadge({ status }: { status: SaveStatus }) {
 
   if (!visible) return null;
 
-  if (status === "error") {
+  if (status === "error" || status === "conflict") {
     return (
       <span className="animate-slide-down flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-red-soft border border-red-500/40 text-red-300 text-xs font-medium">
         <IconAlertTriangle size={14} />
-        Błąd zapisu
+        {status === "conflict" ? "Konflikt danych · odśwież panel" : "Błąd zapisu"}
       </span>
     );
   }

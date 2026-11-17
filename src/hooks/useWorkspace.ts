@@ -42,7 +42,7 @@ function initWorkspaceData(): WorkspaceData {
 }
 
 function mergeWithDefaults(remote: WorkspaceData): WorkspaceData {
-  const merged = initWorkspaceData();
+  const merged = { ...remote, ...initWorkspaceData() };
   for (const m of MIESIACE_ZAKRESU) {
     if (remote.miesiace?.[m]) {
       merged.miesiace[m] = {
@@ -58,7 +58,7 @@ function mergeWithDefaults(remote: WorkspaceData): WorkspaceData {
   return recalculateWorkspaceFuelChains(merged).data;
 }
 
-export type SaveStatus = "idle" | "saving" | "saved" | "error";
+export type SaveStatus = "idle" | "saving" | "saved" | "error" | "conflict";
 
 export function useWorkspace(token: string) {
   const [data, setData] = useState<WorkspaceData>(initWorkspaceData());
@@ -67,6 +67,12 @@ export function useWorkspace(token: string) {
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Flaga: pierwsze załadowanie — nie zapisuj automatycznie od razu
   const initialized = useRef(false);
+  const revision = useRef<string | null>(null);
+  const lastSaved = useRef("");
+  const saveQueue = useRef(Promise.resolve());
+  const conflict = useRef(false);
+  const latest = useRef(data);
+  latest.current = data;
 
   // Ładowanie danych przy pierwszym renderze
   useEffect(() => {
@@ -75,7 +81,10 @@ export function useWorkspace(token: string) {
         const res = await fetch(`/api/workspace/${token}`);
         if (res.ok) {
           const json = await res.json();
-          setData(mergeWithDefaults(json.data as WorkspaceData));
+          const loaded = mergeWithDefaults(json.data as WorkspaceData);
+          revision.current = json.updated_at;
+          lastSaved.current = JSON.stringify(loaded);
+          setData(loaded);
           return;
         }
         // 404 = nowy workspace, sprawdź localStorage
@@ -95,31 +104,34 @@ export function useWorkspace(token: string) {
 
   // Autozapis z debounce 500ms po każdej zmianie danych
   useEffect(() => {
-    if (!initialized.current) return;
+    if (!initialized.current || loading || JSON.stringify(data) === lastSaved.current) return;
 
     if (saveTimer.current) clearTimeout(saveTimer.current);
     setSaveStatus("saving");
 
-    saveTimer.current = setTimeout(async () => {
-      // Zawsze zapisz lokalnie — to gwarantuje brak utraty danych
+    saveTimer.current = setTimeout(() => {
+      // Local recovery copy; success is shown only after the server confirms it.
       saveToLocalStorage(token, data);
 
-      try {
+      saveQueue.current = saveQueue.current.then(async () => { try {
+        if (!revision.current || conflict.current) { setSaveStatus(conflict.current ? "conflict" : "error"); return; }
         const res = await fetch(`/api/workspace/${token}`, {
           method: "PUT",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", "If-Match": revision.current },
           body: JSON.stringify(data),
         });
-        setSaveStatus(res.ok ? "saved" : "error");
+        if (res.status === 409) conflict.current = true;
+        if (res.ok) { const json = await res.json(); revision.current = json.updated_at; lastSaved.current = JSON.stringify(data); }
+        setSaveStatus(res.ok ? JSON.stringify(latest.current) === lastSaved.current ? "saved" : "saving" : res.status === 409 ? "conflict" : "error");
       } catch {
         setSaveStatus("error");
-      }
+      } });
     }, DEBOUNCE_MS);
 
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
-  }, [data, token]);
+  }, [data, token, loading]);
 
   /** Aktualizuj dowolne pole w danych miesiąca */
   const updateMiesiac = useCallback(

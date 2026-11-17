@@ -99,6 +99,13 @@
 .admin-preview .pv-calendar .pv-sunday { background:#353018; }
 .admin-preview .pv-source-entry { padding:12px 0; border-top:1px solid var(--pv-line); }
 .admin-preview .pv-day-details { padding:12px 0; border-bottom:2px solid #ffbf47; }
+.admin-preview .pv-save-status { border-bottom:1px solid var(--pv-line); padding-bottom:12px; margin-bottom:18px; font-size:12px; }
+.admin-preview .pv-save-status [role=alert] { color:#ffb7ac; }
+.admin-preview .pv-save-status button { white-space:normal; overflow-wrap:anywhere; }
+.admin-preview .pv-form .pv-check { display:flex; flex-direction:row; align-items:center; gap:10px; }
+.admin-preview .pv-check input { width:20px; height:20px; flex:none; accent-color:#f5b53e; }
+.admin-preview .pv-invoice-import { padding-bottom:16px; border-bottom:1px solid var(--pv-line); margin-bottom:20px; }
+.admin-preview button:disabled { opacity:.55; cursor:not-allowed; }
 @media(max-width:480px) {
  .admin-preview .pv-mode { padding:8px 12px; }
  .admin-preview .pv-mode a { min-height:36px; display:flex; align-items:center; }

@@ -1,4 +1,5 @@
 // Typy danych dla aplikacji rozliczeń floty dostawczej
+import type { FleetHistoryEntry, RafalMonth } from "./fleet";
 
 export type MiesiącId = 6 | 7 | 8 | 9 | 10 | 11 | 12; // Czerwiec–Grudzień 2026
 
@@ -11,6 +12,7 @@ export type PDFCarUsageType =
 
 export interface PDFImportFilter {
   driverName: string;
+  driverNames?: string[];
   vehicleType: string;
   dateFrom: string | null;
   dateTo: string | null;
@@ -385,6 +387,7 @@ export interface Obciazenie {
 }
 
 export interface DaneMiesiaca {
+  rafal?: RafalMonth;
   faktury: FakturaWeek[];
   dni: Record<string, DzienKierowcy>; // klucz: "2026-06-01"
   tankowanie: WpisTankowania[];
@@ -517,6 +520,7 @@ export interface PodatekMiesiacaOplacony {
 }
 
 export interface WorkspaceData {
+  fleetHistory?: FleetHistoryEntry[];
   miesiace: Partial<Record<MiesiącId, DaneMiesiaca>>;
   notatki?: Notatka[];
   ustawienia?: Partial<UstawieniaPodatkowe>;
@@ -533,6 +537,7 @@ export interface WorkspaceState {
 
 // Wynik obliczeń dla miesiąca
 export interface WynikMiesiaca {
+  rafal: ReturnType<typeof import("./fleet").rafalMonthCost>;
   przychod: number; // przychód brutto z faktur
   wynagrodzeniePracownika: number; // naliczone wynagrodzenie przed potrąceniami
   potraceniaKierowcy: number; // mandaty, szkody, zaliczki potrącane z wypłaty

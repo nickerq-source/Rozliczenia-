@@ -107,9 +107,9 @@ export function AppHeader({
           className="flex"
         />
         {showHistoria && <a
-          href={`/admin/podglad?miesiac=${aktywnyMiesiac}`}
+          href={`/admin/flota?miesiac=${aktywnyMiesiac}`}
           className="block py-2 text-xs text-dim underline hover:text-ink"
-        >Podgląd nowego panelu · bez zapisu</a>}
+        >Menu główne i kierowcy</a>}
         </div>
       </header>
     </>

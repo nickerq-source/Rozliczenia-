@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import type { DaneMiesiaca, MiesiącId, UstawieniaPodatkowe } from "@/lib/types";
 import { DRIVER_PARTS, PREVIEW_DRIVERS, previewDayNet, previewDriverEntries, type PreviewDay, type PreviewDriverId, type PreviewLocation, type PreviewSection } from "@/lib/admin-preview";
 import { czyTankowanieWliczane, formatZl, parseNum, obliczWynagrodzenie, obliczWynikMiesiaca } from "@/lib/business-logic";
@@ -18,7 +18,7 @@ const amount = (value: string) => value.trim() === "" ? null : Number(value.repl
 const validAmount = (n: number | null) => n === null || (Number.isFinite(n) && n >= 0 && n <= 1000000);
 const line = (label: string, value: string) => <div className="pv-row"><span>{label}</span><strong>{value}</strong></div>;
 
-export function PreviewDriver({ driver, part, onPart, month, dane, available, settings, drafts, onDrafts, onCompany }: {
+export function PreviewDriver({ driver, part, onPart, month, dane, available, settings, drafts, onDrafts, onCompany, live }: {
   driver: PreviewDriverId;
   part: PreviewLocation["part"];
   onPart: (part: PreviewLocation["part"]) => void;
@@ -29,6 +29,7 @@ export function PreviewDriver({ driver, part, onPart, month, dane, available, se
   drafts: PreviewDay[];
   onDrafts: (days: PreviewDay[]) => void;
   onCompany: (section: PreviewSection) => void;
+  live?: { busy: boolean; saveDay: (day: PreviewDay) => Promise<boolean>; payroll: ReactNode };
 }) {
   const [editing, setEditing] = useState<PreviewDay | null>(null);
   const [error, setError] = useState("");
@@ -42,7 +43,7 @@ export function PreviewDriver({ driver, part, onPart, month, dane, available, se
   const days = getDniMiesiaca(month);
   const trialComplete = drafts.length > 0 && drafts.every(d => previewDayNet(d) !== null);
   const trialNet = trialComplete ? sumMoney(drafts.map(d => previewDayNet(d)!)) : null;
-  const payrollLabel = isTrial ? "Naliczenie testowe" : "Do wypłaty po potrąceniach";
+  const payrollLabel = isTrial ? live ? "Naliczenie z dni · netto" : "Naliczenie testowe" : "Do wypłaty po potrąceniach";
   const payrollValue = isTrial ? trialNet !== null ? formatZl(trialNet) : drafts.length ? "Niepełne dane" : "Brak wpisów" : available ? formatZl(result.wynagrodzenieDoWyplaty) : "Brak danych";
   const courses = isTrial ? drafts.filter(d => d.status.startsWith("praca")).reduce((sum, d) => sum + d.courses, 0) : days.reduce((sum, date) => sum + (maKolka(dane.dni[date]?.dayType) ? parseNum(dane.dni[date]?.kolka) : 0), 0);
   const openEditor = (day?: PreviewDay) => {
@@ -53,7 +54,8 @@ export function PreviewDriver({ driver, part, onPart, month, dane, available, se
 
   return <>
     <div className="pv-driver-title"><IconUsers size={24} aria-hidden /><div><h1>{PREVIEW_DRIVERS[driver]}</h1><p>{isTrial ? "Umowa o pracę · 90 zł na rękę za kurs" : "Żenia · obecne rozliczenie"}</p></div></div>
-    {isTrial && <p className="pv-notice">Dni i wypłata: próba bez zapisu. Nie wpływa na koszty ani podatki firmy.</p>}
+    {isTrial && !live && <p className="pv-notice">Dni i wypłata: próba bez zapisu. Nie wpływa na koszty ani podatki firmy.</p>}
+    {isTrial && live && dane.zamkniety?.locked && <p className="pv-notice">Miesiąc zamknięty. Edycja jest zablokowana.</p>}
     <nav className="pv-driver-tabs" aria-label="Działy kierowcy">
       {DRIVER_PARTS.map(([id, label]) => <button key={id} aria-current={part === id ? "page" : undefined} onClick={() => { setEditing(null); setSelectedDate(null); onPart(id); }}>{label}</button>)}
     </nav>
@@ -71,20 +73,21 @@ export function PreviewDriver({ driver, part, onPart, month, dane, available, se
       <div className="pv-section-heading"><h2>Dni i wypłata</h2>{isTrial && <button className="pv-command" onClick={() => openEditor()}><IconPlus size={16} aria-hidden />Dodaj dzień</button>}</div>
       <div className="pv-payroll-total"><span>{payrollLabel}</span><strong>{payrollValue}</strong></div>
       <details><summary>Rozliczenie wypłaty</summary>{isTrial ? <>
-        {line("Suma wpisów testowych", payrollValue)}{line("Zatwierdzona lista płac", "Brak danych")}{line("Koszt zatrudnienia", "Nieustalony")}
+        {line(live ? "Naliczenie z dni" : "Suma wpisów testowych", payrollValue)}{line("Lista płac · netto", dane.rafal?.payroll ? formatZl(dane.rafal.payroll.net) : "Brak danych")}{line("Koszt zatrudnienia", live ? `${formatZl(result.rafal.total)}${result.rafal.incomplete ? " · niepełny" : ""}` : "Nieustalony")}
       </> : available ? <>
         {line("Suma dniówek", formatZl(salary.sumaDniowek))}{line("Premia", formatZl(salary.premia))}{line("Wynagrodzenie naliczone", formatZl(salary.wynagrodzenie))}{line("Potrącenia", formatZl(result.potraceniaKierowcy))}
         {line("Do wypłaty", formatZl(result.wynagrodzenieDoWyplaty))}{line("Status", dane.wyplata?.status === "wypłacone" ? "Wypłacone" : "Niewypłacone")}
       </> : <p>Brak zapisanych danych.</p>}</details>
-      {editing && <form ref={editor} className="pv-form" onSubmit={e => {
+      {editing && <form ref={editor} className="pv-form" onSubmit={async e => {
         e.preventDefault();
         if (!days.includes(editing.date) || !Number.isInteger(editing.courses) || editing.courses < 0 || editing.courses > 100 || !validAmount(editing.ordersNet) || !validAmount(editing.leaveNet)) {
           setError("Sprawdź datę miesiąca, liczbę kursów (0–100) i nieujemne kwoty."); return;
         }
-        onDrafts([...drafts.filter(d => d.date !== editing.date), { ...editing }].sort((a, b) => a.date.localeCompare(b.date)));
+        if (live) { if (!await live.saveDay(editing)) return; }
+        else onDrafts([...drafts.filter(d => d.date !== editing.date), { ...editing }].sort((a, b) => a.date.localeCompare(b.date)));
         setEditing(null);
       }}>
-        <h2>Dzień Rafała · wpis testowy</h2>
+        <h2>{live ? "Dzień Rafała" : "Dzień Rafała · wpis testowy"}</h2>
         <div className="pv-fields">
           <label>Data<input type="date" value={editing.date} min={days[0]} max={days.at(-1)} required onChange={e => setEditing({ ...editing, date: e.target.value })} /></label>
           <label>Status<select aria-label="Status dnia" value={editing.status} onChange={e => setEditing({ ...editing, status: e.target.value as PreviewDay["status"] })}>{Object.entries(statuses).map(([id, status]) => <option key={id} value={id}>{status.label}</option>)}</select></label>
@@ -92,10 +95,10 @@ export function PreviewDriver({ driver, part, onPart, month, dane, available, se
           {editing.status === "praca_zlecenia" && <label>Zlecenia · kwota netto<input inputMode="decimal" type="number" min="0" max="1000000" step="0.01" value={editing.ordersNet ?? ""} onChange={e => setEditing({ ...editing, ordersNet: amount(e.target.value) })} /></label>}
           {editing.status === "urlop" && <label>Urlop · netto z listy płac<input inputMode="decimal" type="number" min="0" max="1000000" step="0.01" value={editing.leaveNet ?? ""} onChange={e => setEditing({ ...editing, leaveNet: amount(e.target.value) })} /></label>}
         </div>
-        {editing.status === "postojowe" && <p>Założenie testowe: 50 zł netto. Do uzgodnienia z listą płac.</p>}
+        {editing.status === "postojowe" && <p>Postojowe: 50 zł netto. Do uzgodnienia z listą płac.</p>}
         <label>Komentarz<textarea maxLength={1000} value={editing.note} onChange={e => setEditing({ ...editing, note: e.target.value })} /></label>
         {error && <p role="alert">{error}</p>}
-        <div className="pv-actions"><button className="pv-command" type="submit">Zastosuj tylko w podglądzie</button><button type="button" onClick={() => setEditing(null)}>Anuluj</button></div>
+        <div className="pv-actions"><button className="pv-command" type="submit" disabled={live?.busy || (live && dane.zamkniety?.locked)}>{live ? live.busy ? "Zapisywanie…" : "Zapisz dzień" : "Zastosuj tylko w podglądzie"}</button><button type="button" onClick={() => setEditing(null)}>Anuluj</button></div>
       </form>}
       {!isTrial && selectedDate && salary.dniowki[selectedDate] && <section ref={dayDetails} className="pv-day-details" aria-label="Szczegóły dnia">
         <h2>{selectedDate} · {typDniaMeta(dane.dni[selectedDate]?.dayType).label}</h2>
@@ -148,7 +151,8 @@ export function PreviewDriver({ driver, part, onPart, month, dane, available, se
     {part === "umowa" && <>
       <h2>Umowa i koszty pracownika</h2>
       {isTrial ? <>
-        {line("Rodzaj", "Umowa o pracę")}{line("Za kurs na rękę", "90,00 zł")}{line("Postojowe · założenie", "50,00 zł netto")}{line("Urlop", "Według listy płac")}{line("Stawka zleceń", "Do ustalenia")}{line("Podstawa brutto z umowy", "Do uzupełnienia")}{line("Składki i podatek pracownika", "Według listy płac")}
+        {live?.payroll}
+        {line("Rodzaj", "Umowa o pracę")}{line("Za kurs na rękę", "90,00 zł")}{line("Postojowe", "50,00 zł netto")}{line("Urlop", "Według listy płac")}{line("Zlecenia", "Kwota wpisana dla dnia")}{!live && line("Podstawa brutto z umowy", "Do uzupełnienia")}{line("Składki i podatek pracownika", "Według listy płac")}
       </> : <>
         {line("Oficjalne wynagrodzenie brutto · ustawienia", formatZl(settings.pracownikBruttoMies))}
         {available && <>{line("Podatek dochodowy pracownika", formatZl(result.podatekDochodowyPracownika))}{line("Zdrowotna pracownika", formatZl(result.skladkaZdrowotnaPracownika))}{line("Pozostałe składki ZUS", formatZl(result.pozostaleSkladkiZusPracownika))}{line("Wypłata i zobowiązania pracownika", formatZl(result.wynagrodzenieDoWyplaty + result.obciazeniaPracownika))}</>}

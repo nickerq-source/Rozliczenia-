@@ -1,5 +1,12 @@
 # PapiTrans admin preview
 
+## Production follow-up (2026-11-17)
+
+The approved writable version is now `/admin/flota`; see `FLEET_LIVE.md` for
+data contracts, verification, limitations and rollback. `/admin/podglad` stays
+read-only and `/admin` remains available. The notes below describe the original
+preview milestone, not the current scope of the production application.
+
 Added 2026-11-17. This is a reversible, admin-only UI trial at
 `/admin/podglad`. The default `/admin` panel, financial formulas, PDF import,
 driver accounts and database schema remain unchanged. The only entry added

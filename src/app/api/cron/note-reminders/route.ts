@@ -9,6 +9,7 @@ export const dynamic = "force-dynamic";
 
 interface WorkspaceRow {
   id: string;
+  updated_at: string;
   data: WorkspaceData | null;
 }
 
@@ -118,7 +119,7 @@ export async function GET(req: NextRequest) {
 
     const { data: workspaces, error } = await admin
       .from("workspaces")
-      .select("id, data");
+      .select("id, data, updated_at");
     if (error || !workspaces) {
       return NextResponse.json({ ok: false, error: error?.message }, { status: 500 });
     }
@@ -141,25 +142,28 @@ export async function GET(req: NextRequest) {
 
         const description = `Dziś: ${n.tresc.slice(0, 80)}${n.tresc.length > 80 ? "…" : ""}`;
         changed = true;
-        marked += 1;
         return { ...n, reminderSentAt: now, _descriptionForSend: description } as Notatka & {
           _descriptionForSend: string;
         };
       });
 
+      const descriptions: string[] = [];
       for (const n of notatki as Array<Notatka & { _descriptionForSend?: string }>) {
         if (!n._descriptionForSend) continue;
-        sent += await notifyDrivers(ws.id, n._descriptionForSend);
+        descriptions.push(n._descriptionForSend);
         delete n._descriptionForSend;
       }
 
       if (changed) {
         const nextData: WorkspaceData = { ...wsData, notatki };
-        const { error: saveErr } = await admin
+        const { data: saved, error: saveErr } = await admin
           .from("workspaces")
           .update({ data: nextData, updated_at: now })
-          .eq("id", ws.id);
+          .eq("id", ws.id).eq("updated_at", ws.updated_at).select("id").maybeSingle();
         if (saveErr) throw new Error(saveErr.message);
+        if (!saved) continue;
+        marked += descriptions.length;
+        for (const description of descriptions) sent += await notifyDrivers(ws.id, description);
       }
     }
 

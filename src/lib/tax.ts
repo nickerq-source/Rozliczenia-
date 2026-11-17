@@ -28,6 +28,7 @@ import {
 } from "./invoice-amounts";
 import { calculateVatSettlement } from "./vat-settlement";
 import { calculateOperatingResult } from "./operating-result";
+import { rafalMonthCost } from "./fleet";
 import {
   resolveMonthlyIncomeTax,
 } from "./monthly-income-tax";
@@ -274,6 +275,7 @@ export function zdrowotnaMiesiaca(dochodMiesiaca: number, u: UstawieniaPodatkowe
 // ─── PODSUMOWANIE PODATKOWE MIESIĄCA ─────────────────────────────────────────
 
 export interface PodatkiMiesiaca {
+  rafal: ReturnType<typeof rafalMonthCost>;
   miesiac: MiesiącId;
   aktywny: boolean;
   // VAT
@@ -312,6 +314,7 @@ export interface PodatkiMiesiaca {
 
 /** Sumy VAT i kosztów podatkowych jednego miesiąca (bez YTD) */
 function podstawyMiesiaca(m: MiesiącId, dane: DaneMiesiaca, u: UstawieniaPodatkowe) {
+  const rafal = rafalMonthCost(dane);
   // Sprzedaż
   let sprzedazNetto = 0, vatNalezny = 0, przychodBrutto = 0;
   for (const f of dane.faktury ?? []) {
@@ -348,10 +351,11 @@ function podstawyMiesiaca(m: MiesiącId, dane: DaneMiesiaca, u: UstawieniaPodatk
   const aktywny =
     przychodBrutto > 0
     || kosztyBrutto > 0
-    || wynagrodzenie > 0;
+    || wynagrodzenie > 0 || rafal.total > 0;
   if (!aktywny) {
     return {
       aktywny: false,
+      rafal,
       sprzedazNetto: 0, vatNalezny: 0, kosztyNetto: 0, vatNaliczony: 0,
       kosztyPodatkowe: 0, dochod: 0, zyskPrzedPodatkami: 0,
       wynagrodzeniePodatkowe: 0, zusPracodawcy: 0,
@@ -387,12 +391,12 @@ function podstawyMiesiaca(m: MiesiącId, dane: DaneMiesiaca, u: UstawieniaPodatk
     : round2(wynagrodzenie + obciazeniaPracownika);
 
   const leasingLegacy = wpisyLeasingu.length > 0 ? 0 : parseNum(dane.leasing);
-  const kosztyPodatkowe = round2(kosztyPitFaktury + wynagrodzeniePodatkowe + leasingLegacy);
+  const kosztyPodatkowe = round2(kosztyPitFaktury + wynagrodzeniePodatkowe + leasingLegacy + rafal.taxCost);
   const dochod = round2(sprzedazNetto - kosztyPodatkowe);
   const wynikOperacyjny = calculateOperatingResult({
     revenueGross: przychodBrutto,
-    driverPayout: wynagrodzenieDoWyplaty,
-    employeeCharges: obciazeniaPracownika,
+    driverPayout: wynagrodzenieDoWyplaty + rafal.payout,
+    employeeCharges: obciazeniaPracownika + rafal.charges,
     fuel: 0,
     otherCosts: kosztyBrutto,
     leasing: leasingLegacy,
@@ -401,6 +405,7 @@ function podstawyMiesiaca(m: MiesiącId, dane: DaneMiesiaca, u: UstawieniaPodatk
 
   return {
     aktywny: true,
+    rafal,
     sprzedazNetto: round2(sprzedazNetto),
     vatNalezny: round2(vatNalezny),
     kosztyNetto: round2(kosztyNetto),
@@ -465,6 +470,7 @@ export function podatkiRoku(data: WorkspaceData): PodatkiMiesiaca[] {
 
     wyniki.push({
       miesiac: m as MiesiącId,
+      rafal: p.rafal,
       aktywny: p.aktywny,
       sprzedazNetto: p.sprzedazNetto,
       vatNalezny: p.vatNalezny,

@@ -99,6 +99,7 @@ export function RaportTab({ data }: Props) {
       zdrowotnaPracownika: aktywne.reduce((s, p) => s + p.skladkaZdrowotnaPracownika, 0),
       zusPracownika: aktywne.reduce((s, p) => s + p.pozostaleSkladkiZusPracownika, 0),
       obciazeniaPracownika: aktywne.reduce((s, p) => s + p.obciazeniaPracownika, 0),
+      rafal: aktywne.reduce((s, p) => ({ payout: s.payout + p.rafal.payout, charges: s.charges + p.rafal.charges, taxCost: s.taxCost + p.rafal.taxCost, incomplete: s.incomplete || p.rafal.incomplete }), { payout: 0, charges: 0, taxCost: 0, incomplete: false }),
       zyskPo: aktywne.reduce((s, p) => s + p.zyskPoPodatkach, 0),
       cashflow: aktywne.reduce((s, p) => s + p.cashflowPoPodatkach, 0),
       dochodYtd: podatki[podatki.length - 1]?.dochodYtd ?? 0,
@@ -133,7 +134,7 @@ export function RaportTab({ data }: Props) {
         wynik.wynagrodzeniePracownika > 0 ||
         wynik.paliwo > 0 ||
         wynik.inne > 0 ||
-        wynik.leasing > 0;
+        wynik.leasing > 0 || wynik.rafal.total > 0;
 
       if (aktywny) {
         aktywne++;
@@ -162,7 +163,7 @@ export function RaportTab({ data }: Props) {
         przychod: wynik.przychod,
         koszty: aktywny ? wynik.kosztyOperacyjne : 0,
         paliwo: wynik.paliwo,
-        wynagrodzenie: wynik.wynagrodzenieDoWyplaty,
+        wynagrodzenie: wynik.wynagrodzenieDoWyplaty + wynik.rafal.payout,
         zysk: aktywny ? wynik.zysk : 0,
       });
 
@@ -258,6 +259,9 @@ export function RaportTab({ data }: Props) {
           }
         />
         <Row label="Podatek dochodowy pracownika" value={raport.podatekPrac} />
+        {podatkiSuma.rafal.payout > 0 && <Row label="Rafał · wynagrodzenie netto" value={podatkiSuma.rafal.payout} />}
+        {podatkiSuma.rafal.charges > 0 && <Row label="Rafał · zobowiązania z listy płac" value={podatkiSuma.rafal.charges} />}
+        {podatkiSuma.rafal.incomplete && <p className="text-sm text-amber-300">Raport zawiera niepełne lub nieuzgodnione rozliczenie Rafała.</p>}
         <Row label="Składka zdrowotna pracownika" value={raport.zdrowotnaPrac} />
         <Row label="Pozostałe składki ZUS pracownika" value={raport.zusPrac} />
 
@@ -391,6 +395,7 @@ export function RaportTab({ data }: Props) {
         <p className="text-xs font-bold uppercase tracking-wider text-amber-brand mb-1 mt-4">Podatek dochodowy</p>
         <Row label="Przychód netto (sprzedaż)" value={podatkiSuma.sprzedazNetto} />
         <Row label="Koszty uznane do podatku dochodowego" value={podatkiSuma.kosztyPodatkowe} />
+        {podatkiSuma.rafal.taxCost > 0 && <Row label="W tym Rafał · z listy płac" value={podatkiSuma.rafal.taxCost} />}
         <Row
           label={podatkiSuma.dochodYtd >= 0 ? "Łączny wynik podatkowy w okresie czerwiec–grudzień" : "Niewykorzystana strata z okresu czerwiec–grudzień"}
           value={Math.abs(podatkiSuma.dochodYtd)}
@@ -409,7 +414,7 @@ export function RaportTab({ data }: Props) {
         {/* Łączne podatki i składki za okres (VAT do zapłaty nigdy ujemny) */}
         {(() => {
           const vatOkres = podatkiSuma.vatDoZaplaty;
-          const total = Math.round((vatOkres + podatkiSuma.pit + podatkiSuma.zdrowotna + podatkiSuma.obciazeniaPracownika) * 100) / 100;
+          const total = Math.round((vatOkres + podatkiSuma.pit + podatkiSuma.zdrowotna + podatkiSuma.obciazeniaPracownika + podatkiSuma.rafal.charges) * 100) / 100;
           return (
             <div className="mt-4 rounded-2xl border border-amber-brand/40 bg-amber-brand/10 p-3">
               <p className="mb-1 text-xs font-bold uppercase tracking-wider text-amber-brand">
@@ -421,6 +426,7 @@ export function RaportTab({ data }: Props) {
               <Row label="Podatek dochodowy pracownika łącznie" value={podatkiSuma.podatekPracownika} />
               <Row label="Zdrowotna pracownika łącznie" value={podatkiSuma.zdrowotnaPracownika} />
               <Row label="Pozostałe składki ZUS pracownika łącznie" value={podatkiSuma.zusPracownika} />
+              {podatkiSuma.rafal.charges > 0 && <Row label="Rafał · zobowiązania z listy płac" value={podatkiSuma.rafal.charges} />}
               <Row label="RAZEM PODATKI I SKŁADKI ZA OKRES" value={total} valueClass="text-amber-brand" />
               <p className="mt-2 text-[11px] text-dim/70">
                 Wyliczenie obejmuje okres Czerwiec–Grudzień 2026. Wyliczenia są szacunkowe — ostateczne rozliczenie potwierdza księgowa.

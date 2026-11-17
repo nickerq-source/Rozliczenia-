@@ -25,6 +25,7 @@ import {
 } from "./employee-costs";
 import { sumInvoiceGross } from "./invoice-amounts";
 import { calculateOperatingResult } from "./operating-result";
+import { rafalMonthCost } from "./fleet";
 
 /** Bezpieczne parsowanie liczby — puste lub NaN zwraca 0 */
 export function parseNum(val: string | number | undefined | null): number {
@@ -243,6 +244,7 @@ export function obliczWynikMiesiaca(
   ustawienia?: UstawieniaPodatkowe
 ): WynikMiesiaca {
   const przychod = obliczPrzychod(daneM.faktury, ustawienia);
+  const rafal = rafalMonthCost(daneM);
   const {
     wynagrodzenie,
     premia,
@@ -264,7 +266,7 @@ export function obliczWynikMiesiaca(
     || wynagrodzenie > 0
     || paliwo > 0
     || inne > 0
-    || maJawnyLeasing;
+    || maJawnyLeasing || rafal.total > 0;
   // Pole `leasing` jest legacy i ma domyślne 2300 zł również w pustych,
   // przyszłych miesiącach. Nie traktujemy tej wartości jako poniesionego
   // kosztu, dopóki miesiąc nie ma realnej aktywności.
@@ -289,8 +291,8 @@ export function obliczWynikMiesiaca(
 
   const wynikOperacyjny = calculateOperatingResult({
     revenueGross: przychod,
-    driverPayout: wynagrodzenieDoWyplaty,
-    employeeCharges: obciazeniaPracownika,
+    driverPayout: wynagrodzenieDoWyplaty + rafal.payout,
+    employeeCharges: obciazeniaPracownika + rafal.charges,
     fuel: paliwo,
     otherCosts: inne,
     leasing,
@@ -298,6 +300,7 @@ export function obliczWynikMiesiaca(
 
   return {
     przychod,
+    rafal,
     wynagrodzeniePracownika: wynagrodzenie,
     potraceniaKierowcy,
     wynagrodzenieDoWyplaty,

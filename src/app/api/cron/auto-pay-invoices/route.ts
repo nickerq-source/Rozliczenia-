@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
     const admin = getAdminSupabase();
     const { data: workspaces, error } = await admin
       .from("workspaces")
-      .select("id, data");
+      .select("id, data, updated_at");
     if (error || !workspaces) {
       return NextResponse.json({ ok: false, error: error?.message }, { status: 500 });
     }
@@ -33,6 +33,7 @@ export async function GET(req: NextRequest) {
     for (const ws of workspaces) {
       const wsData = ws.data as WorkspaceData;
       let dirty = false;
+      const events: { id: string; status: string | undefined; weekNumber: number }[] = [];
 
       for (const m of MIESIACE_ZAKRESU) {
         const dane = wsData.miesiace?.[m as MiesiącId] as DaneMiesiaca | undefined;
@@ -49,22 +50,7 @@ export async function GET(req: NextRequest) {
 
           if (dueISO <= today) {
             dirty = true;
-            changed++;
-            notifyWorkspace(
-              ws.id,
-              "faktura_oplacona",
-              `Faktura (tydzień ${weekNumber}) automatycznie oznaczona jako opłacona (21 dni)`
-            ).catch(() => {});
-            admin.from("audit_log").insert({
-              workspace_id: ws.id,
-              user_name: "system",
-              action: "faktura_oplacona_auto",
-              entity: "invoice",
-              entity_id: f.id,
-              old_value: { status: f.status },
-              new_value: { status: "oplacona" },
-              description: `Faktura (tydzień ${weekNumber}) automatycznie oznaczona jako opłacona (21 dni)`,
-            }).then(() => {});
+            events.push({ id: f.id, status: f.status, weekNumber });
             return { ...f, status: "oplacona" as const };
           }
           return f;
@@ -72,10 +58,18 @@ export async function GET(req: NextRequest) {
       }
 
       if (dirty) {
-        await admin
+        const saved = await admin
           .from("workspaces")
           .update({ data: wsData, updated_at: new Date().toISOString() })
-          .eq("id", ws.id);
+          .eq("id", ws.id).eq("updated_at", ws.updated_at).select("id").maybeSingle();
+        if (saved.error) throw new Error(saved.error.message);
+        if (!saved.data) continue;
+        changed += events.length;
+        for (const event of events) {
+          const description = `Faktura (tydzień ${event.weekNumber}) automatycznie oznaczona jako opłacona (21 dni)`;
+          await admin.from("audit_log").insert({ workspace_id: ws.id, user_name: "system", action: "faktura_oplacona_auto", entity: "invoice", entity_id: event.id, old_value: { status: event.status }, new_value: { status: "oplacona" }, description });
+          await notifyWorkspace(ws.id, "faktura_oplacona", description).catch(() => {});
+        }
       }
     }
 

@@ -39,7 +39,7 @@ export async function GET() {
 
   const { data: ws, error } = await getAdminSupabase()
     .from("workspaces")
-    .select("data")
+    .select("data, updated_at")
     .eq("id", profile.workspace_id)
     .single();
   if (error || !ws) {
@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
   const admin = getAdminSupabase();
   const { data: ws, error } = await admin
     .from("workspaces")
-    .select("data")
+    .select("data, updated_at")
     .eq("id", profile.workspace_id)
     .single();
   if (error || !ws) {
@@ -105,7 +105,8 @@ export async function POST(req: NextRequest) {
   const { error: saveErr } = await admin
     .from("workspaces")
     .update({ data: nowaData, updated_at: new Date().toISOString() })
-    .eq("id", profile.workspace_id);
+    .eq("id", profile.workspace_id).eq("updated_at", ws.updated_at).select("id").single();
+  if (saveErr?.code === "PGRST116") return NextResponse.json({ error: "Dane zmienily sie podczas zapisu. Odswiez i sprobuj ponownie." }, { status: 409 });
   if (saveErr) return NextResponse.json({ error: saveErr.message }, { status: 503 });
 
   // Powiadom adminów (action notatka_od_kierowcy) + push (z pominięciem autora)
@@ -180,7 +181,7 @@ export async function PATCH(req: NextRequest) {
   const admin = getAdminSupabase();
   const { data: ws, error } = await admin
     .from("workspaces")
-    .select("data")
+    .select("data, updated_at")
     .eq("id", profile.workspace_id)
     .single();
   if (error || !ws) {
@@ -208,7 +209,8 @@ export async function PATCH(req: NextRequest) {
   const { error: saveErr } = await admin
     .from("workspaces")
     .update({ data: nowaData, updated_at: now })
-    .eq("id", profile.workspace_id);
+    .eq("id", profile.workspace_id).eq("updated_at", ws.updated_at).select("id").single();
+  if (saveErr?.code === "PGRST116") return NextResponse.json({ error: "Dane zmienily sie podczas zapisu. Odswiez i sprobuj ponownie." }, { status: 409 });
   if (saveErr) return NextResponse.json({ error: saveErr.message }, { status: 503 });
 
   return NextResponse.json({ ok: true, readAt: now, unreadCount: unreadDriverNotes(notatki) });
