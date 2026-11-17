@@ -2,18 +2,22 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { MiesiącId, PDFImportDiagnosticRow, WorkspaceData } from "@/lib/types";
-import { preparePreviewSnapshot, previewMonth, previewSearch, readPreviewLocation, type PreviewDay, type PreviewLocation, type PreviewSection } from "@/lib/admin-preview";
+import { PREVIEW_DRIVERS, preparePreviewSnapshot, previewMonth, previewSearch, readPreviewLocation, type PreviewDay, type PreviewLocation, type PreviewSection } from "@/lib/admin-preview";
 import { formatZl, czyTankowanieWliczane } from "@/lib/business-logic";
 import { MIESIACE_ZAKRESU, POLSKIE_MIESIACE, getDefaultMonth } from "@/lib/dates";
 import { calculateInvoiceAmounts } from "@/lib/invoice-amounts";
 import { kategoriaLabel, podatkiRoku, rozbijWpis } from "@/lib/tax";
 import { obliczLogistyka, LOGISTYK_START_MONTH } from "@/lib/logistyk";
 import { podsumujSaldo, tekstSalda, zbierzPozycjeMiesiaca } from "@/lib/rozliczenie-5050";
-import { IconTruck, IconChevronDown, IconLock, IconUsers } from "../ui/icons";
+import { IconTruck, IconChevronDown, IconLock, IconUsers, IconChartBar, IconMoneybag, IconNotes } from "../ui/icons";
 import { PreviewDriver } from "./PreviewDriver";
 import "./admin-preview.css";
 
-const mainSections = [["start", "Start"], ["faktury", "Faktury"], ["kierowcy", "Kierowcy"], ["koszty", "Koszty"], ["wiecej", "Więcej"]] as const;
+const companySections: [PreviewSection, string, string][] = [
+  ["start", "Podsumowanie firmy", "Przychód, wszystkie koszty i to, co zostaje"],
+  ["faktury", "Faktury firmy", "Wspólne dokumenty, import PDF i przelewy na Alior"],
+  ["koszty", "Koszty firmy", "Zakupy, leasing, paliwo i zatwierdzanie zgłoszeń"],
+];
 const extraSections: [PreviewSection, string, string][] = [
   ["zlecenia", "Zlecenia i logistyk", "Pozycje z PDF, ręczne wpisy i prowizje"],
   ["podatki", "Podatki firmy", "VAT, podatek dochodowy i składki"],
@@ -22,6 +26,7 @@ const extraSections: [PreviewSection, string, string][] = [
   ["wiadomosci", "Wiadomości", "Notatki i wątki kierowcy"],
   ["ustawienia", "Ustawienia", "Obecne parametry rozliczeń"],
 ];
+const companyMenu = [...companySections, ...extraSections];
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return <div className="pv-row"><span>{label}</span><strong>{children}</strong></div>;
@@ -80,7 +85,7 @@ export function AdminPreview({ source, updatedAt }: { source: WorkspaceData; upd
   const activeInvoice = invoices.find(f => f.id === location.invoice);
   const legacyUrl = (tab: string) => `/admin?miesiac=${month}&zakladka=${tab}`;
   const go = (target: PreviewSection, title: string, subtitle?: string, patch?: Partial<PreviewLocation>) =>
-    <button className="pv-list-row" onClick={() => navigate({ section: target, ...patch })}>
+    <button className="pv-list-row" onClick={() => navigate({ section: target, invoice: null, ...patch })}>
       <span>{title}{subtitle && <small>{subtitle}</small>}</span><IconChevronDown className="pv-chevron" size={18} aria-hidden />
     </button>;
   const back = (title: string, patch: Partial<PreviewLocation>) => <button className="pv-back" onClick={() => navigate(patch)}><IconChevronDown className="pv-back-icon" size={16} aria-hidden />{title}</button>;
@@ -101,11 +106,23 @@ export function AdminPreview({ source, updatedAt }: { source: WorkspaceData; upd
     <div className="pv-mode"><span><IconLock size={14} aria-hidden />Podgląd · tylko odczyt</span><a href={legacyUrl("podsumowanie")}>Wróć do obecnego panelu</a></div>
     <header className="pv-header">
       <div className="pv-brand"><IconTruck size={22} aria-hidden /><strong>PapiTrans</strong><span>Panel administratora</span></div>
-      <div className="pv-context"><label className="pv-month">Miesiąc<select aria-label="Miesiąc" value={month} onChange={e => navigate({ month: Number(e.target.value) as MiesiącId, invoice: null })}>{MIESIACE_ZAKRESU.map(m => <option key={m} value={m}>{POLSKIE_MIESIACE[m]} 2026</option>)}</select></label><span>{section === "kierowcy" && location.driver ? location.driver === "rafal" ? "Rafał · test" : "Żenia" : "Cała firma"}</span></div>
-      <nav aria-label="Główne działy">{mainSections.map(([id, title]) => <button key={id} aria-current={(section === id || (id === "wiecej" && !mainSections.some(([s]) => s === section))) ? "page" : undefined} onClick={() => navigate({ section: id })}>{title}</button>)}</nav>
+      <nav className="pv-root-nav" aria-label="Główne działy">
+        <button aria-current={section !== "kierowcy" ? "page" : undefined} onClick={() => navigate({ section: "menu", driver: null, invoice: null })}><IconChartBar size={18} aria-hidden />Menu główne</button>
+        <button aria-current={section === "kierowcy" ? "page" : undefined} onClick={() => navigate({ section: "kierowcy", driver: null, invoice: null })}><IconUsers size={18} aria-hidden />Kierowcy</button>
+      </nav>
+      <div className="pv-context"><span>{section === "kierowcy" ? "Rozliczenie kierowcy" : "Rozliczenie firmy"}</span><label className="pv-month">Miesiąc<select aria-label="Miesiąc" value={month} onChange={e => navigate({ month: Number(e.target.value) as MiesiącId, invoice: null })}>{MIESIACE_ZAKRESU.map(m => <option key={m} value={m}>{POLSKIE_MIESIACE[m]} 2026</option>)}</select></label></div>
     </header>
     <main>
-      {!available && section !== "kierowcy" && section !== "wiecej" && <p className="pv-notice">Brak zapisanych danych dla wybranego miesiąca. Nie pokazujemy ich jako rzeczywistych zer.</p>}
+      {section !== "menu" && section !== "kierowcy" && back("Menu główne", { section: "menu", invoice: null })}
+      {!available && section !== "kierowcy" && section !== "menu" && <p className="pv-notice">Brak zapisanych danych dla wybranego miesiąca.</p>}
+      {section === "menu" && <>
+        <h1>Menu główne</h1>
+        <div className="pv-menu-summary"><span>Cała firma · {POLSKIE_MIESIACE[month]}</span><strong>{available ? formatZl(tax.cashflowPoPodatkach) : "Brak danych"}</strong><small>Po wszystkich kosztach i podatkach</small></div>
+        <div className="pv-menu-groups">
+          <section><h2><IconMoneybag size={18} aria-hidden />Finanse firmy</h2>{companySections.map(([id, title, sub]) => <div key={id}>{go(id, title, sub)}</div>)}{go("podatki", "Podatki firmy", "VAT, podatek dochodowy i składki")}</section>
+          <section><h2><IconNotes size={18} aria-hidden />Rozliczenia i organizacja</h2>{extraSections.filter(([id]) => id !== "podatki").map(([id, title, sub]) => <div key={id}>{go(id, title, sub)}</div>)}</section>
+        </div>
+      </>}
       {section === "start" && <>
         <h1>Wynik miesiąca</h1>
         <Row label="Przychód brutto">{available ? formatZl(result.przychod) : "Brak danych"}</Row>
@@ -120,9 +137,8 @@ export function AdminPreview({ source, updatedAt }: { source: WorkspaceData; upd
         <h2>Do załatwienia</h2>
         {untransferred > 0 && go("faktury", `Przelew na Alior: ${untransferred} faktur bez oznaczenia`)}
         {pendingFuel > 0 && go("koszty", `Tankowania do zatwierdzenia: ${pendingFuel}`, undefined, { filter: "paliwo" })}
-        {result.wynagrodzenieDoWyplaty > 0 && dane.wyplata?.status !== "wypłacone" && go("kierowcy", "Żenia: wypłata nieoznaczona", formatZl(result.wynagrodzenieDoWyplaty), { driver: "zenia", part: "wyplata" })}
+        {result.wynagrodzenieDoWyplaty > 0 && dane.wyplata?.status !== "wypłacone" && go("kierowcy", "Żenia: wypłata nieoznaczona", formatZl(result.wynagrodzenieDoWyplaty), { driver: "zenia", part: "dni" })}
         {available && cashTaxes > 0 && !snapshot.podatkiOplacone?.[month]?.oplacono && go("podatki", "Podatki nieoznaczone jako opłacone", formatZl(cashTaxes))}
-        {go("kierowcy", "Rafał Gustab", "Osobny profil testowy, bez wpływu na wynik firmy", { driver: "rafal", part: "dni" })}
       </>}
       {section === "faktury" && <>
         {location.invoice ? <>{back("Lista faktur", { invoice: null })}
@@ -147,8 +163,12 @@ export function AdminPreview({ source, updatedAt }: { source: WorkspaceData; upd
       </>}
       {section === "kierowcy" && (location.driver ? <>
         {back("Lista kierowców", { driver: null })}
-        {available || location.driver === "rafal" ? <PreviewDriver key={`${location.driver}-${month}`} driver={location.driver} part={location.part} onPart={part => navigate({ part })} month={month} dane={dane} settings={settings} drafts={drafts[month] ?? []} onDrafts={days => setDrafts(prev => ({ ...prev, [month]: days }))} /> : <p className="pv-empty">Brak zapisanych danych Żeni w tym miesiącu.</p>}
-      </> : <><h1>Kierowcy</h1>{go("kierowcy", "Żenia · Yevhenii Pitianin", available ? `Wypłata po potrąceniach: ${formatZl(result.wynagrodzenieDoWyplaty)}` : "Brak danych miesiąca", { driver: "zenia", part: "dni" })}{go("kierowcy", "Rafał Gustab", "Umowa o pracę · profil testowy", { driver: "rafal", part: "dni" })}<div className="pv-quiet"><IconUsers size={22} aria-hidden /><span>Każdy kierowca ma osobny kalendarz i rozliczenie.</span></div></>)}
+        <PreviewDriver key={`${location.driver}-${month}`} driver={location.driver} part={location.part} onPart={part => navigate({ part })} month={month} dane={dane} available={available} settings={settings} drafts={drafts[month] ?? []} onDrafts={days => setDrafts(prev => ({ ...prev, [month]: days }))} onCompany={target => navigate({ section: target, driver: null, invoice: null })} />
+      </> : <><h1>Kierowcy</h1><div className="pv-driver-list">
+        {(["zenia", "rafal"] as const).map(id => <button className="pv-driver-choice" key={id} onClick={() => navigate({ driver: id, part: "podsumowanie" })}>
+          <span className="pv-initials" aria-hidden>{id === "zenia" ? "YP" : "RG"}</span><span><strong>{PREVIEW_DRIVERS[id]}</strong><small>{id === "zenia" ? "Żenia · obecne rozliczenie" : "Umowa o pracę · profil testowy"}</small></span><IconChevronDown className="pv-chevron" size={18} aria-hidden />
+        </button>)}
+      </div></>)}
       {section === "koszty" && <>
         <h1>Koszty zakupowe</h1><div className="pv-tabs" aria-label="Rodzaj kosztów">{([ ["wszystkie", "Wszystkie"], ["paliwo", "Paliwo"], ["pozostale", "Pozostałe"] ] as const).map(([id, title]) => <button key={id} aria-pressed={location.filter === id} onClick={() => navigate({ filter: id })}>{title}</button>)}</div>
         <Row label="Zakupy w wyniku miesiąca · brutto">{available ? formatZl(result.paliwo + result.inne + result.leasing) : "Brak danych"}</Row>
@@ -164,8 +184,7 @@ export function AdminPreview({ source, updatedAt }: { source: WorkspaceData; upd
         {!groupedCosts.length && !hasLegacyLease && <p className="pv-empty">Brak zapisanych zakupów.</p>}
         {oldPanel("koszty", "Dodawanie i zatwierdzanie kosztów")}
       </>}
-      {section === "wiecej" && <><h1>Pozostałe działy</h1>{extraSections.map(([id, title, sub]) => <div key={id}>{go(id, title, sub)}</div>)}</>}
-      {extraSections.some(([id]) => id === section) && <>{back("Pozostałe działy", { section: "wiecej" })}<h1>{extraSections.find(([id]) => id === section)?.[1]}</h1></>}
+      {extraSections.some(([id]) => id === section) && <h1>{companyMenu.find(([id]) => id === section)?.[1]}</h1>}
       {section === "podatki" && <>
         <Row label="VAT do zapłaty">{available ? formatZl(Math.max(0, tax.vatDoZaplaty)) : "Brak danych"}</Row><Row label="Podatek dochodowy">{available ? formatZl(tax.pitMiesiac) : "Brak danych"}</Row><Row label="Zdrowotna właściciela">{available ? formatZl(tax.zdrowotna) : "Brak danych"}</Row>
         {available && <><details><summary>Podstawa obliczeń</summary><Row label="Przychód netto">{formatZl(tax.przychodNetto)}</Row><Row label="Koszty podatkowe">{formatZl(tax.kosztyPodatkowe)}</Row><Row label="Dochód podatkowy">{formatZl(tax.dochod)}</Row><Row label="Dochód narastająco">{formatZl(tax.dochodYtd)}</Row><Row label="Nadwyżka VAT do przeniesienia">{formatZl(tax.vatNadwyzkaDoPrzeniesienia)}</Row></details>

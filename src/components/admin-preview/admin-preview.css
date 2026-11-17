@@ -17,9 +17,9 @@
 .admin-preview .pv-month { display:flex; gap:8px; align-items:center; color:var(--pv-dim); font-size:12px; }
 .admin-preview select,.admin-preview input,.admin-preview textarea { background:#080f0c; color:#f2f4f2; border:1px solid var(--pv-line); border-radius:6px; min-height:44px; padding:8px; max-width:100%; }
 .admin-preview .pv-month select { font-size:14px; }
-.admin-preview nav { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:2px; }
-.admin-preview nav button { border-bottom:3px solid transparent; padding:12px 2px; font-size:14px; }
-.admin-preview nav button[aria-current=page] { border-color:#ffbf47; color:#ffbf47; font-weight:700; }
+.admin-preview .pv-root-nav { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:16px; }
+.admin-preview .pv-root-nav button { display:flex; align-items:center; justify-content:center; gap:8px; border-bottom:3px solid transparent; padding:12px 2px; font-size:15px; }
+.admin-preview .pv-root-nav button[aria-current=page] { border-color:#ffbf47; color:#ffbf47; font-weight:700; background:#20291f; }
 .admin-preview main { padding:24px 24px 36px; min-height:410px; }
 .admin-preview h1 { font-size:22px; margin:0 0 20px; line-height:1.3; }
 .admin-preview h2 { font-size:15px; margin:26px 0 8px; }
@@ -61,6 +61,44 @@
 .admin-preview [role=alert] { color:#ffa5a5; }
 .admin-preview .pv-message { white-space:pre-wrap; }
 .admin-preview footer { padding:16px 20px; color:var(--pv-dim); font-size:12px; border-top:1px solid var(--pv-line); }
+.admin-preview .pv-menu-summary { border-left:3px solid #79ce9c; padding:8px 16px; margin-bottom:22px; }
+.admin-preview .pv-menu-summary>span { color:var(--pv-dim); }
+.admin-preview .pv-menu-summary>strong { display:block; font-size:24px; margin:4px 0; }
+.admin-preview .pv-menu-groups { display:grid; grid-template-columns:1fr 1fr; gap:30px; }
+.admin-preview .pv-menu-groups h2 { display:flex; align-items:center; gap:8px; color:#ffbf47; margin:0 0 8px; }
+.admin-preview .pv-menu-groups .pv-list-row { min-height:88px; }
+.admin-preview .pv-driver-list { border-top:1px solid var(--pv-line); }
+.admin-preview .pv-driver-choice { display:grid; grid-template-columns:44px minmax(0,1fr) 18px; width:100%; text-align:left; gap:14px; align-items:center; padding:22px 0; border-bottom:1px solid var(--pv-line); }
+.admin-preview .pv-driver-choice strong { font-size:17px; }
+.admin-preview .pv-initials { display:grid; place-items:center; width:44px; height:44px; background:#2a352d; border-radius:6px; color:#ffbf47; }
+.admin-preview .pv-driver-title { display:flex; align-items:center; gap:12px; margin:18px 0; }
+.admin-preview .pv-driver-title>svg { color:#ffbf47; flex-shrink:0; }
+.admin-preview .pv-driver-title h1 { margin:0; }
+.admin-preview .pv-driver-title p { color:var(--pv-dim); margin:4px 0 0; }
+.admin-preview .pv-driver-tabs { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:4px; padding:8px 0 16px; border-bottom:1px solid var(--pv-line); }
+.admin-preview .pv-driver-tabs button { border:1px solid var(--pv-line); border-radius:6px; font-size:12px; padding:8px 4px; min-height:48px; }
+.admin-preview .pv-driver-tabs button[aria-current=page] { background:#f5b53e; color:#181306; border-color:#f5b53e; font-weight:700; }
+.admin-preview .pv-driver-metrics { display:grid; grid-template-columns:2fr 1fr; gap:18px; padding:16px 0; border-bottom:1px solid var(--pv-line); }
+.admin-preview .pv-driver-metrics span { color:var(--pv-dim); font-size:12px; }
+.admin-preview .pv-driver-metrics strong { display:block; font-size:21px; margin-top:6px; overflow-wrap:anywhere; }
+.admin-preview .pv-section-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:18px 0; }
+.admin-preview .pv-section-heading h2 { margin:0; }
+.admin-preview .pv-payroll-total { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 12px; background:#20372a; border-left:3px solid #79ce9c; }
+.admin-preview .pv-payroll-total strong { font-size:20px; text-align:right; }
+.admin-preview .pv-calendar { width:100%; border-collapse:collapse; table-layout:fixed; margin-top:16px; }
+.admin-preview .pv-calendar th,.admin-preview .pv-calendar td { text-align:center; border-bottom:1px solid var(--pv-line); padding:12px 4px; overflow-wrap:anywhere; font-size:13px; }
+.admin-preview .pv-calendar th:first-child { width:23%; text-align:left; }
+.admin-preview .pv-calendar th:nth-child(2) { width:25%; }
+.admin-preview .pv-calendar th:nth-child(3) { width:16%; }
+.admin-preview .pv-calendar th:last-child { width:36%; }
+.admin-preview .pv-calendar td:last-child { text-align:right; font-weight:700; }
+.admin-preview .pv-calendar thead { color:var(--pv-dim); }
+.admin-preview .pv-calendar abbr { display:inline-block; border:1px solid var(--pv-line); border-radius:6px; padding:3px 8px; text-decoration:none; }
+.admin-preview .pv-calendar button { color:#ffcf72; padding:0; text-align:left; width:100%; }
+.admin-preview .pv-calendar .pv-saturday { background:#1c3525; }
+.admin-preview .pv-calendar .pv-sunday { background:#353018; }
+.admin-preview .pv-source-entry { padding:12px 0; border-top:1px solid var(--pv-line); }
+.admin-preview .pv-day-details { padding:12px 0; border-bottom:2px solid #ffbf47; }
 @media(max-width:480px) {
  .admin-preview .pv-mode { padding:8px 12px; }
  .admin-preview .pv-mode a { min-height:36px; display:flex; align-items:center; }
@@ -68,8 +106,7 @@
  .admin-preview .pv-brand span { display:none; }
  .admin-preview .pv-month { gap:6px; }
  .admin-preview .pv-month select { font-size:16px; padding:8px 4px; }
- .admin-preview .pv-context>span { max-width:70px; }
- .admin-preview nav button { font-size:12px; }
+ .admin-preview .pv-context>span { max-width:90px; text-align:left; }
  .admin-preview main { padding:20px 14px 28px; }
  .admin-preview h1 { font-size:20px; }
  .admin-preview .pv-result { align-items:flex-start; flex-direction:column; gap:10px; }
@@ -77,4 +114,10 @@
  .admin-preview .pv-fields { grid-template-columns:1fr; }
  .admin-preview input,.admin-preview select,.admin-preview textarea { font-size:16px; }
  .admin-preview .pv-row { gap:10px; }
+ .admin-preview .pv-menu-groups { grid-template-columns:1fr; gap:28px; }
+ .admin-preview .pv-menu-groups .pv-list-row { min-height:76px; }
+ .admin-preview .pv-driver-tabs { grid-template-columns:repeat(3,minmax(0,1fr)); }
+ .admin-preview .pv-driver-choice strong { font-size:16px; }
+ .admin-preview .pv-calendar th,.admin-preview .pv-calendar td { font-size:12px; padding:9px 3px; }
+ .admin-preview .pv-calendar button { font-size:12px; }
 }

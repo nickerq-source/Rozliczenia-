@@ -7,7 +7,19 @@ to the existing UI is a preview link in `AppHeader.tsx`.
 
 ## Scope and data boundaries
 
-- Five main sections: Start, invoices, drivers, costs and More.
+- Two top-level areas: company main menu and Drivers. The earlier five-tab
+  layout was rejected by the user and replaced on 2026-11-17.
+- Company menu: company result, shared invoices, all purchases, taxes,
+  logistics, partner settlement, reports, shared messages and company settings.
+- Drivers: choose Yevhenii Pitianin or Rafal Gustab. Both profiles use the
+  same overview, days/payroll, invoice items, fuel submissions and employment
+  sections. The full-month payroll table follows the existing Zenia layout.
+- Driver invoice views sum only explicit matched identities in accepted saved
+  PDF rows (excluding review-needed rows) and assigned invoice additions.
+  Unassigned/manual invoice amounts stay in the company view. These are
+  partial revenue allocations, not driver wages or a duplicate company income.
+- Fuel views use explicit submission author only, not vehicle/route/name
+  guesses. Unassigned vehicle costs, leasing and tax remain in the company menu.
 - Server reads the authenticated admin's workspace with the session-scoped
   Supabase client. Existing RLS applies; no service-role client is used.
 - Existing financial data is read-only, normalized in a detached copy and
@@ -73,7 +85,7 @@ This does not replace an authenticated end-to-end production test with live data
 ## Rollback
 
 For everyday use, select "Wroc do obecnego panelu"; `/admin` is still default.
-For code rollback, revert only the dedicated admin-preview commit after checking
+For code rollback, revert only the dedicated preview commits after checking
 for later changes, then redeploy. No database rollback or financial recalculation
 is needed because the preview performs no business-data writes. Do not reset the
 entire working tree: it also contains unrelated work and private invoice fixtures.

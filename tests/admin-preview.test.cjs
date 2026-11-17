@@ -5,7 +5,7 @@ const fs = require("node:fs");
 const vm = require("node:vm");
 const ts = require("typescript");
 require("./helpers/register-ts.cjs");
-const { preparePreviewSnapshot, previewMonth, previewDayNet, readPreviewLocation, previewSearch } = require("../src/lib/admin-preview.ts");
+const { preparePreviewSnapshot, previewMonth, previewDayNet, readPreviewLocation, previewSearch, previewDriverMatches, previewDriverEntries } = require("../src/lib/admin-preview.ts");
 const { previewFixture } = require("./fixtures/admin-preview.ts");
 const { obliczWynikMiesiaca } = require("../src/lib/business-logic.ts");
 const { getUstawienia, podatkiMiesiaca } = require("../src/lib/tax.ts");
@@ -39,13 +39,36 @@ test("Rafal trial days use explicit net amounts and do not change company cash o
 });
 
 test("navigation roundtrips month, selected driver, invoice and filters; rejects invalid values", () => {
-  const loc = { month: 6, section: "faktury", driver: "rafal", part: "wyplata", invoice: "safe/a&b", filter: "paliwo" };
+  const loc = { month: 6, section: "faktury", driver: "rafal", part: "dni", invoice: "safe/a&b", filter: "paliwo" };
   assert.deepEqual(readPreviewLocation(previewSearch(loc), 11), loc);
   const fallback = readPreviewLocation("?miesiac=1&sekcja=admin&widok=invalid&kierowca=unknown", 11);
   assert.equal(fallback.month, 11);
-  assert.equal(fallback.section, "start");
-  assert.equal(fallback.part, "dni");
+  assert.equal(fallback.section, "menu");
+  assert.equal(fallback.part, "podsumowanie");
   assert.equal(fallback.driver, null);
+  assert.equal(readPreviewLocation("?sekcja=wiecej&widok=wyplata", 11).section, "menu");
+  assert.equal(readPreviewLocation("?widok=wyplata", 11).part, "dni");
+});
+
+test("driver views include only explicit identities, accepted PDF rows and attributed fuel submissions", () => {
+  const data = preparePreviewSnapshot(previewFixture).miesiace[11];
+  const row = (driverName, cost, extra = {}) => ({ driverName, cost, ...extra });
+  data.faktury = [{ id: "shared", kwota: 9999, label: "Shared", pdfImport: {
+    pozycjeUwzglednione: [row("YEVHENII PITIANIN", 100.11), row("Rafał Gustab", 200.22), row("ARTUR SZADY", 300), row("", 400), row("Rafal Gustab", 500, { needsReview: true })],
+    pozycjeOdrzucone: [row("Rafal Gustab", 600)],
+    dodatkiReczne: [{ id: "r", driverName: "Rafal Gustab", netto: 20, addToInvoice: true }, { driverName: "YEVHENII PITIANIN", netto: 80, addToInvoice: false }],
+  } }, { id: "manual", kwota: 8888, label: "Unassigned" }];
+  data.tankowanie = [{ id: "z", dodaneBy: "Żenia", koszt: 10 }, { id: "r", dodaneBy: "Rafal Gustab", koszt: 20 }, { id: "unassigned", koszt: 30, opis: "Rafal Gustab" }];
+  const original = structuredClone(data);
+  const zenia = previewDriverEntries(data, "zenia");
+  const rafal = previewDriverEntries(data, "rafal");
+  assert.equal(zenia.assignedNet, 100.11);
+  assert.equal(rafal.assignedNet, 220.22);
+  assert.deepEqual(zenia.fuel.map(row => row.id), ["z"]);
+  assert.deepEqual(rafal.fuel.map(row => row.id), ["r"]);
+  assert.equal(previewDriverMatches("Rafal", "rafal"), false);
+  assert.equal(previewDriverMatches("Yevhenii Uczyce", "zenia"), false);
+  assert.deepEqual(data, original);
 });
 
 function loadPage(profile, response) {
