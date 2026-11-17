@@ -267,6 +267,7 @@ export interface KosztZalacznik {
 
 /** Pola podatkowe kosztu (domyślnie: rozliczany podatkowo, brutto, VAT 23%) */
 export interface KosztVatInfo {
+  driverId?: "zenia" | "rafal";
   hasInvoice?: boolean; // czy koszt wchodzi do VAT i kosztów podatkowych; domyślnie true
   documentStatus?: DocumentStatus; // brak dokumentu / paragon / faktura
   zalaczniki?: KosztZalacznik[];
@@ -342,6 +343,7 @@ export interface WpisTankowania extends KosztVatInfo {
 
 /** Pojazd używany do budowania niezależnego łańcucha tankowań. */
 export interface FuelVehicleConfig {
+  driverId?: "zenia" | "rafal";
   id: string;
   name: string;
   registration?: string;

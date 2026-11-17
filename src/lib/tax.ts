@@ -14,7 +14,7 @@ import {
   WpisInnegoKosztu,
   WpisTankowania,
 } from "./types";
-import { czyTankowanieWliczane, obliczWynagrodzenie, parseNum } from "./business-logic";
+import { czyTankowanieWliczane, obliczLeasingLegacy, obliczWynagrodzenie, parseNum } from "./business-logic";
 import { MIESIACE_ZAKRESU } from "./dates";
 import {
   obliczObciazeniaPracownika,
@@ -314,7 +314,7 @@ export interface PodatkiMiesiaca {
 
 /** Sumy VAT i kosztów podatkowych jednego miesiąca (bez YTD) */
 function podstawyMiesiaca(m: MiesiącId, dane: DaneMiesiaca, u: UstawieniaPodatkowe) {
-  const rafal = rafalMonthCost(dane);
+  const rafal = rafalMonthCost(m, dane);
   // Sprzedaż
   let sprzedazNetto = 0, vatNalezny = 0, przychodBrutto = 0;
   for (const f of dane.faktury ?? []) {
@@ -332,7 +332,6 @@ function podstawyMiesiaca(m: MiesiącId, dane: DaneMiesiaca, u: UstawieniaPodatk
       .map((t) => ({ ...t, kategoria: t.kategoria ?? ("paliwo_adblue" as KategoriaKosztu) })),
     ...((dane.inneKoszty ?? []) as WpisInnegoKosztu[]),
   ];
-  const wpisyLeasingu = ((dane.inneKoszty ?? []) as WpisInnegoKosztu[]).filter((k) => k.kategoria === "leasing");
   for (const w of wpisy) {
     const r = rozbijWpis(w, u);
     kosztyNetto += r.netto;
@@ -348,10 +347,11 @@ function podstawyMiesiaca(m: MiesiącId, dane: DaneMiesiaca, u: UstawieniaPodatk
   // Miesiąc nieaktywny (brak sprzedaży, kosztów i pracy) nie wnosi nic do
   // podatków — w szczególności domyślny leasing pustych miesięcy nie jest
   // poniesionym kosztem i nie może zawyżać straty YTD.
-  const aktywny =
+  const aktywnyPozaUmowaRafala =
     przychodBrutto > 0
     || kosztyBrutto > 0
-    || wynagrodzenie > 0 || rafal.total > 0;
+    || wynagrodzenie > 0;
+  const aktywny = aktywnyPozaUmowaRafala || rafal.total > 0;
   if (!aktywny) {
     return {
       aktywny: false,
@@ -390,7 +390,7 @@ function podstawyMiesiaca(m: MiesiącId, dane: DaneMiesiaca, u: UstawieniaPodatk
     ? round2(parseNum(u.pracownikBruttoMies) + obciazeniaPracownika)
     : round2(wynagrodzenie + obciazeniaPracownika);
 
-  const leasingLegacy = wpisyLeasingu.length > 0 ? 0 : parseNum(dane.leasing);
+  const leasingLegacy = aktywnyPozaUmowaRafala ? obliczLeasingLegacy(dane) : 0;
   const kosztyPodatkowe = round2(kosztyPitFaktury + wynagrodzeniePodatkowe + leasingLegacy + rafal.taxCost);
   const dochod = round2(sprzedazNetto - kosztyPodatkowe);
   const wynikOperacyjny = calculateOperatingResult({

@@ -35,6 +35,7 @@ import { calculateInvoiceAmounts } from "@/lib/invoice-amounts";
 import { findInvoiceImportConflict, recalculateInvoiceImport, savedInvoicePreview, saveInvoicePreview } from "@/lib/invoice-import";
 
 interface Props {
+  sharedDrivers?: boolean;
   miesiac: MiesiącId;
   dane: DaneMiesiaca;
   onUpdate: (updater: (prev: DaneMiesiaca) => DaneMiesiaca) => void;
@@ -84,6 +85,7 @@ export function ZarobekTab({
   token,
   userName,
   ustawienia,
+  sharedDrivers = false,
 }: Props) {
   const weeks = useMemo(() => getWeeksOfMonth(miesiac), [miesiac]);
 
@@ -105,6 +107,7 @@ export function ZarobekTab({
   const [uploadingId, setUploadingId] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalState | null>(null);
   const [importDriverName, setImportDriverName] = useState(KIEROWCA);
+  const [importBothDrivers, setImportBothDrivers] = useState(sharedDrivers);
   const [importVehicleType, setImportVehicleType] = useState(TYP_TRANSPORTU);
   const [importDateFrom, setImportDateFrom] = useState("");
   const [importDateTo, setImportDateTo] = useState("");
@@ -161,6 +164,7 @@ export function ZarobekTab({
     try {
       const formData = new FormData();
       formData.append("file", file);
+      if (importBothDrivers) formData.append("mode", "fleet");
       formData.append("driverName", importDriverName.trim() || KIEROWCA);
       formData.append("vehicleType", importVehicleType.trim() || TYP_TRANSPORTU);
       if (importDateFrom) formData.append("dateFrom", importDateFrom);
@@ -581,11 +585,13 @@ export function ZarobekTab({
               Parser liczy tylko rekordy z kolumn: kierowca, typ transportu i data załadunku.
             </p>
           </div>
+          {sharedDrivers && <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={importBothDrivers} onChange={e => setImportBothDrivers(e.target.checked)} />Żenia i Rafał · wspólna faktura</label>}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <label className="text-xs text-dim space-y-1">
               Kierowca
               <input
-                value={importDriverName}
+                disabled={importBothDrivers}
+                value={importBothDrivers ? "Yevhenii Pitianin, Rafał Gustab" : importDriverName}
                 onChange={(e) => setImportDriverName(e.target.value)}
                 className="w-full bg-input border border-line rounded-[10px] px-3 py-2.5 text-[15px] text-ink focus:border-amber-brand focus:outline-none focus:ring-2 focus:ring-amber-brand/20"
               />

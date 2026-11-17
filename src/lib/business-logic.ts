@@ -207,8 +207,13 @@ export function obliczInneKoszty(inne: DaneMiesiaca["inneKoszty"]): number {
 
 export function obliczKosztLeasingu(daneM: Pick<DaneMiesiaca, "inneKoszty" | "leasing">): number {
   const wpisyLeasingu = (daneM.inneKoszty ?? []).filter(czyKosztLeasingu);
-  if (wpisyLeasingu.length === 0) return parseNum(daneM.leasing);
-  return wpisyLeasingu.reduce((sum, t) => sum + parseNum(t.koszt), 0);
+  return wpisyLeasingu.reduce((sum, t) => sum + parseNum(t.koszt), obliczLeasingLegacy(daneM));
+}
+
+export function obliczLeasingLegacy(daneM: Pick<DaneMiesiaca, "inneKoszty" | "leasing">): number {
+  // Only a replacement for Zenia's legacy lease suppresses that legacy amount.
+  const replaced = (daneM.inneKoszty ?? []).some(k => czyKosztLeasingu(k) && k.driverId !== "rafal");
+  return replaced ? 0 : parseNum(daneM.leasing);
 }
 
 // ─── OBCIĄŻENIA KIEROWCY ───────────────────────────────────────────────────────
@@ -244,7 +249,7 @@ export function obliczWynikMiesiaca(
   ustawienia?: UstawieniaPodatkowe
 ): WynikMiesiaca {
   const przychod = obliczPrzychod(daneM.faktury, ustawienia);
-  const rafal = rafalMonthCost(daneM);
+  const rafal = rafalMonthCost(miesiac, daneM);
   const {
     wynagrodzenie,
     premia,
@@ -266,10 +271,10 @@ export function obliczWynikMiesiaca(
     || wynagrodzenie > 0
     || paliwo > 0
     || inne > 0
-    || maJawnyLeasing || rafal.total > 0;
+    || maJawnyLeasing;
   // Pole `leasing` jest legacy i ma domyślne 2300 zł również w pustych,
   // przyszłych miesiącach. Nie traktujemy tej wartości jako poniesionego
-  // kosztu, dopóki miesiąc nie ma realnej aktywności.
+  // kosztu na podstawie samej stałej umowy Rafała.
   const leasing = miesiacAktywny ? obliczKosztLeasingu(daneM) : 0;
 
   // Stałe obciążenia pracownika są realnym miesięcznym kosztem firmy na

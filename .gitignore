@@ -12,6 +12,8 @@
 
 # testing
 /coverage
+/tmp/invoice-ui/
+/tmp/pdfs/
 
 # next.js
 /.next/

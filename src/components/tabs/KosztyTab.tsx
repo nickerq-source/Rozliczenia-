@@ -78,6 +78,7 @@ import { cn } from "@/lib/utils";
 import { useAppBackLayer, useSwipeNavigation } from "@/lib/mobile-navigation";
 
 interface Props {
+  section?: WidokKosztow;
   miesiac: MiesiącId;
   dane: DaneMiesiaca;
   onUpdate: (updater: (prev: DaneMiesiaca) => DaneMiesiaca) => void;
@@ -165,7 +166,7 @@ const PAYER_OPTIONS: { id: KosztPayer; label: string }[] = [
   { id: "Firma", label: "Firma" },
 ];
 
-type WidokKosztow =
+export type WidokKosztow =
   | "podsumowanie"
   | "wyplata"
   | "tankowanie"
@@ -937,7 +938,7 @@ function FuelStatsPanel({
 
 
 
-export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia, wszystkieMiesiace, vehicles, saveStatus, focusZgloszenieId, onMoveTankowanie }: Props) {
+export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia, wszystkieMiesiace, vehicles, saveStatus, focusZgloszenieId, onMoveTankowanie, section }: Props) {
   const fuelVehicles = useMemo(
     () => (vehicles?.length ? vehicles : [DEFAULT_FUEL_VEHICLE]),
     [vehicles]
@@ -946,7 +947,8 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
   const [rozwiniete, setRozwiniete] = useState<Record<string, boolean>>({});
   const [autoBusyId, setAutoBusyId] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
-  const [widokKosztow, setWidokKosztow] = useState<WidokKosztow>("podsumowanie");
+  const [internalSection, setWidokKosztow] = useState<WidokKosztow>("podsumowanie");
+  const widokKosztow = section ?? internalSection;
   const [quickActionsOpen, setQuickActionsOpen] = useState(false);
   // Paginacja list kosztów (1-indeksowana)
   const [stronaTank, setStronaTank] = useState(1);
@@ -1002,7 +1004,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
   );
 
   const swipeHandlers = useSwipeNavigation({
-    enabled: true,
+    enabled: !section,
     onSwipeLeft: () => {
       const idx = WIDOK_KOSZTOW_ORDER.indexOf(widokKosztow);
       const next = WIDOK_KOSZTOW_ORDER[idx + 1];
@@ -1346,6 +1348,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
   // kategoryzujemy automatycznie: reguły od ręki (jeden batch), reszta → AI w tle.
   // Ręcznie ustawiona kategoria (manual/rule/ai) NIE jest ruszana.
   useEffect(() => {
+    if (section && section !== "tankowanie" && section !== "samochod") return;
     type Reg = { id: string; kategoria: KategoriaKosztu; typ: "tankowanie" | "inne" };
     const reguly: Reg[] = [];
     const doAI: { id: string; nazwa: string; koszt: number; data: string }[] = [];
@@ -1403,11 +1406,12 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
       })();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dane.tankowanie, dane.inneKoszty]);
+  }, [dane.tankowanie, dane.inneKoszty, section]);
 
   // Stare wpisy z JSONB nie miały pola paidBy. Uzupełniamy je raz na miesiąc,
   // żeby rozliczenie Artur/Damian/Firma nie miało pustych wartości.
   useEffect(() => {
+    if (section && section !== "tankowanie" && section !== "samochod") return;
     if (payerBackfillDone.current.has(miesiac)) return;
     const needsBackfill =
       (dane.tankowanie ?? []).some((t) => !t.paidBy) ||
@@ -1425,7 +1429,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
         paidBy: normalizePayer(k.paidBy),
       })),
     }));
-  }, [dane.tankowanie, dane.inneKoszty, miesiac, onUpdate]);
+  }, [dane.tankowanie, dane.inneKoszty, miesiac, onUpdate, section]);
 
   const allDays = getDniMiesiaca(miesiac);
   const {
@@ -2011,7 +2015,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
 
   return (
     <div {...swipeHandlers} className="app-swipe-surface space-y-4">
-      <KosztySectionSwitch active={widokKosztow} onChange={changeWidokKosztow} />
+      {!section && <KosztySectionSwitch active={widokKosztow} onChange={changeWidokKosztow} />}
       {wynikKosztow.rafal.incomplete && <p className="text-sm text-amber-300">Rafał: niepełne dane dni lub rozliczenia. Wynik jest szacunkowy.</p>}
 
       {showPodsumowanie && <Card className="!border-amber-brand/35">
@@ -3353,7 +3357,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
         wyłącz „Rozlicz podatkowo” w szczegółach VAT — koszt zostanie w wyniku, ale bez VAT i podatku dochodowego.
       </p>
 
-      <button
+      {!section && <button
         type="button"
         onClick={() => setQuickActionsOpen(true)}
         className="fixed right-4 z-40 flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-brand text-amber-ink shadow-2xl transition-transform active:scale-95 sm:hidden"
@@ -3361,7 +3365,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
         aria-label="Szybkie dodawanie"
       >
         <IconPlus size={26} />
-      </button>
+      </button>}
 
       {quickActionsOpen && (
         <div className="fixed inset-0 z-50 sm:hidden" role="dialog" aria-modal="true" data-swipe-ignore="true">

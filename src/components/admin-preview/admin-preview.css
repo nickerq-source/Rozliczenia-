@@ -1,5 +1,6 @@
 .admin-preview { --pv-line:#34433c; --pv-dim:#afbbb4; max-width:820px; margin:0 auto; min-height:100dvh; background:#101714; color:#eef3ef; font-size:14px; line-height:1.5; letter-spacing:0; }
 .admin-preview * { box-sizing:border-box; }
+.admin-preview.driver-embedded { min-height:0; padding:16px; border-radius:8px; }
 .admin-preview button,.admin-preview input,.admin-preview select,.admin-preview textarea { font:inherit; letter-spacing:0; }
 .admin-preview button { min-height:44px; padding:10px 8px; cursor:pointer; }
 .admin-preview a:focus-visible,.admin-preview button:focus-visible,.admin-preview summary:focus-visible { outline:2px solid #f5b53e; outline-offset:3px; }
@@ -106,6 +107,47 @@
 .admin-preview .pv-check input { width:20px; height:20px; flex:none; accent-color:#f5b53e; }
 .admin-preview .pv-invoice-import { padding-bottom:16px; border-bottom:1px solid var(--pv-line); margin-bottom:20px; }
 .admin-preview button:disabled { opacity:.55; cursor:not-allowed; }
+.admin-preview .rf-columns,.admin-preview .rf-day { display:grid; grid-template-columns:60px minmax(0,1fr) 64px 126px; gap:10px; align-items:center; }
+.admin-preview .rf-columns { color:var(--pv-dim); font-size:12px; padding:10px 4px; }
+.admin-preview .rf-columns span:last-child { text-align:right; }
+.admin-preview .rf-day { padding:10px 4px; border-bottom:1px solid var(--pv-line); }
+.admin-preview .rf-day>div { min-width:0; }
+.admin-preview .rf-date { display:flex; align-items:center; gap:5px; }
+.admin-preview .rf-date span { color:var(--pv-dim); font-size:12px; }
+.admin-preview .rf-status select,.admin-preview .rf-courses input { width:100%; min-width:0; padding:8px 5px; }
+.admin-preview .rf-courses { text-align:center; }
+.admin-preview .rf-input-label { display:none; }
+.admin-preview .rf-courses input { text-align:center; }
+.admin-preview .rf-amount { display:flex; align-items:center; justify-content:flex-end; gap:4px; font-size:13px; }
+.admin-preview .rf-amount strong { min-width:0; overflow-wrap:anywhere; text-align:right; font-variant-numeric:tabular-nums; }
+.admin-preview .rf-note-button { display:grid; place-items:center; flex:none; width:30px; padding:4px 0; color:var(--pv-dim); }
+.admin-preview .rf-extra { grid-column:1/-1; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+.admin-preview .rf-extra label { display:flex; flex-direction:column; gap:5px; color:var(--pv-dim); font-size:12px; }
+.admin-preview .rf-extra input,.admin-preview .rf-extra textarea { width:100%; }
+.admin-preview .rf-extra textarea { min-height:70px; resize:vertical; }
+.admin-preview .rf-saturday { background:#1c3525; }
+.admin-preview .rf-sunday { background:#353018; }
+.admin-preview .rf-dirty { border-left:2px solid #f5b53e; }
+.admin-preview .rf-week { margin:18px 0 6px; border-bottom:1px solid var(--pv-line); color:var(--pv-dim); font-size:12px; text-align:center; }
+.admin-preview .rf-pay-summary { border-top:2px solid #f5b53e; margin-top:24px; }
+.admin-preview .rf-pay-summary .pv-payroll-total { margin-top:12px; }
+.admin-preview .rf-pay-summary .pv-payroll-total span { min-width:0; }
+.admin-preview .rf-pay-summary .pv-payroll-total strong { flex:none; max-width:55%; overflow-wrap:anywhere; }
+.admin-preview .rf-pay-summary .pv-actions { margin-top:16px; }
+@media(max-width:639px) {
+ .admin-preview .rf-columns { display:none; }
+ .admin-preview .rf-day { grid-template-columns:minmax(0,1fr) 84px; gap:6px 10px; padding:10px 6px; }
+ .admin-preview .rf-date { grid-column:1; grid-row:1; }
+ .admin-preview .rf-amount { grid-column:2; grid-row:1; font-size:13px; }
+ .admin-preview .rf-status { grid-column:1; grid-row:2; }
+ .admin-preview .rf-courses { grid-column:2; grid-row:2; }
+ .admin-preview .rf-status select,.admin-preview .rf-courses input { font-size:16px; }
+ .admin-preview .rf-input-label { display:block; margin-bottom:3px; color:var(--pv-dim); font-size:10px; text-align:left; }
+ .admin-preview .rf-extra { grid-template-columns:1fr; }
+ .admin-preview .rf-note-button { width:24px; }
+ .admin-preview .rf-pay-summary .pv-payroll-total { flex-direction:column; align-items:flex-start; }
+ .admin-preview .rf-pay-summary .pv-payroll-total strong { max-width:100%; }
+}
 @media(max-width:480px) {
  .admin-preview .pv-mode { padding:8px 12px; }
  .admin-preview .pv-mode a { min-height:36px; display:flex; align-items:center; }

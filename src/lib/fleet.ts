@@ -37,7 +37,7 @@ export interface FleetHistoryEntry {
   at: string;
   actor: string;
   month: number;
-  kind: "day" | "payroll" | "payrollSettings" | "invoice";
+  kind: "day" | "days" | "payroll" | "payrollSettings" | "invoice";
   target: string;
   description: string;
   before: unknown;
@@ -52,18 +52,20 @@ export function fleetDayNet(day: FleetDay): number | null {
   if (day.status === "praca_zlecenia" && day.ordersNet === null) return null;
   return sumMoney([day.courses * 90, day.status === "praca_zlecenia" ? day.ordersNet ?? 0 : 0]);
 }
-export function rafalPayrollSettings(month: Pick<DaneMiesiaca, "rafal">): RafalPayrollSettings {
+export function rafalPayrollSettings(monthId: number, month: Pick<DaneMiesiaca, "rafal">): RafalPayrollSettings {
   return month.rafal?.payrollSettings ?? {
     ...DEFAULT_MINIMUM_PAYROLL,
+    taxReduction: 300,
     mode: month.rafal?.payroll ? "manual" : "minimum",
-    enabled: !!month.rafal?.payroll || !!month.rafal?.days.some(day => day.status !== "wolne"),
+    // The confirmed contract starts in November of the app's 2026 period, not on the first calendar entry.
+    enabled: !!month.rafal?.payroll || (monthId >= 11 && monthId <= 12),
     deductibleThisMonth: true,
   };
 }
 
-export function rafalMonthCost(month: Pick<DaneMiesiaca, "rafal">) {
+export function rafalMonthCost(monthId: number, month: Pick<DaneMiesiaca, "rafal">) {
   const days = month.rafal?.days ?? [];
-  const settings = rafalPayrollSettings(month);
+  const settings = rafalPayrollSettings(monthId, month);
   const minimumCalculation = settings.mode === "minimum" ? calculateMinimumPayroll2026(settings) : null;
   const payroll: RafalPayroll | undefined = !settings.enabled ? undefined
     : minimumCalculation ? { ...minimumCalculation, deductibleThisMonth: settings.deductibleThisMonth }

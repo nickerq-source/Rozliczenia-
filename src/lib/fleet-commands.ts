@@ -7,6 +7,7 @@ import { grossMoney, invoiceDate, moneyCents, sumMoney } from "./invoice-settlem
 
 export type FleetCommand =
   | { kind: "day"; month: MiesiącId; day: FleetDay }
+  | { kind: "days"; month: MiesiącId; days: FleetDay[] }
   | { kind: "payroll"; month: MiesiącId; payroll: RafalPayroll }
   | { kind: "payrollSettings"; month: MiesiącId; settings: RafalPayrollSettings }
   | { kind: "invoice"; month: MiesiącId; id?: string; preview: InvoicePreview; fileName: string; number: string | null }
@@ -65,6 +66,7 @@ export function prepareFleetInvoice(base: InvoicePreview): InvoicePreview {
 
 function getTarget(data: WorkspaceData, entry: FleetHistoryEntry): unknown {
   const month = data.miesiace[entry.month as MiesiącId];
+  if (entry.kind === "days") return Object.fromEntries(entry.target.split(",").map(date => [date, month?.rafal?.days.find(day => day.date === date) ?? null]));
   if (entry.kind === "day") return month?.rafal?.days.find(day => day.date === entry.target) ?? null;
   if (entry.kind === "payroll") return month?.rafal?.payroll ?? null;
   if (entry.kind === "payrollSettings") return month?.rafal?.payrollSettings ?? null;
@@ -86,6 +88,11 @@ function setTarget(data: WorkspaceData, entry: FleetHistoryEntry, value: unknown
     } else if (entry.kind === "payrollSettings") {
       if (value === null) delete month.rafal.payrollSettings;
       else month.rafal.payrollSettings = value as RafalPayrollSettings;
+    } else if (entry.kind === "days") {
+      // Restore only dates touched by this batch, preserving all other days and payroll.
+      const values = value as Record<string, FleetDay | null>;
+      const dates = new Set(entry.target.split(","));
+      month.rafal.days = [...month.rafal.days.filter(day => !dates.has(day.date)), ...Object.values(values).filter((day): day is FleetDay => day !== null)].sort((a, b) => a.date.localeCompare(b.date));
     } else month.rafal.days = [...month.rafal.days.filter(day => day.date !== entry.target), ...(value === null ? [] : [value as FleetDay])].sort((a, b) => a.date.localeCompare(b.date));
   }
 }
@@ -114,6 +121,14 @@ export function applyFleetCommand(source: WorkspaceData, input: FleetCommand, ac
   if (input.kind === "day") {
     validateFleetDay(input.day, input.month);
     target = input.day.date; value = input.day; description = `Rafał: dzień ${target}`;
+  } else if (input.kind === "days") {
+    ensure(Array.isArray(input.days) && input.days.length > 0 && input.days.length <= 31, "Wybierz od 1 do 31 dni do zapisania.");
+    for (const day of input.days) validateFleetDay(day, input.month);
+    ensure(new Set(input.days.map(day => day.date)).size === input.days.length, "Dzień występuje więcej niż raz.");
+    const days = [...input.days].sort((a, b) => a.date.localeCompare(b.date));
+    target = days.map(day => day.date).join(",");
+    value = Object.fromEntries(days.map(day => [day.date, day]));
+    description = `Rafał: dni miesiąca ${input.month} (${days.length})`;
   } else if (input.kind === "payroll") {
     validatePayroll(input.payroll);
     target = "payroll"; value = input.payroll; description = `Rafał: lista płac za miesiąc ${input.month}`;

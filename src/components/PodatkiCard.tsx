@@ -7,6 +7,7 @@
 import { useEffect, useState } from "react";
 import { PodatkiMiesiaca } from "@/lib/tax";
 import { formatZl } from "@/lib/business-logic";
+import { companySettlementTotals } from "@/lib/company-settlement";
 import { MiesiącId, WynikMiesiaca } from "@/lib/types";
 import { Card } from "./ui/Card";
 import { IconMoneybag } from "./ui/icons";
@@ -260,8 +261,8 @@ export function PodatkiCard({
   const vatDoZaplatyDodatni = Math.max(0, p.vatDoZaplaty);
   const nadwyzkaVat = Math.max(0, -p.vatDoZaplaty);
   const sprzedazBrutto = p.sprzedazNetto + p.vatNalezny;
-  // Łączne zobowiązania: podatki właściciela i firmy oraz stałe obciążenia pracownika.
-  const laczniePowinnoWyjsc = vatDoZaplatyDodatni + p.pitMiesiac + p.zdrowotna + p.obciazeniaPracownika + p.rafal.charges;
+  const companyTotals = companySettlementTotals(p, wynik);
+  const laczniePowinnoWyjsc = companyTotals.taxLiabilities;
 
   const kosztyOperacyjne = wynik.kosztyOperacyjne;
   const kosztPracownika = wynik.wynagrodzenieDoWyplaty + wynik.obciazeniaPracownika;
@@ -461,8 +462,8 @@ export function PodatkiCard({
           <p className="mb-1 text-xs font-bold text-white">2. Policz dochód podatkowy</p>
           <Wiersz label="Przychód netto" value={p.przychodNetto} />
           <Wiersz
-            label="− Koszty pracownika uznane do podatku"
-            value={p.wynagrodzeniePodatkowe + p.rafal.taxCost}
+            label="− Koszty obu kierowców uznane do podatku"
+            value={companyTotals.taxableEmploymentCosts}
           />
           <Wiersz
             label="− Koszty zakupowe uznane do podatku"
@@ -539,15 +540,18 @@ export function PodatkiCard({
         <div className="bg-green-soft/70 p-3">
           <p className="mb-1 text-xs font-bold text-green-300">4. Podsumowanie końcowe</p>
           <Wiersz label="Przychód brutto" value={sprzedazBrutto} />
-          <Wiersz label="− Wypłata kierowcy po potrąceniach" value={wynik.wynagrodzenieDoWyplaty} />
-          {p.rafal.active && <Wiersz label="− Rafał · wynagrodzenie netto" value={p.rafal.payout} />}
+          <Wiersz
+            label="− Wypłaty kierowców razem"
+            value={companyTotals.driverPayouts}
+            note={`Żenia ${formatZl(wynik.wynagrodzenieDoWyplaty)} + Rafał ${formatZl(p.rafal.payout)}`}
+          />
           <Wiersz label="− Paliwo" value={wynik.paliwo} />
           <Wiersz label="− Inne koszty" value={wynik.inne} />
           <Wiersz label="− Leasing" value={wynik.leasing} />
           <Wiersz
             label="− Podatki i składki razem"
             value={laczniePowinnoWyjsc}
-            note="VAT, podatek dochodowy, rezerwa na zdrowotną właściciela i zobowiązania pracownika"
+            note="VAT, podatek dochodowy, rezerwa na zdrowotną właściciela i zobowiązania obu kierowców"
             term="lacznie"
           />
           <Wiersz
@@ -602,10 +606,10 @@ export function PodatkiCard({
         <div className="mt-3 space-y-0.5">
           {/* Koszty pracownika — poza VAT */}
           <p className="mb-1 text-xs font-bold uppercase tracking-wider text-amber-brand">
-            Koszty pracownika — bez VAT
+            Koszty kierowców — bez VAT
           </p>
           <Wiersz
-            label="Wynagrodzenie naliczone kierowcy"
+            label="Żenia · wynagrodzenie naliczone"
             value={wynik.wynagrodzeniePracownika}
             note={oficjalneAktywne ? "kwota przed potrąceniami; do podatku tylko część oficjalna" : "kwota przed potrąceniami; bez VAT"}
           />
@@ -617,15 +621,16 @@ export function PodatkiCard({
             />
           )}
           <Wiersz
-            label="Wypłata kierowcy po potrąceniach"
+            label="Żenia · wypłata po potrąceniach"
             value={wynik.wynagrodzenieDoWyplaty}
             bold
           />
           {wynik.podatekDochodowyPracownika > 0 && <Wiersz label="Podatek dochodowy pracownika" value={wynik.podatekDochodowyPracownika} />}
           {wynik.skladkaZdrowotnaPracownika > 0 && <Wiersz label="Składka zdrowotna pracownika" value={wynik.skladkaZdrowotnaPracownika} />}
           {wynik.pozostaleSkladkiZusPracownika > 0 && <Wiersz label="Pozostałe składki ZUS pracownika" value={wynik.pozostaleSkladkiZusPracownika} />}
-          <Wiersz label="Razem koszt pracownika" value={kosztPracownika} bold />
-          {p.rafal.active && <><Wiersz label="Rafał · wynagrodzenie netto" value={p.rafal.payout} /><Wiersz label="Rafał · zobowiązania z umowy" value={p.rafal.charges} /><Wiersz label="Razem koszty obu pracowników" value={kosztPracownika + p.rafal.total} bold /></>}
+          <Wiersz label="Razem koszt Żeni" value={kosztPracownika} bold />
+          {p.rafal.active && <><Wiersz label="Rafał · wynagrodzenie netto" value={p.rafal.payout} /><Wiersz label="Rafał · zobowiązania z umowy" value={p.rafal.charges} /></>}
+          <Wiersz label="Razem koszty obu kierowców" value={companyTotals.employmentCosts} bold />
 
           {/* Koszty zakupowe — VAT tylko z dokumentów */}
           <p className="mb-1 mt-4 text-xs font-bold uppercase tracking-wider text-amber-brand">
@@ -659,7 +664,7 @@ export function PodatkiCard({
           {oficjalneAktywne && (
             <>
               <p className="mb-1 mt-4 text-xs font-bold uppercase tracking-wider text-amber-brand">
-                Wpływ kosztów pracownika na podatek dochodowy
+                Żenia · koszty uznane do podatku dochodowego
               </p>
               <Wiersz label="Wynagrodzenie przyjęte do podatku (bez obciążeń)" value={oficjalnyBrutto} />
               {p.podatekDochodowyPracownika > 0 && <Wiersz label="Podatek dochodowy pracownika" value={p.podatekDochodowyPracownika} />}
@@ -681,8 +686,7 @@ export function PodatkiCard({
             Podatek dochodowy ({taxForm === "skala" ? "skala" : "liniowy 19%"})
           </p>
           <Wiersz label="Przychód netto" value={p.przychodNetto} />
-          <Wiersz label="Koszty pracownika uznane do dochodowego" value={p.wynagrodzeniePodatkowe} />
-          {p.rafal.active && <Wiersz label="Rafał · koszt podatkowy umowy" value={p.rafal.taxCost} />}
+          <Wiersz label="Koszty obu kierowców uznane do dochodowego" value={companyTotals.taxableEmploymentCosts} note={`Żenia ${formatZl(p.wynagrodzeniePodatkowe)} + Rafał ${formatZl(p.rafal.taxCost)}`} />
           <Wiersz label="Koszty zakupowe uznane do dochodowego" value={kosztyZakupowePodatkowe} />
           <Wiersz label="Razem koszty uznane do dochodowego" value={p.kosztyPodatkowe} term="koszty_pit" bold />
           {strata ? (

@@ -7,8 +7,10 @@
 
 import { useMemo } from "react";
 import { WorkspaceData, MiesiącId } from "@/lib/types";
-import { podatkiRoku } from "@/lib/tax";
-import { formatZl } from "@/lib/business-logic";
+import { getUstawienia, podatkiRoku } from "@/lib/tax";
+import { domyslneDaneMiesiaca, formatZl, obliczWynikMiesiaca } from "@/lib/business-logic";
+import { companyTaxLiabilities } from "@/lib/company-settlement";
+import { CompanyTaxSummary } from "../admin/CompanyTaxSummary";
 import { POLSKIE_MIESIACE } from "@/lib/dates";
 import { Card, CardTitle } from "../ui/Card";
 import { IconMoneybag, IconCheck } from "../ui/icons";
@@ -19,56 +21,49 @@ const r2 = (n: number) => Math.round(n * 100) / 100;
 export function PodatkiDoZaplatyTab({
   data,
   onToggle,
+  miesiac,
 }: {
   data: WorkspaceData;
+  miesiac: MiesiącId;
   onToggle: (miesiac: MiesiącId, oplacono: boolean) => void;
 }) {
+  const podatki = useMemo(() => podatkiRoku(data), [data]);
+  const wybrany = podatki.find(p => p.miesiac === miesiac)!;
+  const wynik = obliczWynikMiesiaca(miesiac, data.miesiace[miesiac] ?? domyslneDaneMiesiaca(miesiac), getUstawienia(data));
   const wiersze = useMemo(() => {
-    // VAT: nadwyżka (VAT z kosztów > VAT ze sprzedaży) przechodzi na kolejny
-    // miesiąc i pomniejsza tam VAT do zapłaty. PIT/strata już liczy się
-    // narastająco w silniku, więc nie ruszamy.
-    let vatNadwyzka = 0;
-    return podatkiRoku(data)
+    return podatki
       .map((p) => {
         // VAT gdyby bez przeniesienia nadwyżki (sam ten miesiąc):
         const vatBezNadwyzki = Math.max(0, r2(p.vatNalezny - p.vatNaliczony));
         // z przeniesieniem nadwyżki z poprzednich miesięcy:
-        const dostepnyVat = vatNadwyzka + p.vatNaliczony;
-        const vatDoZaplaty = Math.max(0, r2(p.vatNalezny - dostepnyVat));
+        const vatDoZaplaty = Math.max(0, p.vatDoZaplaty);
         const uzytaNadwyzka = Math.max(0, r2(vatBezNadwyzki - vatDoZaplaty)); // ile nadwyżka zmniejszyła VAT
-        vatNadwyzka = Math.max(0, r2(dostepnyVat - p.vatNalezny));
         return {
           miesiac: p.miesiac,
-          razem: r2(
-            vatDoZaplaty +
-              p.pitMiesiac +
-              p.zdrowotna +
-              p.podatekDochodowyPracownika +
-              p.skladkaZdrowotnaPracownika +
-              p.pozostaleSkladkiZusPracownika
-          ),
-          nadwyzkaVatDalej: vatNadwyzka,
+          razem: companyTaxLiabilities(p),
+          nadwyzkaVatDalej: p.vatNadwyzkaDoPrzeniesienia,
           uzytaNadwyzka,
           oplacono: !!data.podatkiOplacone?.[p.miesiac]?.oplacono,
         };
       })
       .filter((w) => w.razem > 0 || w.nadwyzkaVatDalej > 0 || w.uzytaNadwyzka > 0);
-  }, [data]);
+  }, [data, podatki]);
 
   const sumaWszystko = r2(wiersze.reduce((s, w) => s + w.razem, 0));
   const sumaOplacone = r2(wiersze.filter((w) => w.oplacono).reduce((s, w) => s + w.razem, 0));
   const sumaDoZaplaty = r2(sumaWszystko - sumaOplacone);
 
   return (
+    <div className="space-y-4">
+    <CompanyTaxSummary tax={wybrany} result={wynik} />
     <Card>
       <div className="mb-3 flex items-start gap-2">
         <IconMoneybag size={18} className="mt-0.5 text-amber-brand" />
         <div className="min-w-0 flex-1">
-          <CardTitle className="mb-1">Podatki do zapłaty</CardTitle>
+          <CardTitle className="mb-1">Podatki i składki · rozliczenia miesięcy</CardTitle>
           <p className="text-[11px] text-dim">
-            Jedna kwota za miesiąc (VAT + dochodowy i zdrowotna właściciela + podatek, zdrowotna i ZUS
-            pracownika). Nadwyżka VAT ze stratnego miesiąca przechodzi na kolejny i pomniejsza kwotę.
-            Zaznacz, które miesiące już opłaciłeś. Szacunkowo — potwierdza księgowa.
+            Kwoty dla całej firmy: VAT, dochodowy i rezerwa na zdrowotną właściciela oraz
+            zobowiązania Żeni i Rafała. Nadwyżka VAT pomniejsza kolejne rozliczenia.
           </p>
         </div>
       </div>
@@ -99,6 +94,8 @@ export function PodatkiDoZaplatyTab({
           {wiersze.map((w) => (
             <button
               key={w.miesiac}
+              data-testid={`tax-liability-${w.miesiac}`}
+              aria-pressed={w.oplacono}
               type="button"
               onClick={() => onToggle(w.miesiac, !w.oplacono)}
               className={cn(
@@ -149,5 +146,6 @@ export function PodatkiDoZaplatyTab({
         </div>
       )}
     </Card>
+    </div>
   );
 }

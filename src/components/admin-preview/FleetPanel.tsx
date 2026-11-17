@@ -40,9 +40,9 @@ function ManualPayroll({ month, dane, save, busy }: { month: MiesiącId; dane: D
   </form>;
 }
 
-function Payroll({ month, dane, save, busy }: { month: MiesiącId; dane: DaneMiesiaca; save: Save; busy: boolean }) {
+export function Payroll({ month, dane, save, busy }: { month: MiesiącId; dane: DaneMiesiaca; save: Save; busy: boolean }) {
   const [error, setError] = useState("");
-  const cost = rafalMonthCost(dane);
+  const cost = rafalMonthCost(month, dane);
   const settings = cost.settings;
   const automatic = settings.mode === "minimum";
   const payroll = cost.payroll ?? cost.minimumCalculation;

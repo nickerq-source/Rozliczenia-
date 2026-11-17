@@ -12,7 +12,7 @@ import {
   WpisInnegoKosztu,
   WpisTankowania,
 } from "@/lib/types";
-import { czyKosztLeasingu, czyTankowanieWliczane, obliczWynikMiesiaca, formatZl, formatZlCaly } from "@/lib/business-logic";
+import { obliczLeasingLegacy, czyTankowanieWliczane, obliczWynikMiesiaca, formatZl, formatZlCaly } from "@/lib/business-logic";
 import { POLSKIE_MIESIACE } from "@/lib/dates";
 import { Card } from "../ui/Card";
 import { PodatkiCard } from "../PodatkiCard";
@@ -38,6 +38,7 @@ import {
   IconAlertTriangle,
 } from "../ui/icons";
 import { cn } from "@/lib/utils";
+import { sumMoney } from "@/lib/invoice-settlement";
 
 function Row({
   icon,
@@ -62,6 +63,7 @@ function Row({
 }
 
 interface PodsumowanieProps {
+  scope?: "company" | "payroll";
   miesiac: MiesiącId;
   dane: DaneMiesiaca;
   token: string;
@@ -119,6 +121,7 @@ export function PodsumowanieTab({
   podatki,
   taxForm = "skala",
   ustawienia,
+  scope,
 }: PodsumowanieProps) {
   const wynik = useMemo(() => obliczWynikMiesiaca(miesiac, dane, ustawienia), [miesiac, dane, ustawienia]);
   const zyskDodatni = wynik.zysk >= 0;
@@ -270,8 +273,8 @@ export function PodsumowanieTab({
         });
       }
     }
-    const leasingZWpisow = dane.inneKoszty.some(czyKosztLeasingu);
-    if (wynik.leasing > 0 && !leasingZWpisow) {
+    const leasingLegacy = obliczLeasingLegacy(dane);
+    if (wynik.leasing > 0 && leasingLegacy > 0) {
       dodatkowe.push({
         data: "",
         typ: "leasing",
@@ -280,16 +283,16 @@ export function PodsumowanieTab({
         statusDokumentu: "faktura",
         rozliczanyPodatkowo: "tak",
         zalaczniki: 0,
-        kwotaBrutto: wynik.leasing,
-        netto: wynik.leasing,
+        kwotaBrutto: leasingLegacy,
+        netto: leasingLegacy,
         vat: 0,
         vatDoOdliczenia: 0,
-        kosztPodatkowy: wynik.leasing,
+        kosztPodatkowy: leasingLegacy,
       });
     }
 
     return [...baza, ...dodatkowe];
-  }, [dane.inneKoszty, dane.tankowanie, ustawienia, wynik]);
+  }, [dane, ustawienia, wynik]);
 
   const kosztyBezDokumentu = useMemo(
     () => kosztyEksport.filter((k) => k.statusDokumentu === "brak dokumentu"),
@@ -472,6 +475,7 @@ export function PodsumowanieTab({
   return (
     <div className="space-y-4">
       {/* Karta P&L */}
+      {scope !== "payroll" && <>
       <Card>
         <h2 className="text-lg font-bold text-white mb-4">
           {POLSKIE_MIESIACE[miesiac]} 2026 — Rachunek zysków i strat
@@ -491,21 +495,22 @@ export function PodsumowanieTab({
         {/* KOSZTY PRACOWNIKA — BEZ VAT */}
         <div className="mb-3">
           <p className="mb-1 text-xs font-bold uppercase tracking-wider text-amber-brand">
-            Koszty pracownika — bez VAT
+            Koszty kierowców — bez VAT
           </p>
           <Row
             icon={<IconUsers size={18} />}
-            label="Wypłata kierowcy po potrąceniach"
-            value={wynik.wynagrodzenieDoWyplaty}
+            label="Wypłaty kierowców razem"
+            value={sumMoney([wynik.wynagrodzenieDoWyplaty, wynik.rafal.payout])}
           />
-          {wynik.podatekDochodowyPracownika > 0 && <Row icon={<IconUsers size={18} />} label="Podatek dochodowy pracownika" value={wynik.podatekDochodowyPracownika} />}
-          {wynik.skladkaZdrowotnaPracownika > 0 && <Row icon={<IconUsers size={18} />} label="Składka zdrowotna pracownika" value={wynik.skladkaZdrowotnaPracownika} />}
-          {wynik.pozostaleSkladkiZusPracownika > 0 && <Row icon={<IconUsers size={18} />} label="Pozostałe składki ZUS pracownika" value={wynik.pozostaleSkladkiZusPracownika} />}
-          {wynik.rafal.active && <><Row icon={<IconUsers size={18} />} label="Rafał · wynagrodzenie netto" value={wynik.rafal.payout} /><Row icon={<IconUsers size={18} />} label="Rafał · zobowiązania z umowy" value={wynik.rafal.charges} /></>}
+          <p className="mt-1 text-xs text-dim">Żenia {formatZl(wynik.wynagrodzenieDoWyplaty)} + Rafał {formatZl(wynik.rafal.payout)}</p>
+          {wynik.podatekDochodowyPracownika > 0 && <Row icon={<IconUsers size={18} />} label="Żenia · podatek dochodowy" value={wynik.podatekDochodowyPracownika} />}
+          {wynik.skladkaZdrowotnaPracownika > 0 && <Row icon={<IconUsers size={18} />} label="Żenia · składka zdrowotna" value={wynik.skladkaZdrowotnaPracownika} />}
+          {wynik.pozostaleSkladkiZusPracownika > 0 && <Row icon={<IconUsers size={18} />} label="Żenia · pozostałe składki ZUS" value={wynik.pozostaleSkladkiZusPracownika} />}
+          {wynik.rafal.active && <Row icon={<IconUsers size={18} />} label="Rafał · zobowiązania z umowy" value={wynik.rafal.charges} />}
           {wynik.rafal.incomplete && <p className="text-sm text-amber-300">Rafał: niepełne dane dni lub rozliczenia. Wynik firmy jest szacunkowy.</p>}
           {wynik.rafal.estimated && <p className="text-sm text-dim">Umowa Rafała: szacunek od najniższej krajowej, pełny etat i miesiąc.</p>}
           <p className="mt-1 text-[10px] leading-relaxed text-dim/70">
-            Naliczone wynagrodzenie: {formatZl(wynik.wynagrodzeniePracownika)}
+            Naliczone wynagrodzenie Żeni: {formatZl(wynik.wynagrodzeniePracownika)}
             {wynik.potraceniaKierowcy > 0
               ? `, potrącenia: ${formatZl(wynik.potraceniaKierowcy)}.`
               : "."}{" "}
@@ -664,7 +669,8 @@ export function PodsumowanieTab({
       )}
 
       {/* Wypłata kierowcy (tylko admin) */}
-      {isAdmin && (
+      </>}
+      {scope !== "company" && isAdmin && (
         <Card>
           <div className="flex items-center gap-2 mb-2">
             <IconUsers size={18} className="text-amber-brand" />
@@ -728,7 +734,7 @@ export function PodsumowanieTab({
       )}
 
       {/* Obciążenia kierowcy (admin: edycja) */}
-      {isAdmin && (
+      {scope !== "company" && isAdmin && (
         <ObciazeniaSekcja
           miesiac={miesiac}
           obciazenia={dane.obciazenia ?? []}
@@ -740,7 +746,7 @@ export function PodsumowanieTab({
       )}
 
       {/* Podatki — szacunek (tylko admin) */}
-      {isAdmin && podatki && (
+      {scope !== "payroll" && isAdmin && podatki && (
         <PodatkiCard
           p={podatki}
           taxForm={taxForm}
@@ -753,7 +759,7 @@ export function PodsumowanieTab({
       )}
 
       {/* Statystyki — pille */}
-      <Card>
+      {scope !== "company" && <Card>
         <div className="flex flex-wrap gap-2">
           <span className="flex items-center gap-2 px-3.5 py-2 rounded-full bg-surface2 border border-line text-sm">
             <IconCalendar size={16} className="text-dim" />
@@ -836,7 +842,7 @@ export function PodsumowanieTab({
             </div>
           )}
         </div>
-      </Card>
+      </Card>}
     </div>
   );
 }

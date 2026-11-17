@@ -18,7 +18,8 @@ const amount = (value: string) => value.trim() === "" ? null : Number(value.repl
 const validAmount = (n: number | null) => n === null || (Number.isFinite(n) && n >= 0 && n <= 1000000);
 const line = (label: string, value: string) => <div className="pv-row"><span>{label}</span><strong>{value}</strong></div>;
 
-export function PreviewDriver({ driver, part, onPart, month, dane, available, settings, drafts, onDrafts, onCompany, live }: {
+export function PreviewDriver({ driver, part, onPart, month, dane, available, settings, drafts, onDrafts, onCompany, live, embedded }: {
+  embedded?: boolean;
   driver: PreviewDriverId;
   part: PreviewLocation["part"];
   onPart: (part: PreviewLocation["part"]) => void;
@@ -54,12 +55,12 @@ export function PreviewDriver({ driver, part, onPart, month, dane, available, se
   };
 
   return <>
-    <div className="pv-driver-title"><IconUsers size={24} aria-hidden /><div><h1>{PREVIEW_DRIVERS[driver]}</h1><p>{isTrial ? "Umowa o pracę · 90 zł na rękę za kurs" : "Żenia · obecne rozliczenie"}</p></div></div>
+    {!embedded && <div className="pv-driver-title"><IconUsers size={24} aria-hidden /><div><h1>{PREVIEW_DRIVERS[driver]}</h1><p>{isTrial ? "Umowa o pracę · 90 zł na rękę za kurs" : "Żenia · obecne rozliczenie"}</p></div></div>}
     {isTrial && !live && <p className="pv-notice">Dni i wypłata: próba bez zapisu. Nie wpływa na koszty ani podatki firmy.</p>}
     {isTrial && live && dane.zamkniety?.locked && <p className="pv-notice">Miesiąc zamknięty. Edycja jest zablokowana.</p>}
-    <nav className="pv-driver-tabs" aria-label="Działy kierowcy">
+    {!embedded && <nav className="pv-driver-tabs" aria-label="Działy kierowcy">
       {DRIVER_PARTS.map(([id, label]) => <button key={id} aria-current={part === id ? "page" : undefined} onClick={() => { setEditing(null); setSelectedDate(null); onPart(id); }}>{label}</button>)}
-    </nav>
+    </nav>}
 
     {part === "podsumowanie" && <>
       <h2>Podsumowanie kierowcy</h2>

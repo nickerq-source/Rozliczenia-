@@ -8,6 +8,7 @@ import { WorkspaceData, DaneMiesiaca, MiesiącId, Notatka, UstawieniaPodatkowe }
 import { domyslneDaneMiesiaca } from "@/lib/business-logic";
 import { MIESIACE_ZAKRESU } from "@/lib/dates";
 import { DEFAULT_FUEL_VEHICLE, recalculateWorkspaceFuelChains } from "@/lib/recalculate-fuel-chain";
+import type { FleetCommand } from "@/lib/fleet-commands";
 
 const DEBOUNCE_MS = 500;
 
@@ -64,6 +65,9 @@ export function useWorkspace(token: string) {
   const [data, setData] = useState<WorkspaceData>(initWorkspaceData());
   const [loading, setLoading] = useState(true);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const [fleetBusy, setFleetBusy] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const fleetInFlight = useRef(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Flaga: pierwsze załadowanie — nie zapisuj automatycznie od razu
   const initialized = useRef(false);
@@ -73,6 +77,18 @@ export function useWorkspace(token: string) {
   const conflict = useRef(false);
   const latest = useRef(data);
   latest.current = data;
+
+  const persist = useCallback(async (snapshot: WorkspaceData) => {
+    if (!revision.current || conflict.current) throw new Error("Odśwież panel przed zapisem. Brak aktualnej wersji danych.");
+    const response = await fetch(`/api/workspace/${token}`, {
+      method: "PUT", headers: { "Content-Type": "application/json", "If-Match": revision.current }, body: JSON.stringify(snapshot),
+    });
+    const json = await response.json();
+    if (response.status === 409) conflict.current = true;
+    if (!response.ok) throw new Error(json.error || "Nie udało się zapisać zmian.");
+    revision.current = json.updated_at;
+    lastSaved.current = JSON.stringify(snapshot);
+  }, [token]);
 
   // Ładowanie danych przy pierwszym renderze
   useEffect(() => {
@@ -104,7 +120,7 @@ export function useWorkspace(token: string) {
 
   // Autozapis z debounce 500ms po każdej zmianie danych
   useEffect(() => {
-    if (!initialized.current || loading || JSON.stringify(data) === lastSaved.current) return;
+    if (!initialized.current || loading || fleetInFlight.current || JSON.stringify(data) === lastSaved.current) return;
 
     if (saveTimer.current) clearTimeout(saveTimer.current);
     setSaveStatus("saving");
@@ -114,28 +130,57 @@ export function useWorkspace(token: string) {
       saveToLocalStorage(token, data);
 
       saveQueue.current = saveQueue.current.then(async () => { try {
-        if (!revision.current || conflict.current) { setSaveStatus(conflict.current ? "conflict" : "error"); return; }
-        const res = await fetch(`/api/workspace/${token}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json", "If-Match": revision.current },
-          body: JSON.stringify(data),
-        });
-        if (res.status === 409) conflict.current = true;
-        if (res.ok) { const json = await res.json(); revision.current = json.updated_at; lastSaved.current = JSON.stringify(data); }
-        setSaveStatus(res.ok ? JSON.stringify(latest.current) === lastSaved.current ? "saved" : "saving" : res.status === 409 ? "conflict" : "error");
-      } catch {
-        setSaveStatus("error");
+        await persist(data);
+        setSaveError("");
+        setSaveStatus(JSON.stringify(latest.current) === lastSaved.current ? "saved" : "saving");
+      } catch (error) {
+        setSaveError(error instanceof Error ? error.message : "Nie udało się zapisać zmian.");
+        setSaveStatus(conflict.current ? "conflict" : "error");
       } });
     }, DEBOUNCE_MS);
 
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
-  }, [data, token, loading]);
+  }, [data, token, loading, persist]);
+
+  // Both write APIs share one revision and queue. Flush ordinary edits before a payroll command.
+  const saveFleet = useCallback(async (command: FleetCommand): Promise<boolean> => {
+    if (fleetInFlight.current || loading) return false;
+    fleetInFlight.current = true; setFleetBusy(true); setSaveError(""); setSaveStatus("saving");
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    try {
+      await saveQueue.current;
+      const snapshot = latest.current;
+      if (JSON.stringify(snapshot) !== lastSaved.current) {
+        saveToLocalStorage(token, snapshot);
+        await persist(snapshot);
+      }
+      if (!revision.current || conflict.current) throw new Error("Dane zmieniły się. Odśwież panel przed zapisem.");
+      const response = await fetch("/api/admin/fleet", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ revision: revision.current, command }),
+      });
+      const json = await response.json();
+      if (response.status === 409) conflict.current = true;
+      if (!response.ok) throw new Error(json.error || "Nie udało się zapisać zmiany kierowcy.");
+      const confirmed = mergeWithDefaults(json.data);
+      revision.current = json.updated_at;
+      lastSaved.current = JSON.stringify(confirmed);
+      latest.current = confirmed;
+      setData(confirmed); saveToLocalStorage(token, confirmed); setSaveStatus("saved");
+      return true;
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Nie udało się zapisać zmiany.");
+      setSaveStatus(conflict.current ? "conflict" : "error");
+      return false;
+    } finally { fleetInFlight.current = false; setFleetBusy(false); }
+  }, [loading, persist, token]);
 
   /** Aktualizuj dowolne pole w danych miesiąca */
   const updateMiesiac = useCallback(
     (miesiac: MiesiącId, updater: (prev: DaneMiesiaca) => DaneMiesiaca) => {
+      if (fleetInFlight.current) return;
       setData((prev) =>
         recalculateWorkspaceFuelChains({
           ...prev,
@@ -151,12 +196,14 @@ export function useWorkspace(token: string) {
 
   /** Aktualizuj całe dane workspace, gdy operacja dotyczy więcej niż jednego miesiąca. */
   const updateWorkspace = useCallback((updater: (prev: WorkspaceData) => WorkspaceData) => {
+    if (fleetInFlight.current) return;
     setData((prev) => recalculateWorkspaceFuelChains(updater(prev)).data);
   }, []);
 
   /** Aktualizuj listę notatek workspace */
   const updateNotatki = useCallback(
     (updater: (prev: Notatka[]) => Notatka[]) => {
+      if (fleetInFlight.current) return;
       setData((prev) => ({
         ...prev,
         notatki: updater(prev.notatki ?? []),
@@ -168,6 +215,7 @@ export function useWorkspace(token: string) {
   /** Aktualizuj ustawienia podatkowe workspace */
   const updateUstawienia = useCallback(
     (patch: Partial<UstawieniaPodatkowe>) => {
+      if (fleetInFlight.current) return;
       setData((prev) => ({
         ...prev,
         ustawienia: { ...(prev.ustawienia ?? {}), ...patch },
@@ -176,5 +224,5 @@ export function useWorkspace(token: string) {
     []
   );
 
-  return { data, loading, saveStatus, updateMiesiac, updateWorkspace, updateNotatki, updateUstawienia };
+  return { data, loading, saveStatus, saveError, fleetBusy, saveFleet, updateMiesiac, updateWorkspace, updateNotatki, updateUstawienia };
 }

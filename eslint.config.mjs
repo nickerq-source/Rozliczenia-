@@ -17,6 +17,7 @@ const eslintConfig = [
       "dist/**",
       "build/**",
       "coverage/**",
+      "tmp/invoice-ui/**",
     ],
   },
   ...compat.extends("next/core-web-vitals", "next/typescript"),

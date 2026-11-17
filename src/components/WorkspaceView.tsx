@@ -2,7 +2,7 @@
 
 // Główny widok workspace — łączy header, zakładki miesięcy i zawartość
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentProps } from "react";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { AppHeader } from "./AppHeader";
 import { TabName } from "./TabSwitch";
@@ -26,6 +26,14 @@ import { IconLock, IconLockOpen } from "./ui/icons";
 import { getWeeksOfMonth, POLSKIE_MIESIACE, MIESIACE_ZAKRESU, getDefaultMonth } from "@/lib/dates";
 import { useAppBackLayer, useSwipeNavigation } from "@/lib/mobile-navigation";
 import { getInvoiceWeekIndex } from "@/lib/invoice-weeks";
+import { adminSearch, readAdminLocation, type AdminLocation } from "@/lib/admin-navigation";
+import { AdminChoices, AdminNavigation, DriverSwitcher } from "./admin/AdminNavigation";
+import { DriverWorkspace } from "./admin/DriverWorkspace";
+import { CompanyCosts } from "./admin/CompanyCosts";
+
+function CompanyOrLegacyCosts({ company, ...props }: ComponentProps<typeof KosztyTab> & { company: boolean }) {
+  return company ? <CompanyCosts {...props} /> : <KosztyTab {...props} />;
+}
 
 // Tło z obrazu + ciemna nakładka; karty leżą nad nakładką
 function Background() {
@@ -193,7 +201,16 @@ interface Props {
 }
 
 export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props) {
-  const { data, loading, saveStatus, updateMiesiac, updateWorkspace, updateNotatki, updateUstawienia } = useWorkspace(token);
+  const { data, loading, saveStatus, saveError, fleetBusy, saveFleet, updateMiesiac, updateWorkspace, updateNotatki, updateUstawienia } = useWorkspace(token);
+  const [location, setLocation] = useState<AdminLocation>(() => readAdminLocation(""));
+  const [classic, setClassic] = useState(false);
+  const useMenu = isAdmin && !classic;
+  const companyVisible = !useMenu || location.area === "firma";
+  const choose = useCallback((next: AdminLocation) => {
+    setLocation(next); setAktywnyMiesiac(next.month); setAktywnaZakladka(next.tab);
+    window.history.pushState(null, "", `${window.location.pathname}${adminSearch(next)}`);
+    window.scrollTo({ top: 0 });
+  }, []);
   // Domyślnie aktualny miesiąc (nie zawsze Czerwiec). URL param ma priorytet — patrz efekt niżej.
   const [aktywnyMiesiac, setAktywnyMiesiac] = useState<MiesiącId>(getDefaultMonth());
   const [aktywnaZakladka, setAktywnaZakladka] = useState<TabName>("podsumowanie");
@@ -203,6 +220,16 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
 
   // Deep-link z powiadomienia: /admin?miesiac=6&zakladka=koszty&zgloszenie=ID
   useEffect(() => {
+    if (isAdmin && new URLSearchParams(window.location.search).get("uklad") !== "klasyczny") {
+      const read = () => {
+        const next = readAdminLocation(window.location.search);
+        setLocation(next); setAktywnyMiesiac(next.month); setAktywnaZakladka(next.tab);
+        setFocusZgloszenie(new URLSearchParams(window.location.search).get("zgloszenie"));
+      };
+      read(); window.addEventListener("popstate", read);
+      return () => window.removeEventListener("popstate", read);
+    }
+    setClassic(true);
     const params = new URLSearchParams(window.location.search);
     // Priorytet miesiąca: URL (?miesiac= albo ?month=) > aktualny miesiąc (init).
     const m = Number(params.get("miesiac") ?? params.get("month"));
@@ -220,7 +247,7 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
     if (m || z || zgl) {
       window.history.replaceState(null, "", window.location.pathname);
     }
-  }, []);
+  }, [isAdmin]);
 
   // Imię: z profilu auth, fallback do localStorage (legacy)
   const [userName, setUserNameState] = useState<string | null>(initialUserName ?? null);
@@ -240,12 +267,13 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
 
   const changeZakladka = useCallback(
     (tab: TabName) => {
+      if (useMenu) { choose({ ...location, area: "firma", tab }); return; }
       if (tab === aktywnaZakladka) return;
       tabHistory.current.push(aktywnaZakladka);
       setTabBackDepth(tabHistory.current.length);
       setAktywnaZakladka(tab);
     },
-    [aktywnaZakladka]
+    [aktywnaZakladka, useMenu, choose, location]
   );
 
   const cofnijZakladke = useCallback(() => {
@@ -276,7 +304,7 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
   );
 
   const swipeHandlers = useSwipeNavigation({
-    enabled: !loading,
+    enabled: !loading && companyVisible,
     onSwipeLeft: () => przelaczSwipe(1),
     onSwipeRight: () => przelaczSwipe(-1),
   });
@@ -289,6 +317,7 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
   const lockedMonths = MIESIACE_ZAKRESU.filter(
     (m) => !!data.miesiace[m as MiesiącId]?.zamkniety?.locked
   ) as number[];
+  const lastUndoable = data.fleetHistory?.findLast(entry => !entry.undoneAt)?.id;
 
   function handleUpdateMiesiac(updater: (prev: typeof daneMiesiaca) => typeof daneMiesiaca) {
     // Zamknięty miesiąc = readonly (dodatkowo inputy blokuje <fieldset disabled>)
@@ -432,12 +461,13 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
         <AppHeader
           saveStatus={saveStatus}
           aktywnyMiesiac={aktywnyMiesiac}
-          onMiesiacChange={setAktywnyMiesiac}
+          onMiesiacChange={month => useMenu ? choose({ ...location, month }) : setAktywnyMiesiac(month)}
           aktywnaZakladka={aktywnaZakladka}
           onZakladkaChange={changeZakladka}
           userName={userName ?? ""}
           showHistoria={isAdmin}
           lockedMonths={lockedMonths}
+          navigation={useMenu ? <AdminNavigation location={location} onChange={choose} /> : undefined}
         />
 
         {/* Jednorazowy modal imienia (userName === "" po odczycie localStorage) */}
@@ -445,12 +475,28 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
 
         <main
           {...swipeHandlers}
-          className="app-swipe-surface max-w-[480px] mx-auto px-3 sm:px-6 py-4 space-y-4 pb-0"
+          className={`app-swipe-surface mx-auto px-3 sm:px-6 py-4 space-y-4 pb-0 ${useMenu ? location.area === 'kierowcy' && location.driver ? 'max-w-[680px] lg:max-w-[960px]' : 'max-w-[680px]' : 'max-w-[480px]'}`}
         >
+          {saveError && <div role="alert" className="rounded-lg border border-red-400/40 bg-surface p-3 text-sm text-red-300">{saveError}{saveStatus === "conflict" && <button className="mt-2 block underline" onClick={() => { if (window.confirm("Odświeżyć dane? Niezapisane zmiany pozostaną tylko w lokalnej kopii odzyskiwania.")) window.location.reload(); }}>Odśwież dane</button>}</div>}
           {loading ? (
             <LoadingSkeleton />
           ) : (
             <>
+              {useMenu && (location.area === "start" || location.area === "kierowcy" && !location.driver) && <AdminChoices location={location} onChange={choose} />}
+              {useMenu && location.area === "kierowcy" && location.driver && <div className="grid gap-5 lg:grid-cols-[200px_minmax(0,1fr)]">
+                <DriverSwitcher location={location} onChange={choose} />
+                <div className="min-w-0 space-y-4">
+                  <DriverWorkspace key={location.driver} data={data} month={aktywnyMiesiac} driver={location.driver} view={location.view} onView={view => choose({ ...location, view })}
+                    token={token} userName={userName ?? ""} status={saveStatus} busy={fleetBusy} save={saveFleet}
+                    updateMonth={handleUpdateMiesiac} updateWorkspace={updateWorkspace} moveFuel={moveTankowanieDoMiesiaca} focus={focusZgloszenie}
+                    onCompany={() => choose({ ...location, area: "firma", tab: "zarobek", driver: undefined })} />
+                {monthLocked && <p className="text-sm text-amber-brand">Miesiąc zamknięty. Odblokowanie jest dostępne w podsumowaniu firmy.</p>}
+                {location.driver === "rafal" && <details className="rounded-lg border border-line bg-surface px-4 text-sm"><summary className="cursor-pointer py-3">Historia zmian i cofanie</summary>
+                  {[...(data.fleetHistory ?? [])].filter(entry => entry.month === aktywnyMiesiac).reverse().map(entry => <div key={entry.id} className="border-t border-line py-3"><p>{entry.description}{entry.undoneAt ? " · cofnięto" : ""}</p><p className="text-xs text-dim">{entry.actor} · {new Date(entry.at).toLocaleString("pl-PL")}</p>{entry.id === lastUndoable && <button className="mt-2 text-amber-brand underline" disabled={fleetBusy || monthLocked} onClick={() => { if (window.confirm(`Cofnąć: ${entry.description}?`)) void saveFleet({ kind: "undo", id: entry.id }); }}>Cofnij zmianę</button>}</div>)}
+                </details>}
+                </div>
+              </div>}
+              {companyVisible && <>
               {/* Baner zamkniętego miesiąca */}
               {monthLocked && aktywnaZakladka !== "raport" && aktywnaZakladka !== "wiadomosci" && aktywnaZakladka !== "legenda" && aktywnaZakladka !== "ustawienia" && (
                 <div className="flex items-center gap-2 rounded-xl bg-surface2 border border-line px-4 py-2.5 text-sm text-dim">
@@ -460,10 +506,11 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
               )}
 
               {/* fieldset disabled = wszystkie pola i przyciski readonly */}
-              <fieldset disabled={monthLocked} className={monthLocked ? "opacity-80" : undefined}>
+              <fieldset disabled={monthLocked || fleetBusy} className={monthLocked ? "opacity-80" : undefined}>
                 <div className="space-y-4">
                   {aktywnaZakladka === "podsumowanie" && (
                     <PodsumowanieTab
+                      scope={useMenu ? "company" : undefined}
                       miesiac={aktywnyMiesiac}
                       dane={daneMiesiaca}
                       token={token}
@@ -477,6 +524,7 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
                   )}
                   {aktywnaZakladka === "zarobek" && (
                     <ZarobekTab
+                      sharedDrivers={useMenu}
                       miesiac={aktywnyMiesiac}
                       dane={daneMiesiaca}
                       onUpdate={handleUpdateMiesiac}
@@ -486,7 +534,8 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
                     />
                   )}
                   {aktywnaZakladka === "koszty" && (
-                    <KosztyTab
+                    <CompanyOrLegacyCosts
+                      company={useMenu}
                       miesiac={aktywnyMiesiac}
                       dane={daneMiesiaca}
                       onUpdate={handleUpdateMiesiac}
@@ -514,7 +563,7 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
 
               {aktywnaZakladka === "raport" && <RaportTab data={data} />}
               {aktywnaZakladka === "podatki" && isAdmin && (
-                <PodatkiDoZaplatyTab data={data} onToggle={oznaczPodatekOplacony} />
+                <PodatkiDoZaplatyTab data={data} miesiac={aktywnyMiesiac} onToggle={oznaczPodatekOplacony} />
               )}
               {aktywnaZakladka === "wiadomosci" && isAdmin && (
                 <WiadomosciTab
@@ -565,6 +614,7 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
                   </button>
                 </div>
               )}
+              </>}
             </>
           )}
 

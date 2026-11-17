@@ -9,8 +9,10 @@ import { getBrowserSupabase } from "@/lib/supabase-browser";
 import { POLSKIE_MIESIACE, MIESIACE_ZAKRESU } from "@/lib/dates";
 import { MiesiącId } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useEffect, useRef, type ReactNode } from "react";
 
 interface AppHeaderProps {
+  navigation?: ReactNode;
   saveStatus: SaveStatus;
   aktywnyMiesiac: MiesiącId;
   onMiesiacChange: (m: MiesiącId) => void;
@@ -30,8 +32,15 @@ export function AppHeader({
   userName,
   showHistoria = false,
   lockedMonths = [],
+  navigation,
 }: AppHeaderProps) {
   const router = useRouter();
+  const monthStrip = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const strip = monthStrip.current;
+    const selected = strip?.querySelector<HTMLButtonElement>('[aria-pressed="true"]');
+    if (strip && selected) strip.scrollLeft = Math.max(0, selected.offsetLeft - strip.offsetLeft - strip.clientWidth / 2 + selected.offsetWidth / 2);
+  }, [aktywnyMiesiac]);
 
   async function logout() {
     try {
@@ -81,11 +90,12 @@ export function AppHeader({
           </div>
 
         {/* Przełącznik miesięcy — poziomy scroll na mobile */}
-        <div className="flex gap-1 overflow-x-auto scrollbar-none pb-1.5">
+        <div ref={monthStrip} className="flex gap-1 overflow-x-auto scrollbar-none pb-1.5">
           {MIESIACE_ZAKRESU.map((m) => (
             <button
               key={m}
               onClick={() => onMiesiacChange(m as MiesiącId)}
+              aria-pressed={aktywnyMiesiac === m}
               className={cn(
                 "shrink-0 flex items-center gap-1 px-3 py-1 rounded-lg text-[13px] font-medium transition-all duration-150",
                 aktywnyMiesiac === m
@@ -100,16 +110,12 @@ export function AppHeader({
         </div>
 
         {/* Zakładki — dolna linia bursztynowa */}
-        <TabSwitch
+        {navigation !== undefined ? navigation : <TabSwitch
           active={aktywnaZakladka}
           onChange={onZakladkaChange}
           showHistoria={showHistoria}
           className="flex"
-        />
-        {showHistoria && <a
-          href={`/admin/flota?miesiac=${aktywnyMiesiac}`}
-          className="block py-2 text-xs text-dim underline hover:text-ink"
-        >Menu główne i kierowcy</a>}
+        />}
         </div>
       </header>
     </>
