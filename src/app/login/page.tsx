@@ -92,12 +92,12 @@ export default function LoginPage() {
         <div className="flex flex-col items-center mb-6">
           <IconTruck size={36} className="text-amber-brand mb-2" />
           <span className="logo-gem text-[32px] leading-none">PapiTrans</span>
-          <span className="pt-display mt-1">El Jefe de la Ruta</span>
+          <span className="logo-subtitle text-[11px] mt-1">El Jefe de la Ruta</span>
         </div>
 
         <form
           onSubmit={handleLogin}
-          className="pt-stock-panel bg-surface rounded-lg border border-line p-5 space-y-3 shadow-2xl"
+          className="bg-surface rounded-2xl border border-line p-5 space-y-3 shadow-2xl"
         >
           <div>
             <label className="block text-xs text-dim mb-1">Konto</label>
