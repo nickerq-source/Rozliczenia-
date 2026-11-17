@@ -260,7 +260,7 @@ export function RaportTab({ data }: Props) {
         />
         <Row label="Podatek dochodowy pracownika" value={raport.podatekPrac} />
         {podatkiSuma.rafal.payout > 0 && <Row label="Rafał · wynagrodzenie netto" value={podatkiSuma.rafal.payout} />}
-        {podatkiSuma.rafal.charges > 0 && <Row label="Rafał · zobowiązania z listy płac" value={podatkiSuma.rafal.charges} />}
+        {podatkiSuma.rafal.charges > 0 && <Row label="Rafał · zobowiązania z umowy" value={podatkiSuma.rafal.charges} />}
         {podatkiSuma.rafal.incomplete && <p className="text-sm text-amber-300">Raport zawiera niepełne lub nieuzgodnione rozliczenie Rafała.</p>}
         <Row label="Składka zdrowotna pracownika" value={raport.zdrowotnaPrac} />
         <Row label="Pozostałe składki ZUS pracownika" value={raport.zusPrac} />
@@ -395,7 +395,7 @@ export function RaportTab({ data }: Props) {
         <p className="text-xs font-bold uppercase tracking-wider text-amber-brand mb-1 mt-4">Podatek dochodowy</p>
         <Row label="Przychód netto (sprzedaż)" value={podatkiSuma.sprzedazNetto} />
         <Row label="Koszty uznane do podatku dochodowego" value={podatkiSuma.kosztyPodatkowe} />
-        {podatkiSuma.rafal.taxCost > 0 && <Row label="W tym Rafał · z listy płac" value={podatkiSuma.rafal.taxCost} />}
+        {podatkiSuma.rafal.taxCost > 0 && <Row label="W tym Rafał · koszt umowy" value={podatkiSuma.rafal.taxCost} />}
         <Row
           label={podatkiSuma.dochodYtd >= 0 ? "Łączny wynik podatkowy w okresie czerwiec–grudzień" : "Niewykorzystana strata z okresu czerwiec–grudzień"}
           value={Math.abs(podatkiSuma.dochodYtd)}
@@ -426,7 +426,7 @@ export function RaportTab({ data }: Props) {
               <Row label="Podatek dochodowy pracownika łącznie" value={podatkiSuma.podatekPracownika} />
               <Row label="Zdrowotna pracownika łącznie" value={podatkiSuma.zdrowotnaPracownika} />
               <Row label="Pozostałe składki ZUS pracownika łącznie" value={podatkiSuma.zusPracownika} />
-              {podatkiSuma.rafal.charges > 0 && <Row label="Rafał · zobowiązania z listy płac" value={podatkiSuma.rafal.charges} />}
+              {podatkiSuma.rafal.charges > 0 && <Row label="Rafał · zobowiązania z umowy" value={podatkiSuma.rafal.charges} />}
               <Row label="RAZEM PODATKI I SKŁADKI ZA OKRES" value={total} valueClass="text-amber-brand" />
               <p className="mt-2 text-[11px] text-dim/70">
                 Wyliczenie obejmuje okres Czerwiec–Grudzień 2026. Wyliczenia są szacunkowe — ostateczne rozliczenie potwierdza księgowa.

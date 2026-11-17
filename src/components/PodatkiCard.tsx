@@ -574,9 +574,9 @@ export function PodatkiCard({
         {p.podatekDochodowyPracownika > 0 && <Wiersz label="Podatek dochodowy pracownika" value={p.podatekDochodowyPracownika} klasa="text-ink" />}
         {p.skladkaZdrowotnaPracownika > 0 && <Wiersz label="Składka zdrowotna pracownika" value={p.skladkaZdrowotnaPracownika} klasa="text-ink" />}
         {p.pozostaleSkladkiZusPracownika > 0 && <Wiersz label="Pozostałe składki ZUS pracownika" value={p.pozostaleSkladkiZusPracownika} klasa="text-ink" />}
-        {p.rafal.active && <Wiersz label="Rafał · zobowiązania z listy płac" value={p.rafal.charges} />}
+        {p.rafal.active && <Wiersz label="Rafał · zobowiązania z umowy" value={p.rafal.charges} />}
         <Wiersz label="RAZEM PODATKI I ZOBOWIĄZANIA" value={laczniePowinnoWyjsc} klasa="text-amber-brand" bold />
-        {p.rafal.incomplete && <p className="text-amber-300 text-sm">Rafał: niepełna lub nieuzgodniona lista płac. Wynik jest szacunkowy.</p>}
+        {p.rafal.incomplete && <p className="text-amber-300 text-sm">Rafał: niepełne dane dni lub rozliczenia. Wynik jest szacunkowy.</p>}
         {vatDoZaplatyDodatni === 0 && p.pitMiesiac === 0 && p.obciazeniaPracownika === 0 && p.rafal.charges === 0 && (
           <p className="mt-2 text-[11px] text-dim">
             W tym miesiącu nie wychodzi VAT ani podatek dochodowy do zapłaty. Do odłożenia zostaje rezerwa na zdrowotną właściciela: {formatZl(p.zdrowotna)}.
@@ -625,7 +625,7 @@ export function PodatkiCard({
           {wynik.skladkaZdrowotnaPracownika > 0 && <Wiersz label="Składka zdrowotna pracownika" value={wynik.skladkaZdrowotnaPracownika} />}
           {wynik.pozostaleSkladkiZusPracownika > 0 && <Wiersz label="Pozostałe składki ZUS pracownika" value={wynik.pozostaleSkladkiZusPracownika} />}
           <Wiersz label="Razem koszt pracownika" value={kosztPracownika} bold />
-          {p.rafal.active && <><Wiersz label="Rafał · wynagrodzenie netto" value={p.rafal.payout} /><Wiersz label="Rafał · zobowiązania z listy płac" value={p.rafal.charges} /><Wiersz label="Razem koszty obu pracowników" value={kosztPracownika + p.rafal.total} bold /></>}
+          {p.rafal.active && <><Wiersz label="Rafał · wynagrodzenie netto" value={p.rafal.payout} /><Wiersz label="Rafał · zobowiązania z umowy" value={p.rafal.charges} /><Wiersz label="Razem koszty obu pracowników" value={kosztPracownika + p.rafal.total} bold /></>}
 
           {/* Koszty zakupowe — VAT tylko z dokumentów */}
           <p className="mb-1 mt-4 text-xs font-bold uppercase tracking-wider text-amber-brand">
@@ -682,7 +682,7 @@ export function PodatkiCard({
           </p>
           <Wiersz label="Przychód netto" value={p.przychodNetto} />
           <Wiersz label="Koszty pracownika uznane do dochodowego" value={p.wynagrodzeniePodatkowe} />
-          {p.rafal.active && <Wiersz label="Rafał · koszt podatkowy z listy płac" value={p.rafal.taxCost} />}
+          {p.rafal.active && <Wiersz label="Rafał · koszt podatkowy umowy" value={p.rafal.taxCost} />}
           <Wiersz label="Koszty zakupowe uznane do dochodowego" value={kosztyZakupowePodatkowe} />
           <Wiersz label="Razem koszty uznane do dochodowego" value={p.kosztyPodatkowe} term="koszty_pit" bold />
           {strata ? (

@@ -1,5 +1,5 @@
 import type { FakturaWeek, MiesiącId, WorkspaceData } from "./types";
-import type { FleetDay, FleetHistoryEntry, RafalPayroll } from "./fleet";
+import type { FleetDay, FleetHistoryEntry, RafalPayroll, RafalPayrollSettings } from "./fleet";
 import { FLEET_DRIVERS, matchesInvoiceDriver } from "./driver-identity";
 import { domyslneDaneMiesiaca } from "./business-logic";
 import { findInvoiceImportConflict, invoiceSourceRows, recalculateInvoiceImport, saveInvoicePreview, type InvoicePreview } from "./invoice-import";
@@ -8,6 +8,7 @@ import { grossMoney, invoiceDate, moneyCents, sumMoney } from "./invoice-settlem
 export type FleetCommand =
   | { kind: "day"; month: MiesiącId; day: FleetDay }
   | { kind: "payroll"; month: MiesiącId; payroll: RafalPayroll }
+  | { kind: "payrollSettings"; month: MiesiącId; settings: RafalPayrollSettings }
   | { kind: "invoice"; month: MiesiącId; id?: string; preview: InvoicePreview; fileName: string; number: string | null }
   | { kind: "undo"; id: string };
 
@@ -28,6 +29,13 @@ export function validatePayroll(p: RafalPayroll) {
   ensure(p && [p.gross, p.net, p.employeeIncomeTax, p.employeeHealth, p.employeeSocial, p.employerContributions, p.otherDeductions].every(cash), "Wpisz nieujemne kwoty z listy płac, z dokładnością do grosza.");
   ensure(text(p.reference, 200) && p.reference.trim() && typeof p.deductibleThisMonth === "boolean", "Podaj numer lub opis listy płac.");
   ensure(Math.abs(moneyCents(p.gross) - moneyCents(sumMoney([p.net, p.employeeIncomeTax, p.employeeHealth, p.employeeSocial, p.otherDeductions]))) <= 1, "Brutto musi być równe netto + podatek + składki pracownika + pozostałe potrącenia. Składki pracodawcy wpisz osobno.");
+}
+
+export function validatePayrollSettings(settings: RafalPayrollSettings) {
+  ensure(settings && ["minimum", "manual"].includes(settings.mode), "Wybierz sposób rozliczenia umowy.");
+  ensure([settings.enabled, settings.deductibleThisMonth, settings.labourFund, settings.guaranteedBenefitsFund].every(v => typeof v === "boolean"), "Sprawdź opcje rozliczenia.");
+  ensure([0, 100, 150, 300].includes(settings.taxReduction) && [0, 250, 300].includes(settings.taxCosts) && [12, 32].includes(settings.taxRate), "Sprawdź ustawienia podatku pracownika.");
+  ensure(cash(settings.accidentRate) && settings.accidentRate <= 10, "Składka wypadkowa musi wynosić od 0 do 10%.");
 }
 
 export function prepareFleetInvoice(base: InvoicePreview): InvoicePreview {
@@ -59,6 +67,7 @@ function getTarget(data: WorkspaceData, entry: FleetHistoryEntry): unknown {
   const month = data.miesiace[entry.month as MiesiącId];
   if (entry.kind === "day") return month?.rafal?.days.find(day => day.date === entry.target) ?? null;
   if (entry.kind === "payroll") return month?.rafal?.payroll ?? null;
+  if (entry.kind === "payrollSettings") return month?.rafal?.payrollSettings ?? null;
   return month?.faktury.find(invoice => invoice.id === entry.target) ?? null;
 }
 function setTarget(data: WorkspaceData, entry: FleetHistoryEntry, value: unknown) {
@@ -74,6 +83,9 @@ function setTarget(data: WorkspaceData, entry: FleetHistoryEntry, value: unknown
     if (entry.kind === "payroll") {
       if (value === null) delete month.rafal.payroll;
       else month.rafal.payroll = value as RafalPayroll;
+    } else if (entry.kind === "payrollSettings") {
+      if (value === null) delete month.rafal.payrollSettings;
+      else month.rafal.payrollSettings = value as RafalPayrollSettings;
     } else month.rafal.days = [...month.rafal.days.filter(day => day.date !== entry.target), ...(value === null ? [] : [value as FleetDay])].sort((a, b) => a.date.localeCompare(b.date));
   }
 }
@@ -105,6 +117,9 @@ export function applyFleetCommand(source: WorkspaceData, input: FleetCommand, ac
   } else if (input.kind === "payroll") {
     validatePayroll(input.payroll);
     target = "payroll"; value = input.payroll; description = `Rafał: lista płac za miesiąc ${input.month}`;
+  } else if (input.kind === "payrollSettings") {
+    validatePayrollSettings(input.settings);
+    target = "payrollSettings"; value = input.settings; description = `Rafał: ustawienia umowy za miesiąc ${input.month}`;
   } else if (input.kind === "invoice") {
     ensure(text(input.fileName, 250) && (input.number === null || text(input.number, 100)), "Nieprawidłowy dokument.");
     const preview = prepareFleetInvoice(input.preview);

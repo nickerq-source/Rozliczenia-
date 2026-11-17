@@ -2,8 +2,8 @@
 
 import { useRef, useState } from "react";
 import type { DaneMiesiaca, MiesiącId, WorkspaceData } from "@/lib/types";
-import { rafalMonthCost, type RafalPayroll } from "@/lib/fleet";
-import { prepareFleetInvoice, validatePayroll, type FleetCommand } from "@/lib/fleet-commands";
+import { rafalMonthCost, type RafalPayroll, type RafalPayrollSettings } from "@/lib/fleet";
+import { prepareFleetInvoice, validatePayroll, validatePayrollSettings, type FleetCommand } from "@/lib/fleet-commands";
 import { savedInvoicePreview, type InvoicePreview } from "@/lib/invoice-import";
 import { formatZl } from "@/lib/business-logic";
 import { POLSKIE_MIESIACE } from "@/lib/dates";
@@ -19,10 +19,9 @@ const payrollFields = [
   ["otherDeductions", "Pozostałe potrącenia do przekazania"],
 ] as const;
 
-function Payroll({ month, dane, save, busy }: { month: MiesiącId; dane: DaneMiesiaca; save: Save; busy: boolean }) {
+function ManualPayroll({ month, dane, save, busy }: { month: MiesiącId; dane: DaneMiesiaca; save: Save; busy: boolean }) {
   const [error, setError] = useState("");
-  const cost = rafalMonthCost(dane);
-  return <><form className="pv-form" key={JSON.stringify(dane.rafal?.payroll)} onSubmit={async e => {
+  return <form className="pv-form" key={JSON.stringify(dane.rafal?.payroll)} onSubmit={async e => {
     e.preventDefault(); setError("");
     const form = new FormData(e.currentTarget);
     const payroll = Object.fromEntries(payrollFields.map(([key]) => [key, Number(String(form.get(key)).replace(",", "."))])) as unknown as RafalPayroll;
@@ -38,14 +37,66 @@ function Payroll({ month, dane, save, busy }: { month: MiesiącId; dane: DaneMie
     <p className="pv-muted">Koszt podatkowy z listy płac: brutto + składki pracodawcy. Podatek i składki: według wpisanych kwot.</p>
     {error && <p role="alert">{error}</p>}
     <button className="pv-command" disabled={busy || dane.zamkniety?.locked}>Zapisz listę płac</button>
-  </form>
-    {cost.active && <section aria-label="Zapisane rozliczenie wypłaty">
-      <h2>Zapisane rozliczenie</h2>
-      <div className="pv-row"><span>Netto z listy płac</span><strong>{cost.payroll ? formatZl(cost.payrollNet) : "Brak danych"}</strong></div>
-      <div className="pv-row"><span>Pozostała wypłata</span><strong>{cost.payroll ? formatZl(cost.additionalPayout) : "Brak podziału"}</strong></div>
-      <div className="pv-row"><span>Cała wypłata netto</span><strong>{formatZl(cost.payout)}</strong></div>
-    </section>}
-  </>;
+  </form>;
+}
+
+function Payroll({ month, dane, save, busy }: { month: MiesiącId; dane: DaneMiesiaca; save: Save; busy: boolean }) {
+  const [error, setError] = useState("");
+  const cost = rafalMonthCost(dane);
+  const settings = cost.settings;
+  const automatic = settings.mode === "minimum";
+  const payroll = cost.payroll ?? cost.minimumCalculation;
+  const row = (label: string, value: number | undefined) => <div className="pv-row"><span>{label}</span><strong>{value === undefined ? "Brak danych" : formatZl(value)}</strong></div>;
+  return <section aria-label="Rozliczenie umowy Rafała">
+    <h2>{automatic ? "Najniższa krajowa · 2026" : "Umowa · dane z listy płac"}</h2>
+    {automatic && <p className="pv-muted">Szacunek: pełny etat, pełny miesiąc, bez PPK i ulg podatkowych. PIT-2: {settings.taxReduction} zł. Koszty uzyskania: {settings.taxCosts} zł.</p>}
+    {!settings.enabled && <p className="pv-notice">Umowa nie jest ujęta w kosztach tego miesiąca.</p>}
+    {row("Podstawa brutto umowy", payroll?.gross)}
+    {row("Podatek dochodowy pracownika", payroll?.employeeIncomeTax)}
+    {row("Składka zdrowotna pracownika", payroll?.employeeHealth)}
+    {row("Składki społeczne pracownika", payroll?.employeeSocial)}
+    {row("Składki pracodawcy", payroll?.employerContributions)}
+    {row("Netto z umowy o pracę", payroll?.net)}
+    {row("Zarobione z dni i kursów", cost.calculated)}
+    {row("Pozostała wypłata", cost.additionalPayout)}
+    {row("Wypłata ujęta w kosztach", cost.payout)}
+    {row("Razem koszt w PapiTrans", cost.total)}
+    <details>
+      <summary>Ustawienia umowy · {POLSKIE_MIESIACE[month]}</summary>
+      <form className="pv-form" key={JSON.stringify(settings)} onSubmit={async e => {
+        e.preventDefault(); setError("");
+        const values = new FormData(e.currentTarget);
+        const updated: RafalPayrollSettings = {
+          mode: values.get("mode") as RafalPayrollSettings["mode"],
+          enabled: values.get("enabled") === "on",
+          taxReduction: Number(values.get("taxReduction")) as RafalPayrollSettings["taxReduction"],
+          taxCosts: Number(values.get("taxCosts")) as RafalPayrollSettings["taxCosts"],
+          taxRate: Number(values.get("taxRate")) as RafalPayrollSettings["taxRate"],
+          accidentRate: Number(String(values.get("accidentRate")).replace(",", ".")),
+          labourFund: values.get("labourFund") === "on",
+          guaranteedBenefitsFund: values.get("guaranteedBenefitsFund") === "on",
+          deductibleThisMonth: values.get("deductibleThisMonth") === "on",
+        };
+        try { validatePayrollSettings(updated); await save({ kind: "payrollSettings", month, settings: updated }); }
+        catch (err) { setError(err instanceof Error ? err.message : "Sprawdź ustawienia umowy."); }
+      }}>
+        <label className="pv-check"><input name="enabled" type="checkbox" defaultChecked={settings.enabled} />Umowa aktywna w tym miesiącu</label>
+        <label>Rozliczenie<select name="mode" aria-label="Rozliczenie" defaultValue={settings.mode}><option value="minimum">Najniższa krajowa · automatycznie</option><option value="manual">Własna lista płac · wyjątek</option></select></label>
+        <div className="pv-fields">
+          <label>PIT-2 w tej firmie<select name="taxReduction" aria-label="PIT-2 w tej firmie" defaultValue={settings.taxReduction}><option value="0">Bez pomniejszenia</option><option value="100">100 zł miesięcznie</option><option value="150">150 zł miesięcznie</option><option value="300">300 zł miesięcznie</option></select></label>
+          <label>Koszty uzyskania pracownika<select name="taxCosts" aria-label="Koszty uzyskania pracownika" defaultValue={settings.taxCosts}><option value="250">250 zł · standardowe</option><option value="300">300 zł · dojazd z innej miejscowości</option><option value="0">Bez kosztów</option></select></label>
+          <label>Stawka podatku pracownika<select name="taxRate" aria-label="Stawka podatku pracownika" defaultValue={settings.taxRate}><option value="12">12%</option><option value="32">32%</option></select></label>
+          <label>Składka wypadkowa (%)<input name="accidentRate" type="number" min="0" max="10" step="0.01" inputMode="decimal" required defaultValue={settings.accidentRate} /></label>
+        </div>
+        <label className="pv-check"><input name="labourFund" type="checkbox" defaultChecked={settings.labourFund} />Fundusz Pracy i Fundusz Solidarnościowy</label>
+        <label className="pv-check"><input name="guaranteedBenefitsFund" type="checkbox" defaultChecked={settings.guaranteedBenefitsFund} />FGŚP</label>
+        <label className="pv-check"><input name="deductibleThisMonth" type="checkbox" defaultChecked={settings.deductibleThisMonth} />Ujmuj automatyczne wyliczenie w kosztach podatkowych miesiąca</label>
+        {error && <p role="alert">{error}</p>}
+        <button className="pv-command" disabled={busy || dane.zamkniety?.locked}>Zapisz ustawienia umowy</button>
+      </form>
+    </details>
+    {!automatic && <ManualPayroll month={month} dane={dane} save={save} busy={busy} />}
+  </section>;
 }
 
 function FleetInvoices({ month, dane, save, busy }: { month: MiesiącId; dane: DaneMiesiaca; save: Save; busy: boolean }) {

@@ -6,7 +6,7 @@ const vm = require("node:vm");
 const ts = require("typescript");
 require("./helpers/register-ts.cjs");
 const commands = require("../src/lib/fleet-commands.ts");
-const { rafalMonthCost } = require("../src/lib/fleet.ts");
+const { rafalMonthCost, rafalPayrollSettings } = require("../src/lib/fleet.ts");
 const { obliczWynikMiesiaca } = require("../src/lib/business-logic.ts");
 const { previewDriverEntries } = require("../src/lib/admin-preview.ts");
 const { podatkiMiesiaca, getUstawienia } = require("../src/lib/tax.ts");
@@ -49,15 +49,17 @@ test("undo refuses out-of-order and later external modification", () => {
   saved.miesiace[11].rafal.days[1].courses = 6;
   assert.throws(() => apply(saved, { kind: "undo", id: saved.fleetHistory.at(-1).id }), /później/);
 });
-test("day estimate changes cash only; higher payslip net is preserved without double counting", () => {
+test("days trigger minimum-wage payroll; explicit historical payslip still remains usable", () => {
   const source = fixture(), u = getUstawienia(source);
   const old = obliczWynikMiesiaca(11, source.miesiace[11], u), oldTax = podatkiMiesiaca(source, 11);
   const saved = apply(source, { kind: "day", month: 11, day });
   const estimate = obliczWynikMiesiaca(11, saved.miesiace[11], u);
-  assert.equal(estimate.rafal.payout, 270);
-  assert.equal(estimate.rafal.incomplete, true);
-  assert.equal(estimate.kosztyOperacyjne, old.kosztyOperacyjne + 270);
-  assert.equal(podatkiMiesiaca(saved, 11).kosztyPodatkowe, oldTax.kosztyPodatkowe);
+  assert.equal(estimate.rafal.calculated, 270);
+  assert.equal(estimate.rafal.payout, 3305.85);
+  assert.equal(estimate.rafal.incomplete, false);
+  assert.equal(estimate.rafal.estimated, true);
+  assert.equal(estimate.kosztyOperacyjne, old.kosztyOperacyjne + 5790.28);
+  assert.equal(podatkiMiesiaca(saved, 11).kosztyPodatkowe, oldTax.kosztyPodatkowe + 5790.28);
   const official = apply(saved, { kind: "payroll", month: 11, payroll });
   const result = obliczWynikMiesiaca(11, official.miesiace[11], u), tax = podatkiMiesiaca(official, 11);
   assert.equal(result.rafal.payout, 3500);
@@ -70,6 +72,72 @@ test("day estimate changes cash only; higher payslip net is preserved without do
   assert.equal(rafalMonthCost({ rafal: { days: [], payroll } }).taxCost, 6000);
   assert.equal(rafalMonthCost({ rafal: { days: [], payroll: { ...payroll, deductibleThisMonth: false } } }).taxCost, 0);
   assert.throws(() => commands.validatePayroll({ ...payroll, gross: 5001 }), /Brutto/);
+});
+
+test("automatic payroll settings persist, audit and undo without changing days or stored payslip", () => {
+  const source = apply(fixture(), { kind: "day", month: 11, day: { ...day, courses: 50 } });
+  const before = rafalMonthCost(source.miesiace[11]);
+  assert.equal(before.payroll.employeeIncomeTax, 468);
+  assert.equal(before.charges, 2484.43);
+  assert.equal(before.payout, 4500);
+  const settings = { ...rafalPayrollSettings(source.miesiace[11]), taxReduction: 300 };
+  const saved = JSON.parse(JSON.stringify(apply(source, { kind: "payrollSettings", month: 11, settings })));
+  const after = rafalMonthCost(saved.miesiace[11]);
+  assert.equal(after.payroll.employeeIncomeTax, 168);
+  assert.equal(after.payrollNet, 3605.85);
+  assert.equal(after.additionalPayout, 894.15);
+  assert.equal(after.payout, 4500);
+  assert.equal(after.charges, 2184.43);
+  assert.equal(after.total, 6684.43);
+  assert.equal(after.taxCost, 5790.28);
+  assert.equal(saved.miesiace[11].rafal.payroll, undefined, "calculation does not fabricate a saved payslip");
+  assert.deepEqual(saved.miesiace[11].rafal.days, source.miesiace[11].rafal.days);
+  assert.deepEqual(saved.miesiace[6], source.miesiace[6]);
+  const undone = apply(saved, { kind: "undo", id: saved.fleetHistory.at(-1).id });
+  assert.deepEqual(rafalMonthCost(undone.miesiace[11]), before);
+  assert.equal(saved.fleetHistory.at(-1).kind, "payrollSettings");
+});
+
+test("minimum-wage charges and tax cost do not rise with courses; all extra payout reduces final cash", () => {
+  const source = apply(fixture(), { kind: "day", month: 11, day: { ...day, courses: 50 } });
+  const before = podatkiMiesiaca(source, 11);
+  const saved = apply(source, { kind: "day", month: 11, day: { ...day, courses: 60 } });
+  const after = podatkiMiesiaca(saved, 11);
+  assert.equal(after.rafal.calculated, 5400);
+  assert.equal(after.rafal.payout, 5400);
+  assert.equal(after.rafal.charges, before.rafal.charges);
+  assert.equal(Math.round(after.cashflowPoPodatkach * 100), Math.round(before.cashflowPoPodatkach * 100) - 90000);
+  for (const field of ["kosztyPodatkowe", "pitMiesiac", "zdrowotna", "vatDoZaplaty"]) assert.equal(after[field], before[field]);
+  assert.equal(after.zyskPrzedPodatkami, obliczWynikMiesiaca(11, saved.miesiace[11], getUstawienia(saved)).zysk);
+});
+
+test("no contract costs in empty months; settings allow a full month without courses or disable charges", () => {
+  const source = fixture();
+  assert.equal(rafalMonthCost(source.miesiace[11]).total, 0);
+  const settings = { ...rafalPayrollSettings(source.miesiace[11]), enabled: true };
+  const saved = apply(source, { kind: "payrollSettings", month: 11, settings });
+  assert.equal(rafalMonthCost(saved.miesiace[11]).total, 5790.28);
+  assert.equal(rafalMonthCost(saved.miesiace[6]).total, 0);
+  const disabled = apply(saved, { kind: "payrollSettings", month: 11, settings: { ...settings, enabled: false } });
+  assert.equal(rafalMonthCost(disabled.miesiace[11]).total, 0);
+  const noDeduction = apply(saved, { kind: "payrollSettings", month: 11, settings: { ...settings, deductibleThisMonth: false } });
+  assert.equal(rafalMonthCost(noDeduction.miesiace[11]).taxCost, 0);
+  assert.equal(rafalMonthCost(noDeduction.miesiace[11]).total, 5790.28);
+});
+
+test("switching between automatic and manual preserves the original payslip; invalid settings rejected", () => {
+  const source = apply(fixture(), { kind: "payroll", month: 11, payroll });
+  const settings = { ...rafalPayrollSettings(source.miesiace[11]), mode: "minimum" };
+  const automatic = apply(source, { kind: "payrollSettings", month: 11, settings });
+  assert.equal(rafalMonthCost(automatic.miesiace[11]).payroll.gross, 4806);
+  assert.deepEqual(automatic.miesiace[11].rafal.payroll, payroll);
+  const undone = apply(automatic, { kind: "undo", id: automatic.fleetHistory.at(-1).id });
+  assert.deepEqual(rafalMonthCost(undone.miesiace[11]), rafalMonthCost(source.miesiace[11]));
+  for (const patch of [{ enabled: "true" }, { mode: "other" }, { taxReduction: 600 }, { taxCosts: -1 }, { taxRate: 24 }, { accidentRate: NaN }, { accidentRate: 11 }, { accidentRate: 1.123 }, { labourFund: null }]) {
+    assert.throws(() => apply(source, { kind: "payrollSettings", month: 11, settings: { ...settings, ...patch } }), commands.FleetInputError);
+  }
+  source.miesiace[11].zamkniety = { locked: true };
+  assert.throws(() => apply(source, { kind: "payrollSettings", month: 11, settings }), /zamknięty/);
 });
 
 test("full accrued payout survives lower payslip net; remainder changes cash without extra tax or charges", () => {

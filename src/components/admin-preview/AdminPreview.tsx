@@ -121,7 +121,7 @@ export function AdminPreview({ source, updatedAt, live }: { source: WorkspaceDat
     </header>
     <main>
       {live?.toolbar}
-      {dane.rafal && result.rafal.incomplete && <p className="pv-notice" role="status">Rafał: rozliczenie wynagrodzenia niepełne. Uzupełnij listę płac i uzgodnij ją z ewidencją dni. Wynik firmy jest szacunkowy.</p>}
+      {dane.rafal && result.rafal.incomplete && <p className="pv-notice" role="status">Rafał: brakuje kwot w dniach lub uzgodnionych danych rozliczenia. Wynik firmy jest niepełny.</p>}
       {section !== "menu" && section !== "kierowcy" && back("Menu główne", { section: "menu", invoice: null })}
       {!available && section !== "kierowcy" && section !== "menu" && <p className="pv-notice">Brak zapisanych danych dla wybranego miesiąca.</p>}
       {section === "menu" && <>
@@ -141,7 +141,8 @@ export function AdminPreview({ source, updatedAt, live }: { source: WorkspaceDat
         {available && <details><summary>Co składa się na koszty?</summary>
           <Row label="Cała wypłata Żeni po potrąceniach">{formatZl(result.wynagrodzenieDoWyplaty)}</Row>
           <Row label="Zobowiązania za pracownika">{formatZl(result.obciazeniaPracownika)}</Row>
-          {result.rafal.active && <><Row label="Rafał · wynagrodzenie netto">{formatZl(result.rafal.payout)}</Row><Row label="Rafał · zobowiązania z listy płac">{formatZl(result.rafal.charges)}</Row></>}
+          {result.rafal.active && <><Row label="Rafał · wynagrodzenie netto">{formatZl(result.rafal.payout)}</Row><Row label="Rafał · zobowiązania z umowy">{formatZl(result.rafal.charges)}</Row></>}
+          {result.rafal.estimated && <p className="pv-muted">Umowa Rafała: szacunek od najniższej krajowej, pełny etat i miesiąc.</p>}
           <Row label="Paliwo">{formatZl(result.paliwo)}</Row><Row label="Leasing">{formatZl(result.leasing)}</Row><Row label="Inne koszty">{formatZl(result.inne)}</Row>
         </details>}
         <h2>Do załatwienia</h2>
@@ -177,7 +178,7 @@ export function AdminPreview({ source, updatedAt, live }: { source: WorkspaceDat
         <PreviewDriver key={`${location.driver}-${month}`} driver={location.driver} part={location.part} onPart={part => navigate({ part })} month={month} dane={dane} available={available} settings={settings} drafts={live ? dane.rafal?.days ?? [] : drafts[month] ?? []} onDrafts={days => setDrafts(prev => ({ ...prev, [month]: days }))} onCompany={target => navigate({ section: target, driver: null, invoice: null })} live={live ? { busy: live.busy, saveDay: day => live.onSaveDay(month, day), payroll: live.payroll(month, dane) } : undefined} />
       </> : <><h1>Kierowcy</h1><div className="pv-driver-list">
         {(["zenia", "rafal"] as const).map(id => <button className="pv-driver-choice" key={id} onClick={() => navigate({ driver: id, part: "podsumowanie" })}>
-          <span className="pv-initials" aria-hidden>{id === "zenia" ? "YP" : "RG"}</span><span><strong>{PREVIEW_DRIVERS[id]}</strong><small>{id === "zenia" ? "Żenia · obecne rozliczenie" : live ? "Umowa o pracę · dni i lista płac" : "Umowa o pracę · profil testowy"}</small></span><IconChevronDown className="pv-chevron" size={18} aria-hidden />
+          <span className="pv-initials" aria-hidden>{id === "zenia" ? "YP" : "RG"}</span><span><strong>{PREVIEW_DRIVERS[id]}</strong><small>{id === "zenia" ? "Żenia · obecne rozliczenie" : live ? "Dni i kursy · umowa o pracę" : "Umowa o pracę · profil testowy"}</small></span><IconChevronDown className="pv-chevron" size={18} aria-hidden />
         </button>)}
       </div></>)}
       {section === "koszty" && <>
@@ -214,7 +215,7 @@ export function AdminPreview({ source, updatedAt, live }: { source: WorkspaceDat
       {section === "wiadomosci" && <>{(snapshot.notatki ?? []).filter(n => n.miesiac === month).map(n => <details key={n.id}><summary>{n.kanal === "kierowca" ? "Wątek kierowcy" : "Administratorzy"} · {n.autor}</summary><p className="pv-message">{n.tresc}</p></details>)}{!(snapshot.notatki ?? []).some(n => n.miesiac === month) && <p className="pv-empty">Brak wiadomości w tym miesiącu.</p>}{oldPanel("wiadomosci", "Pisanie wiadomości")}</>}
       {section === "ustawienia" && <>
         <Row label="Forma opodatkowania">{settings.taxForm === "skala" ? "Skala podatkowa" : "Podatek liniowy"}</Row><Row label="Tryb rozliczenia">{settings.incomeTaxScope === "company_division" ? "Odgałęzienie firmy" : "Samodzielne"}</Row><Row label="Domyślny VAT sprzedaży">{settings.defaultSalesVatRate * 100}%</Row>
-        {go("kierowcy", live ? "Umowa i lista płac Rafała" : "Warunki Rafała · test", "90 zł za kurs, urlop według listy płac", { driver: "rafal", part: "umowa" })}{oldPanel("ustawienia", "Zmiana ustawień")}
+        {go("kierowcy", live ? "Umowa i składki Rafała" : "Warunki Rafała · test", "90 zł za kurs, urlop według listy płac", { driver: "rafal", part: "umowa" })}{oldPanel("ustawienia", "Zmiana ustawień")}
       </>}
     </main>
     <footer>Odczyt danych{updatedAt && Number.isFinite(Date.parse(updatedAt)) ? ` z ${new Date(updatedAt).toLocaleDateString("pl-PL", { timeZone: "Europe/Warsaw" })}` : ""}.{!live && <> Bez zapisu do bazy.{hasDrafts && <span> Dni Rafała: niezapisane dane testowe.</span>}</>}</footer>

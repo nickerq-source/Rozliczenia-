@@ -43,9 +43,9 @@ export function PreviewDriver({ driver, part, onPart, month, dane, available, se
   const days = getDniMiesiaca(month);
   const trialComplete = drafts.length > 0 && drafts.every(d => previewDayNet(d) !== null);
   const trialNet = trialComplete ? sumMoney(drafts.map(d => previewDayNet(d)!)) : null;
-  const payrollLabel = isTrial ? live ? "Cała wypłata · netto" : "Naliczenie testowe" : "Do wypłaty po potrąceniach";
+  const payrollLabel = isTrial ? live ? "Zarobione z dni · netto" : "Naliczenie testowe" : "Do wypłaty po potrąceniach";
   const accrualValue = trialNet !== null ? formatZl(trialNet) : drafts.length ? "Niepełne dane" : "Brak wpisów";
-  const payrollValue = isTrial ? live && result.rafal.active ? formatZl(result.rafal.payout) : accrualValue : available ? formatZl(result.wynagrodzenieDoWyplaty) : "Brak danych";
+  const payrollValue = isTrial ? accrualValue : available ? formatZl(result.wynagrodzenieDoWyplaty) : "Brak danych";
   const courses = isTrial ? drafts.filter(d => d.status.startsWith("praca")).reduce((sum, d) => sum + d.courses, 0) : days.reduce((sum, date) => sum + (maKolka(dane.dni[date]?.dayType) ? parseNum(dane.dni[date]?.kolka) : 0), 0);
   const openEditor = (day?: PreviewDay) => {
     setError("");
@@ -75,11 +75,12 @@ export function PreviewDriver({ driver, part, onPart, month, dane, available, se
       <div className="pv-payroll-total"><span>{payrollLabel}</span><strong>{payrollValue}</strong></div>
       <details><summary>Rozliczenie wypłaty</summary>{isTrial ? <>
         {line(live ? "Naliczenie z dni" : "Suma wpisów testowych", accrualValue)}
-        {line("Netto z listy płac", dane.rafal?.payroll ? formatZl(result.rafal.payrollNet) : "Brak danych")}
+        {line("Netto z umowy o pracę", result.rafal.payroll ? formatZl(result.rafal.payrollNet) : "Brak danych")}
         {live && <>
           {line("Pozostała wypłata", result.rafal.payroll ? formatZl(result.rafal.additionalPayout) : "Brak podziału")}
-          {line("Cała wypłata netto", formatZl(result.rafal.payout))}
-          {line("Zobowiązania z listy płac", formatZl(result.rafal.charges))}
+          {line("Wypłata ujęta w kosztach", formatZl(result.rafal.payout))}
+          {line("Podatek i składki z umowy", formatZl(result.rafal.charges))}
+          {result.rafal.estimated && <p className="pv-muted">Umowa: szacunek od najniższej krajowej, pełny etat i miesiąc. Wypłata w kosztach nie jest niższa niż netto z umowy.</p>}
         </>}
         {line("Koszt zatrudnienia", live ? `${formatZl(result.rafal.total)}${result.rafal.incomplete ? " · niepełny" : ""}` : "Nieustalony")}
       </> : available ? <>
@@ -160,7 +161,7 @@ export function PreviewDriver({ driver, part, onPart, month, dane, available, se
       <h2>Umowa i koszty pracownika</h2>
       {isTrial ? <>
         {live?.payroll}
-        {line("Rodzaj", "Umowa o pracę")}{line("Za kurs na rękę", "90,00 zł")}{line("Postojowe", "50,00 zł netto")}{line("Urlop", "Według listy płac")}{line("Zlecenia", "Kwota wpisana dla dnia")}{!live && line("Podstawa brutto z umowy", "Do uzupełnienia")}{line("Składki i podatek pracownika", "Według listy płac")}
+        {line("Rodzaj", "Umowa o pracę")}{line("Za kurs na rękę", "90,00 zł")}{line("Postojowe", "50,00 zł netto")}{line("Urlop", "Według listy płac")}{line("Zlecenia", "Kwota wpisana dla dnia")}{!live && line("Podstawa brutto z umowy", "Do uzupełnienia")}{line("Składki i podatek pracownika", live && result.rafal.settings.mode === "minimum" ? "Automatycznie od najniższej krajowej" : "Według listy płac")}
       </> : <>
         {line("Oficjalne wynagrodzenie brutto · ustawienia", formatZl(settings.pracownikBruttoMies))}
         {available && <>{line("Podatek dochodowy pracownika", formatZl(result.podatekDochodowyPracownika))}{line("Zdrowotna pracownika", formatZl(result.skladkaZdrowotnaPracownika))}{line("Pozostałe składki ZUS", formatZl(result.pozostaleSkladkiZusPracownika))}{line("Wypłata i zobowiązania pracownika", formatZl(result.wynagrodzenieDoWyplaty + result.obciazeniaPracownika))}</>}

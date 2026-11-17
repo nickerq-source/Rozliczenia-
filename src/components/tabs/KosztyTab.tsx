@@ -1965,7 +1965,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
     { label: "Pozostałe składki ZUS pracownika", value: obciazeniaPracownika.pozostaleSkladkiZusPracownika, icon: <IconUsers size={16} /> },
     ...(wynikKosztow.rafal.active ? [
       { label: "Rafał · wynagrodzenie netto", value: wynikKosztow.rafal.payout, icon: <IconUsers size={16} /> },
-      { label: "Rafał · zobowiązania z listy płac", value: wynikKosztow.rafal.charges, icon: <IconUsers size={16} /> },
+      { label: "Rafał · zobowiązania z umowy", value: wynikKosztow.rafal.charges, icon: <IconUsers size={16} /> },
     ] : []),
   ];
   const kosztyZakupoweRows = [
@@ -2012,7 +2012,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
   return (
     <div {...swipeHandlers} className="app-swipe-surface space-y-4">
       <KosztySectionSwitch active={widokKosztow} onChange={changeWidokKosztow} />
-      {wynikKosztow.rafal.incomplete && <p className="text-sm text-amber-300">Rafał: niepełna lub nieuzgodniona lista płac. Wynik jest szacunkowy.</p>}
+      {wynikKosztow.rafal.incomplete && <p className="text-sm text-amber-300">Rafał: niepełne dane dni lub rozliczenia. Wynik jest szacunkowy.</p>}
 
       {showPodsumowanie && <Card className="!border-amber-brand/35">
         <div className="mb-4 flex items-start gap-3">

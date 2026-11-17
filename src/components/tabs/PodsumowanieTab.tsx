@@ -501,8 +501,9 @@ export function PodsumowanieTab({
           {wynik.podatekDochodowyPracownika > 0 && <Row icon={<IconUsers size={18} />} label="Podatek dochodowy pracownika" value={wynik.podatekDochodowyPracownika} />}
           {wynik.skladkaZdrowotnaPracownika > 0 && <Row icon={<IconUsers size={18} />} label="Składka zdrowotna pracownika" value={wynik.skladkaZdrowotnaPracownika} />}
           {wynik.pozostaleSkladkiZusPracownika > 0 && <Row icon={<IconUsers size={18} />} label="Pozostałe składki ZUS pracownika" value={wynik.pozostaleSkladkiZusPracownika} />}
-          {wynik.rafal.active && <><Row icon={<IconUsers size={18} />} label="Rafał · wynagrodzenie netto" value={wynik.rafal.payout} /><Row icon={<IconUsers size={18} />} label="Rafał · zobowiązania z listy płac" value={wynik.rafal.charges} /></>}
-          {wynik.rafal.incomplete && <p className="text-sm text-amber-300">Rafał: lista płac wymaga uzupełnienia lub uzgodnienia. Wynik firmy jest szacunkowy.</p>}
+          {wynik.rafal.active && <><Row icon={<IconUsers size={18} />} label="Rafał · wynagrodzenie netto" value={wynik.rafal.payout} /><Row icon={<IconUsers size={18} />} label="Rafał · zobowiązania z umowy" value={wynik.rafal.charges} /></>}
+          {wynik.rafal.incomplete && <p className="text-sm text-amber-300">Rafał: niepełne dane dni lub rozliczenia. Wynik firmy jest szacunkowy.</p>}
+          {wynik.rafal.estimated && <p className="text-sm text-dim">Umowa Rafała: szacunek od najniższej krajowej, pełny etat i miesiąc.</p>}
           <p className="mt-1 text-[10px] leading-relaxed text-dim/70">
             Naliczone wynagrodzenie: {formatZl(wynik.wynagrodzeniePracownika)}
             {wynik.potraceniaKierowcy > 0
