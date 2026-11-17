@@ -60,12 +60,12 @@ export function LogistykView({ name }: { name: string }) {
 
   return (
     <div className="min-h-screen bg-bg text-ink">
-      <header className="sticky top-0 z-10 border-b border-line bg-surface/90 backdrop-blur-xl">
+      <header className="pt-masthead sticky top-0 z-10 border-b border-line bg-surface/90 backdrop-blur-xl">
         <div className="flex items-center justify-between gap-2 px-4 py-3">
           <div className="flex items-center gap-2">
             <IconUsers size={20} className="text-amber-brand" />
             <div>
-              <p className="text-sm font-extrabold text-white">Logistyk</p>
+              <p className="pt-display">Logistyk</p>
               <p className="text-[11px] text-dim">{name}</p>
             </div>
           </div>

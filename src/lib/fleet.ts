@@ -45,12 +45,15 @@ export interface FleetHistoryEntry {
   undoneAt?: string;
   undoneBy?: string;
 }
+export const RAFAL_KOLKO = 90;
+export const RAFAL_POSTOJOWE = 50;
+
 export function fleetDayNet(day: FleetDay): number | null {
   if (day.status === "wolne") return 0;
-  if (day.status === "postojowe") return 50;
+  if (day.status === "postojowe") return RAFAL_POSTOJOWE;
   if (day.status === "urlop") return day.leaveNet;
   if (day.status === "praca_zlecenia" && day.ordersNet === null) return null;
-  return sumMoney([day.courses * 90, day.status === "praca_zlecenia" ? day.ordersNet ?? 0 : 0]);
+  return sumMoney([day.courses * RAFAL_KOLKO, day.status === "praca_zlecenia" ? day.ordersNet ?? 0 : 0]);
 }
 export function rafalPayrollSettings(monthId: number, month: Pick<DaneMiesiaca, "rafal">): RafalPayrollSettings {
   return month.rafal?.payrollSettings ?? {

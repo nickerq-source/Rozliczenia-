@@ -33,6 +33,8 @@ import {
 } from "../KosztSzczegoly";
 import {
   obliczWynagrodzenie,
+  STAWKA_KOLKA_ZENI,
+  STAWKA_URLOPU,
   obliczWynikMiesiaca,
   czyKosztLeasingu,
   czyTankowanieWliczane,
@@ -46,15 +48,11 @@ import { fuelStatusLabel } from "@/lib/fuel-calculations";
 import { DEFAULT_FUEL_VEHICLE } from "@/lib/recalculate-fuel-chain";
 import { scanReceiptDataUrl } from "@/lib/receipt-scan-client";
 import {
-  getDniMiesiaca,
-  isSobota,
-  isNiedziela,
-  nrDnia,
   nazwaSkrotDnia,
-  getDayOfWeek,
   MIESIACE_ZAKRESU,
   POLSKIE_MIESIACE,
 } from "@/lib/dates";
+import { PayrollCalendar } from "../admin/PayrollCalendar";
 import { NumInput } from "../ui/NumInput";
 import { Card, CardTitle } from "../ui/Card";
 import {
@@ -78,6 +76,7 @@ import { cn } from "@/lib/utils";
 import { useAppBackLayer, useSwipeNavigation } from "@/lib/mobile-navigation";
 
 interface Props {
+  payrollAction?: React.ReactNode;
   section?: WidokKosztow;
   miesiac: MiesiącId;
   dane: DaneMiesiaca;
@@ -92,19 +91,6 @@ interface Props {
   // Id zgłoszenia z deep-linku powiadomienia — podświetlamy dzień
   focusZgloszenieId?: string | null;
   onMoveTankowanie?: (id: string, targetMonth: MiesiącId, patch: Partial<WpisTankowania>) => boolean;
-}
-
-// Separator tygodniowy — linia z wycentrowaną etykietą
-function WeekSeparator({ n }: { n: number }) {
-  return (
-    <div className="flex items-center gap-3 py-1.5" aria-hidden>
-      <span className="flex-1 h-px bg-line" />
-      <span className="text-[11px] font-medium uppercase tracking-wider text-dim">
-        Tydzień {n}
-      </span>
-      <span className="flex-1 h-px bg-line" />
-    </div>
-  );
 }
 
 // Bursztynowa pill z datą wpisu
@@ -938,7 +924,7 @@ function FuelStatsPanel({
 
 
 
-export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia, wszystkieMiesiace, vehicles, saveStatus, focusZgloszenieId, onMoveTankowanie, section }: Props) {
+export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia, wszystkieMiesiace, vehicles, saveStatus, focusZgloszenieId, onMoveTankowanie, section, payrollAction }: Props) {
   const fuelVehicles = useMemo(
     () => (vehicles?.length ? vehicles : [DEFAULT_FUEL_VEHICLE]),
     [vehicles]
@@ -1431,7 +1417,6 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
     }));
   }, [dane.tankowanie, dane.inneKoszty, miesiac, onUpdate, section]);
 
-  const allDays = getDniMiesiaca(miesiac);
   const {
     dniowki,
     wynagrodzenie,
@@ -2010,13 +1995,10 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
   const inneStrona = Math.min(stronaInne, inneTotalStron);
   const inneWidoczne = inneBezLeasingu.slice((inneStrona - 1) * KOSZTY_NA_STRONE, inneStrona * KOSZTY_NA_STRONE);
 
-  // Numer tygodnia rośnie przy każdym poniedziałku (poza pierwszym dniem)
-  let weekNum = 1;
-
   return (
     <div {...swipeHandlers} className="app-swipe-surface space-y-4">
       {!section && <KosztySectionSwitch active={widokKosztow} onChange={changeWidokKosztow} />}
-      {wynikKosztow.rafal.incomplete && <p className="text-sm text-amber-300">Rafał: niepełne dane dni lub rozliczenia. Wynik jest szacunkowy.</p>}
+      {!section && wynikKosztow.rafal.incomplete && <p className="text-sm text-amber-300">Rafał: niepełne dane dni lub rozliczenia. Wynik jest szacunkowy.</p>}
 
       {showPodsumowanie && <Card className="!border-amber-brand/35">
         <div className="mb-4 flex items-start gap-3">
@@ -2413,296 +2395,92 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
       )}
 
       {/* ── PODKATEGORIA: WYPŁATA KIEROWCY ──────────────────────────────── */}
-      {showWyplata && <Card>
-        <CardTitle>Wypłata kierowcy</CardTitle>
-        <p className="mb-3 text-xs text-dim">
-          Dniówki, kółka, zlecenia, premie i dodatki kierowcy.
-        </p>
-
-        {/* Legenda skrótów typów dnia */}
-        <div className="mb-3 flex flex-wrap items-center gap-1.5 text-[11px] text-dim">
-          {TYPY_DNIA.map((t) => (
-            <span key={t.id} className="inline-flex items-center gap-1">
-              <span className={cn("rounded-full border px-1.5 py-0.5 font-bold leading-none", t.chipCls)}>
-                {t.krotki}
-              </span>
-              <span>= {t.label}</span>
-            </span>
-          ))}
-        </div>
-
-        {/* Nagłówek kolumn */}
-        <div className={cn(
-          "hidden gap-2 text-xs font-bold uppercase tracking-wide text-dim mb-2 px-2 sm:grid",
-          miesiac === 6 ? "grid-cols-[1fr_4rem_4rem_6rem]" : "grid-cols-[1fr_4rem_6rem]"
-        )}>
-          <span>Dzień</span>
-          <span className="text-center">Kółka</span>
-          {miesiac === 6 && <span className="text-center">Szkoln.</span>}
-          <span className="text-right">Dniówka</span>
-        </div>
-
-        <div className="space-y-1">
-          {allDays.map((iso, dayIdx) => {
-            const dzien = dane.dni[iso] ?? { data: iso, kolka: 0, szkolenie: 0 };
+      {showWyplata && <>
+        <PayrollCalendar driver="zenia" month={miesiac} action={payrollAction}
+          legend={TYPY_DNIA.map(t => [t.id, t.krotki, t.label] as const)}
+          rates={<>Kółko: <strong>{STAWKA_KOLKA_ZENI} zł</strong> · Urlop: <strong>{STAWKA_URLOPU} zł</strong></>}
+          notice={dane.zamkniety?.locked && <p className="pv-notice">Miesiąc zamknięty. Edycja jest zablokowana.</p>}
+          dayCells={iso => {
+            const dzien = dane.dni[iso];
+            const typ = dzien?.dayType ?? "pracujacy";
+            const meta = typDniaMeta(typ);
             const info = dniowki[iso];
-            const kolka = parseNum(dzien.kolka);
-            const sob = isSobota(iso);
-            const nie = isNiedziela(iso);
-            const aktywna = kolka > 0;
-            const zglDnia = zglPerDay.get(iso);
-            const sporny = zglDnia?.status === "zgloszony";
-            const typDnia = dzien.dayType ?? "pracujacy";
-            const wolny = czyWolny(typDnia);
-            const dzienMaKolka = maKolka(typDnia);
-            const dzienMaZlecenia = maZlecenia(typDnia);
-            const meta = typDniaMeta(typDnia);
-
-            const separator =
-              dayIdx > 0 && getDayOfWeek(iso) === 1 ? <WeekSeparator n={++weekNum} /> : null;
-
-            return (
-              <div key={iso}>
-                {separator}
-                <div
-                  className={cn(
-                    "space-y-3 rounded-lg border border-line/70 bg-surface2/55 p-3 sm:hidden",
-                    sporny && "ring-1 ring-amber-brand",
-                    aktywna && sob && "border-green-500/35",
-                    aktywna && nie && "border-yellow-500/35"
-                  )}
-                  style={
-                    sob && aktywna
-                      ? { background: "var(--sat-bg)" }
-                      : nie && aktywna
-                      ? { background: "var(--sun-bg)" }
-                      : undefined
-                  }
-                >
-                  <div className="grid grid-cols-[minmax(0,1fr)_104px] items-start gap-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className={cn("text-xl font-extrabold tabular-nums", aktywna && (sob || nie) ? "text-white" : "text-ink")}>
-                          {nrDnia(iso)}
-                        </span>
-                        <span className={cn(
-                          "text-sm font-bold",
-                          aktywna && (sob || nie)
-                            ? "text-white/75"
-                            : sob ? "text-green-400" : nie ? "text-yellow-400" : "text-dim"
-                        )}>
-                          {nazwaSkrotDnia(iso)}
-                        </span>
-                      </div>
-                      <select
-                        value={typDnia}
-                        onChange={(e) => setDayType(iso, e.target.value as DayType)}
-                        title="Typ dnia"
-                        className={cn("mt-2 min-h-[44px] w-full min-w-0 rounded-lg border px-2 py-1.5 text-base font-extrabold", meta.chipCls)}
-                      >
-                        {TYPY_DNIA.map((t) => (
-                          <option key={t.id} value={t.id}>{typDnia === t.id ? t.krotki : `${t.krotki} — ${t.label}`}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-white/55">Dniówka</p>
-                      {info?.dniowka ? (
-                        <p className="tabular-nums break-words text-base font-extrabold text-white">
-                          {formatZlCaly(info.dniowka)}
-                        </p>
-                      ) : (
-                        <p className="text-lg font-bold text-dim/50">—</p>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className={cn("grid gap-2", miesiac === 6 ? "grid-cols-2" : "grid-cols-1")}>
-                    <label className="text-[11px] font-bold uppercase tracking-wider text-dim">
-                      Kółka
-                      {wolny ? (
-                        <span className={cn("mt-1 flex min-h-[44px] items-center justify-center rounded-xl border px-3 text-sm font-extrabold", meta.chipCls)}>
-                          {meta.krotki}
-                        </span>
-                      ) : dzienMaKolka ? (
-                        <NumInput
-                          value={dzien.kolka || ""}
-                          onChange={(v) => setKolka(iso, v)}
-                          onFocus={() => startDayEdit(iso, "kolka", dzien.kolka)}
-                          onBlur={(e) => finishDayEdit(iso, "kolka", parseNum(e.currentTarget.value))}
-                          placeholder="0"
-                          className="mt-1 !text-center !text-lg"
-                        />
-                      ) : (
-                        <span className="mt-1 flex min-h-[44px] items-center justify-center rounded-xl border border-line bg-input text-dim/50">
-                          —
-                        </span>
-                      )}
-                    </label>
-
-                    {miesiac === 6 && (
-                      <label className="text-[11px] font-bold uppercase tracking-wider text-dim">
-                        Szkolenie
-                        {dzienMaKolka ? (
-                          <NumInput
-                            value={dzien.szkolenie || ""}
-                            onChange={(v) => setSzkolenie(iso, v)}
-                            onFocus={() => startDayEdit(iso, "szkolenie", dzien.szkolenie)}
-                            onBlur={(e) => finishDayEdit(iso, "szkolenie", parseNum(e.currentTarget.value))}
-                            placeholder="0"
-                            className="mt-1 !text-center !text-lg"
-                          />
-                        ) : (
-                          <span className="mt-1 flex min-h-[44px] items-center justify-center rounded-xl border border-line bg-input text-dim/50">
-                            —
-                          </span>
-                        )}
-                      </label>
-                    )}
-                  </div>
-                </div>
-
-                <div
-                  className={cn(
-                    "hidden gap-2 items-center rounded-xl py-1.5 px-2 sm:grid",
-                    sporny && "ring-1 ring-amber-brand",
-                    miesiac === 6 ? "grid-cols-[1fr_4rem_4rem_6rem]" : "grid-cols-[1fr_4rem_6rem]"
-                  )}
-                  style={
-                    sob && aktywna
-                      ? { background: "var(--sat-bg)" }
-                      : nie && aktywna
-                      ? { background: "var(--sun-bg)" }
-                      : undefined
-                  }
-                >
-                  {/* Data + typ dnia */}
-                  <div className="text-sm tabular-nums flex items-center gap-1.5 flex-wrap">
-                    <span className={cn("font-bold", aktywna && (sob || nie) ? "text-white" : "text-ink")}>
-                      {nrDnia(iso)}
-                    </span>
-                    <span className={cn(
-                      "text-xs",
-                      aktywna && (sob || nie)
-                        ? "text-white/70"
-                        : sob ? "text-green-400" : nie ? "text-yellow-400" : "text-dim"
-                    )}>
-                      {nazwaSkrotDnia(iso)}
-                    </span>
-                    <select
-                      value={typDnia}
-                      onChange={(e) => setDayType(iso, e.target.value as DayType)}
-                      title="Typ dnia"
-                      className={cn("rounded-full border px-1.5 py-0.5 text-[10px] font-bold", meta.chipCls)}
-                    >
-                      {TYPY_DNIA.map((t) => (
-                        <option key={t.id} value={t.id}>{t.krotki}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  {/* Kółka — input dla P/P+Z; chip dla wolnych; „—" dla samego Z */}
-                  {wolny ? (
-                    <span className={cn("flex items-center justify-center rounded-lg border px-1 py-1.5 text-[10px] font-bold !w-16", meta.chipCls)}>
-                      {meta.krotki}
-                    </span>
-                  ) : dzienMaKolka ? (
+            const kolka = dzien?.kolka ?? 0;
+            const hasCourses = maKolka(typ);
+            return {
+              amount: dzien ? info?.dniowka ?? 0 : null, active: (info?.dniowka ?? 0) > 0,
+              marked: zglPerDay.get(iso)?.status === "zgloszony",
+              status: <select aria-label={`Status ${iso}`} title={meta.label} data-status={typ} value={typ}
+                onChange={e => setDayType(iso, e.target.value as DayType)}>
+                {TYPY_DNIA.map(t => <option key={t.id} value={t.id}>{t.id === typ ? t.krotki : `${t.krotki} · ${t.label}`}</option>)}
+              </select>,
+              courses: hasCourses ? <NumInput aria-label={`Kursy ${iso}`} inputMode="numeric" value={kolka}
+                onChange={v => setKolka(iso, v)} onFocus={() => startDayEdit(iso, "kolka", kolka)}
+                onBlur={e => finishDayEdit(iso, "kolka", parseNum(e.currentTarget.value))} /> :
+                <span className="rf-day-off" data-status={typ}>{czyWolny(typ) ? meta.krotki : "—"}</span>,
+              extra: (miesiac === 6 && hasCourses || maZlecenia(typ)) && <>
+                {miesiac === 6 && hasCourses && <label>Szkolenie
+                  <NumInput aria-label={`Szkolenie ${iso}`} step="0.01" value={dzien?.szkolenie ?? 0}
+                    onChange={v => setSzkolenie(iso, v)} onFocus={() => startDayEdit(iso, "szkolenie", dzien?.szkolenie ?? 0)}
+                    onBlur={e => finishDayEdit(iso, "szkolenie", parseNum(e.currentTarget.value))} />
+                </label>}
+                {maZlecenia(typ) && dzien && (() => {
+              const stawka = parseNum(dzien.stawkaZlecenia) || 100;
+              const pokazInna = innaStawka[iso] ?? (stawka !== 50 && stawka !== 100);
+              return (
+                <div className="col-span-full flex flex-wrap items-center gap-1.5 text-[11px] text-dim">
+                  <span className="shrink-0">Zlecenia</span>
+                  <div className="w-12">
                     <NumInput
-                      value={dzien.kolka || ""}
-                      onChange={(v) => setKolka(iso, v)}
-                      onFocus={() => startDayEdit(iso, "kolka", dzien.kolka)}
-                      onBlur={(e) => finishDayEdit(iso, "kolka", parseNum(e.currentTarget.value))}
+                      value={dzien.zlecenia || ""}
+                      onChange={(v) => patchDzien(iso, { zlecenia: v })}
                       placeholder="0"
-                      className="!py-1.5 !px-2 !text-sm !text-center !w-16"
+                      className="!py-1 !px-1.5 !text-xs !text-center"
                     />
-                  ) : (
-                    <span className="flex items-center justify-center text-dim/40 text-sm !w-16" title="tylko zlecenia">—</span>
-                  )}
-
-                  {/* Szkolenie (tylko czerwiec, dni z trasami) */}
-                  {miesiac === 6 && (
-                    dzienMaKolka ? (
-                      <NumInput
-                        value={dzien.szkolenie || ""}
-                        onChange={(v) => setSzkolenie(iso, v)}
-                        onFocus={() => startDayEdit(iso, "szkolenie", dzien.szkolenie)}
-                        onBlur={(e) => finishDayEdit(iso, "szkolenie", parseNum(e.currentTarget.value))}
-                        placeholder="0"
-                        className="!py-1.5 !px-2 !text-sm !text-center !w-16"
-                      />
-                    ) : (
-                      <span className="flex items-center justify-center text-dim/40 text-sm !w-16">—</span>
-                    )
-                  )}
-
-                  {/* Dniówka */}
-                  <div className="text-right text-sm tabular-nums">
-                    {info?.dniowka ? (
-                      <span className={cn("font-bold", aktywna && (sob || nie) ? "text-white" : "text-ink")}>
-                        {formatZlCaly(info.dniowka)}
-                      </span>
-                    ) : (
-                      <span className="text-dim/40">—</span>
-                    )}
                   </div>
-                </div>
-
-                {/* Zlecenia — tylko gdy typ dnia to P+Z lub Z */}
-                {dzienMaZlecenia && (() => {
-                  const stawka = parseNum(dzien.stawkaZlecenia) || 100;
-                  const pokazInna = innaStawka[iso] ?? (stawka !== 50 && stawka !== 100);
-                  return (
-                    <div className="flex items-center gap-1.5 px-2 pb-1 -mt-0.5 text-[11px] text-dim">
-                      <span className="shrink-0">Zlecenia</span>
-                      <div className="w-12">
-                        <NumInput
-                          value={dzien.zlecenia || ""}
-                          onChange={(v) => patchDzien(iso, { zlecenia: v })}
-                          placeholder="0"
-                          className="!py-1 !px-1.5 !text-xs !text-center"
-                        />
-                      </div>
-                      <span>×</span>
-                      <select
-                        value={pokazInna ? "inna" : String(stawka)}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          if (v === "inna") {
-                            setInnaStawka((p) => ({ ...p, [iso]: true }));
-                          } else {
-                            setInnaStawka((p) => ({ ...p, [iso]: false }));
-                            patchDzien(iso, { stawkaZlecenia: Number(v) });
-                          }
-                        }}
-                        className="bg-input border border-line rounded-lg px-1.5 py-1 text-xs text-ink"
-                      >
-                        <option value="50">50 zł</option>
-                        <option value="100">100 zł</option>
-                        <option value="inna">inna</option>
-                      </select>
-                      {pokazInna && (
-                        <div className="w-16">
-                          <NumInput
-                            value={dzien.stawkaZlecenia || ""}
-                            onChange={(v) => patchDzien(iso, { stawkaZlecenia: v })}
-                            placeholder="zł"
-                            className="!py-1 !px-1.5 !text-xs !text-center"
-                          />
-                        </div>
-                      )}
-                      {info && info.kwotaZlecen > 0 && (
-                        <span className="ml-auto text-amber-brand font-semibold tabular-nums">
-                          +{formatZlCaly(info.kwotaZlecen)}
-                        </span>
-                      )}
+                  <span>×</span>
+                  <select
+                    value={pokazInna ? "inna" : String(stawka)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v === "inna") {
+                        setInnaStawka((p) => ({ ...p, [iso]: true }));
+                      } else {
+                        setInnaStawka((p) => ({ ...p, [iso]: false }));
+                        patchDzien(iso, { stawkaZlecenia: Number(v) });
+                      }
+                    }}
+                    className="bg-input border border-line rounded-lg px-1.5 py-1 text-xs text-ink"
+                  >
+                    <option value="50">50 zł</option>
+                    <option value="100">100 zł</option>
+                    <option value="inna">inna</option>
+                  </select>
+                  {pokazInna && (
+                    <div className="w-16">
+                      <NumInput
+                        value={dzien.stawkaZlecenia || ""}
+                        onChange={(v) => patchDzien(iso, { stawkaZlecenia: v })}
+                        placeholder="zł"
+                        className="!py-1 !px-1.5 !text-xs !text-center"
+                      />
                     </div>
-                  );
-                })()}
-              </div>
-            );
-          })}
-        </div>
+                  )}
+                  {info && info.kwotaZlecen > 0 && (
+                    <span className="ml-auto text-amber-brand font-semibold tabular-nums">
+                      +{formatZl(info.kwotaZlecen)}
+                    </span>
+                  )}
+                </div>
+              );
 
+                })()}
+              </>,
+            };
+          }}
+        />
+        <details className="fc-disclosure" open={section ? undefined : true}>
+          <summary>Dodatki i szczegóły naliczenia Żeni</summary>
         {/* Liczniki dni wg typu */}
         {(() => {
           const c = liczDniWgTypu(dane.dni);
@@ -2741,7 +2519,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
           {premia > 0 && (
             <div className="flex justify-between text-sm">
               <span className="text-amber-brand">Premia (≥4 soboty)</span>
-              <span className="tabular-nums text-amber-brand">+ {formatZlCaly(premia)}</span>
+              <span className="tabular-nums text-amber-brand">+ {formatZl(premia)}</span>
             </div>
           )}
           {dodatkiZablokowaneOdLipca && (
@@ -2751,7 +2529,7 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
           )}
           <div className="flex justify-between font-bold pt-2 border-t border-line">
             <span className="text-white">Wynagrodzenie naliczone</span>
-            <span className="tabular-nums text-white text-lg">{formatZlCaly(wynagrodzenie)}</span>
+            <span className="tabular-nums text-white text-lg">{formatZl(wynagrodzenie)}</span>
           </div>
           {potraceniaKierowcy > 0 && (
             <>
@@ -2789,7 +2567,8 @@ export function KosztyTab({ miesiac, dane, onUpdate, token, userName, ustawienia
             </div>
           )}
         </div>
-      </Card>}
+        </details>
+      </>}
 
       {/* ── PODKATEGORIA: TANKOWANIE ────────────────────────────────────── */}
       {showTankowanie && <Card>

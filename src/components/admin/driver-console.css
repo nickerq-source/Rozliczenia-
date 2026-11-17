@@ -1,0 +1,305 @@
+/* Presentation is scoped to the admin's driver directory and driver workspace. */
+.fleet-console {
+  --fc-surface: #1b2225;
+  --fc-line: #394346;
+  --fc-secondary: #b1bdbc;
+  --fc-active: #ffd17a;
+}
+.fleet-console .fc-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px 18px;
+  flex-wrap: wrap;
+  padding: 4px 0 16px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--fc-line);
+}
+.fleet-console .fc-title h1 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 24px;
+  font-family: var(--brand-display);
+  font-weight: 400;
+  line-height: 1.2;
+}
+.fleet-console .fc-count {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fc-secondary);
+  border: 1px solid var(--fc-line);
+  border-radius: 4px;
+  min-width: 24px;
+  padding: 3px;
+  text-align: center;
+}
+.fleet-console .fc-period, .fleet-console .fc-person-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--fc-secondary);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.fleet-console .fc-tile {
+  position: relative;
+  background: var(--fc-surface);
+  border: 1px solid var(--fc-line);
+  border-radius: 8px;
+  text-align: left;
+  overflow-wrap: break-word;
+  transition: border-color 140ms, background-color 140ms;
+}
+.fleet-console .fc-person {
+  --scorch: calc(100% - 14px) 21px;
+  --stock-position: right top;
+  --photo-tilt: -3deg;
+  display: grid;
+  justify-items: center;
+  align-items: center;
+  grid-template-rows: auto 1fr auto;
+  gap: 9px;
+  padding: 44px 12px 14px;
+  min-height: 232px;
+}
+.fleet-console .fc-person:nth-child(even) {
+  --scorch: 12px 45%;
+  --stock-position: left bottom;
+  --stock-size: auto 118%;
+  --photo-tilt: 2deg;
+}
+.fleet-console .fc-person .driver-avatar {
+  z-index: 1; width: 78px; height: 86px; border: 3px solid #eee6d2; border-bottom-width: 6px;
+  border-radius: 1px; transform: rotate(var(--photo-tilt));
+  background: #2a332a; box-shadow: 0 0 0 1px #756954, 1px 3px 3px #35281952;
+}
+.fleet-console .fc-wanted {
+  position: absolute; z-index: 0; top: 12px; justify-self: center; pointer-events: none;
+  border-block: 3px double currentColor; color: #653a2a; opacity: .48;
+  font: 900 23px/.98 Georgia, "Times New Roman", serif; text-align: center;
+  padding: 2px 1px; transform: rotate(-5deg);
+}
+.fleet-console .fc-person:nth-child(even) .fc-wanted { transform: rotate(3deg); }
+.fleet-console .fc-person strong {
+  color: #22312a; font-size: 25px; line-height: 1.1; text-align: center; overflow-wrap: anywhere;
+}
+.fleet-console .fc-person-action {
+  width: 100%;
+  justify-content: space-between;
+  border-top: 3px double #897e66;
+  padding-top: 8px;
+}
+.fleet-console .fc-person .fc-person-action { color: #344239; font-weight: 600; }
+.fleet-console .fc-person-action svg { color: currentColor; flex: none; }
+.fleet-console .fc-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 54px;
+  padding: 10px;
+  font-size: 13px;
+  line-height: 1.3;
+  font-weight: 600;
+}
+.fleet-console .fc-switch .driver-avatar { width: 32px; height: 32px; font-size: 12px; border-radius: 5px; }
+.fleet-console .fc-switch svg { margin-left: auto; flex: none; color: var(--sign-ink); }
+.fleet-console .fc-sections {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  margin-bottom: 20px;
+}
+.fleet-console .fc-tile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  min-height: 72px;
+  font-size: 14px;
+  line-height: 1.35;
+  font-weight: 600;
+}
+.fleet-console .fc-tile svg { flex: none; color: var(--fc-secondary); }
+.fleet-console .fc-tile[aria-current="page"] {
+  border-color: #927640;
+  background: #302b21;
+  color: var(--fc-active);
+  box-shadow: inset 3px 0 var(--fc-active);
+}
+.fleet-console .fc-tile[aria-current="page"] svg { color: currentColor; }
+@media (hover: hover) {
+  .fleet-console .fc-tile:hover { border-color: var(--fc-secondary); }
+}
+.fleet-console .fc-tile:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.fleet-console .fc-ledger { background: var(--fc-surface); padding: 16px; }
+.fleet-console .fc-ledger h2 { font-size: 18px; font-weight: 700; padding-bottom: 8px; }
+.fleet-console .fc-ledger dl > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px 12px;
+  border-bottom: 1px solid var(--fc-line);
+  padding: 10px 0;
+  font-size: 14px;
+}
+.fleet-console .fc-ledger dt { color: var(--fc-secondary); }
+.fleet-console .fc-ledger dd { margin-left: auto; font-weight: 600; font-variant-numeric: tabular-nums; }
+.fleet-console .fc-ledger dl > .fc-total { border-bottom: 0; padding: 14px 0 0; }
+.fleet-console .fc-total dt { color: var(--text); font-weight: 700; }
+.fleet-console .fc-total dd { font-size: 22px; color: var(--fc-active); }
+@media (min-width: 640px) {
+  .fleet-console .fc-sections { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .fleet-console .fc-person { min-height: 278px; padding: 54px 22px 18px; }
+  .fleet-console .fc-person .driver-avatar { width: 101px; height: 110px; }
+  .fleet-console .fc-wanted { font-size: 35px; }
+  .fleet-console .fc-person strong { font-size: 28px; }
+}
+@media (max-width: 639px) {
+  .fleet-console .fc-sections > .fc-tile:last-child:nth-child(odd) { grid-column: 1 / -1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fleet-console :is(.fc-person,.fc-switch,.fc-tile) { transition: none; }
+}
+
+.fleet-console .fc-wordmark { display: block; width: 124px; height: auto; }
+.fleet-console .fc-title .fc-directory-title,
+.fleet-console .fc-person strong { font-family: "Pirata One", Georgia, serif; font-weight: 400; }
+.fleet-console .fc-directory-title .fc-count { font-family: var(--font-sans), sans-serif; }
+.fleet-console .fc-sign {
+  --enamel: #12382f;
+  --pinstripe: #74998b;
+  --silver: #d6e4dd;
+  --sign-ink: var(--silver);
+  --flourish: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 84 12'%3E%3Cpath fill='none' stroke='%239eb4a9' d='M0 6h20l5-3h8l6 3-6 3h-8l-5-3m64 0H64l-5-3h-8l-6 3 6 3h8l5-3'/%3E%3Cpath fill='%23d6e4dd' d='m42 2 4 4-4 4-4-4z'/%3E%3C/svg%3E");
+  --edge: polygon(6px 0, 22% 0, calc(22% + 4px) 3px, calc(22% + 12px) 0, calc(100% - 9px) 0, 100% 5px, 100% 57%, calc(100% - 4px) 61%, 100% 65%, 100% calc(100% - 6px), calc(100% - 5px) 100%, 70% 100%, calc(70% - 9px) calc(100% - 3px), calc(70% - 14px) 100%, 4px 100%, 0 calc(100% - 8px), 0 7px);
+  isolation: isolate; position: relative;
+  border: 0; background: transparent; color: var(--silver); text-align: left;
+}
+.fleet-console .fc-sign:nth-child(even) {
+  --edge: polygon(2px 3px, 12px 0, 66% 0, calc(66% + 7px) 3px, calc(66% + 15px) 0, calc(100% - 4px) 0, 100% 9px, 100% calc(100% - 6px), calc(100% - 9px) 100%, 25% 100%, calc(25% - 4px) calc(100% - 3px), calc(25% - 12px) 100%, 7px 100%, 0 calc(100% - 3px), 0 53%, 3px 48%, 0 44%);
+}
+/* Only the enamel and its rim are chipped; the button and focus ring stay intact. */
+.fleet-console .fc-sign::before, .fleet-console .fc-sign::after {
+  content: ""; position: absolute; pointer-events: none; clip-path: var(--edge);
+}
+.fleet-console .fc-sign::before { inset: 0; z-index: -2; background: var(--pinstripe); }
+.fleet-console .fc-sign::after {
+  inset: 1.5px; z-index: -1; background-color: var(--enamel);
+  background-image: var(--flourish), var(--flourish),
+    linear-gradient(var(--pinstripe), var(--pinstripe)), linear-gradient(var(--pinstripe), var(--pinstripe));
+  background-position: center top, center bottom, center 5px, center calc(100% - 5px);
+  background-size: 68px 11px, 68px 11px, calc(100% - 22px) 1px, calc(100% - 22px) 1px;
+  background-repeat: no-repeat;
+}
+.fleet-console .fc-switch::after { background-image: none; }
+/* Separate paper silhouettes; fixed-size tears don't grow into the lettering on wide cards. */
+.fleet-console .fc-sign.fc-person {
+  --pinstripe: #b7a98b;
+  --edge: polygon(
+    36px 0, 40% 0, calc(40% + 4px) 2px, calc(40% + 11px) 0, calc(100% - 21px) 0,
+    calc(100% - 17px) 5px, calc(100% - 13px) 4px, calc(100% - 14px) 8px,
+    calc(100% - 8px) 10px, calc(100% - 7px) 14px, calc(100% - 3px) 13px, 100% 19px,
+    100% 62%, calc(100% - 4px) calc(62% + 4px), 100% calc(62% + 8px), 100% calc(100% - 32px),
+    calc(100% - 7px) calc(100% - 27px), calc(100% - 5px) calc(100% - 23px),
+    calc(100% - 12px) calc(100% - 24px), calc(100% - 13px) calc(100% - 17px),
+    calc(100% - 20px) calc(100% - 13px), calc(100% - 19px) calc(100% - 9px),
+    calc(100% - 26px) calc(100% - 9px), calc(100% - 34px) 100%, 22px 100%,
+    16px calc(100% - 6px), 12px calc(100% - 5px), 12px calc(100% - 10px),
+    6px calc(100% - 9px), 5px calc(100% - 14px), 0 calc(100% - 18px),
+    0 33px, 5px 27px, 9px 28px, 8px 22px, 15px 18px, 13px 14px,
+    21px 15px, 22px 9px, 28px 8px, 27px 5px, 33px 4px
+  );
+}
+.fleet-console .fc-person:nth-child(even) {
+  --edge: polygon(
+    23px 0, 69% 0, calc(69% + 5px) 2px, calc(69% + 9px) 0, calc(100% - 38px) 0,
+    calc(100% - 33px) 6px, calc(100% - 28px) 4px, calc(100% - 30px) 9px,
+    calc(100% - 21px) 11px, calc(100% - 22px) 16px, calc(100% - 15px) 15px,
+    calc(100% - 12px) 22px, calc(100% - 7px) 21px, calc(100% - 8px) 26px, 100% 31px,
+    100% calc(100% - 22px), calc(100% - 6px) calc(100% - 18px),
+    calc(100% - 5px) calc(100% - 13px), calc(100% - 11px) calc(100% - 14px),
+    calc(100% - 13px) calc(100% - 7px), calc(100% - 19px) calc(100% - 6px), calc(100% - 23px) 100%,
+    37px 100%, 31px calc(100% - 4px), 26px calc(100% - 3px), 27px calc(100% - 8px),
+    18px calc(100% - 8px), 19px calc(100% - 14px), 12px calc(100% - 13px),
+    9px calc(100% - 20px), 5px calc(100% - 19px), 0 calc(100% - 26px),
+    0 57%, 3px calc(57% - 5px), 0 calc(57% - 8px), 0 21px,
+    6px 17px, 5px 13px, 12px 13px, 10px 8px, 17px 7px, 17px 3px
+  );
+}
+/* Punch the hole in the paper layers only. Text, focus outline and hit area remain intact. */
+.fleet-console .fc-person::before, .fleet-console .fc-person::after {
+  mask-image: radial-gradient(ellipse 5px 4px at var(--scorch), transparent 75%, black 100%);
+}
+.fleet-console .fc-person::after {
+  background-color: #dfd3b8;
+  background-image:
+    radial-gradient(ellipse 12px 10px at var(--scorch), #2d2018 38%, #68472d 49%, #ab7747 58%, #a3754733 80%, transparent),
+    url("/art/dossier-paper.webp");
+  background-size: 100% 100%, var(--stock-size, cover);
+  background-position: center, var(--stock-position);
+  box-shadow: inset 0 0 20px #78552b36;
+}
+@media (forced-colors: active) {
+  .fleet-console .fc-person { border: 1px solid ButtonText; background: Canvas; }
+  .fleet-console .fc-person strong, .fleet-console .fc-person .fc-person-action { color: ButtonText; }
+  .fleet-console .fc-person::before, .fleet-console .fc-person::after, .fleet-console .fc-wanted { display: none; }
+}
+.fleet-console .fc-entry {
+  display: grid; grid-template-columns: 40px minmax(0, 1fr) 18px; align-items: center;
+  gap: 8px; min-height: 114px; padding: 22px 18px; text-align: left;
+}
+.fleet-console .fc-entry-icon {
+  display: grid; place-items: center; width: 40px; height: 40px;
+  border: 3px double var(--pinstripe); border-radius: 50%; color: var(--silver);
+}
+.fleet-console .fc-entry-icon svg { width: 21px; height: 21px; }
+.fleet-console .fc-entry strong {
+  font: 400 36px/1.15 "Pirata One", Georgia, serif;
+  letter-spacing: 0; overflow-wrap: break-word; color: #f0f3ed;
+  text-shadow: 0 1px #6f9285, 1px 2px #0b241d, 2px 3px #618475;
+}
+.fleet-console .fc-sign:focus-visible { outline: 2px solid var(--amber); outline-offset: 3px; }
+.fleet-console .fc-sign:is(:focus-visible,:active,[aria-current="page"]) {
+  --pinstripe: var(--amber); --sign-ink: var(--amber); --enamel: #293228;
+}
+.fleet-console .fc-switch[aria-current="page"] { color: var(--sign-ink); }
+@media (hover: hover) {
+  .fleet-console .fc-sign:hover { --pinstripe: var(--amber); --sign-ink: var(--amber); --enamel: #293228; }
+}
+@media (prefers-reduced-motion: no-preference) and (hover: hover) {
+  .fleet-console .fc-entry > svg { transition: translate 160ms ease-out; }
+  .fleet-console .fc-entry:is(:hover,:focus-visible) > svg { translate: 3px 0; }
+}
+.fleet-console .fc-company-layout { display: grid; gap: 18px; }
+.fleet-console .fc-company-nav { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; align-self: start; }
+.fleet-console .fc-company-nav .fc-tile {
+  min-height: 58px; padding: 7px 3px; flex-direction: column;
+  justify-content: center; text-align: center; gap: 3px; font-size: 13px;
+}
+.fleet-console .fc-company-nav .fc-tile[aria-current="page"] { box-shadow: inset 0 -3px var(--fc-active); }
+@media (min-width: 1024px) {
+  .fleet-console .fc-company-layout { grid-template-columns: 184px minmax(0, 1fr); gap: 20px; }
+  .fleet-console .fc-company-nav { position: sticky; top: 148px; grid-template-columns: 1fr; }
+  .fleet-console .fc-company-nav .fc-tile { flex-direction: row; justify-content: start; gap: 12px; padding: 10px 14px; min-height: 44px; font-size: 14px; }
+  .fleet-console .fc-company-nav .fc-tile[aria-current="page"] { box-shadow: inset 3px 0 var(--fc-active); }
+}
+.fleet-console .fc-disclosure { margin: 16px 0; padding: 0 14px; background: var(--fc-surface); border: 1px solid var(--fc-line); border-radius: 8px; }
+.fleet-console .fc-disclosure summary { cursor: pointer; padding: 13px 0; font-size: 14px; font-weight: 600; }
+.fleet-console .fc-disclosure[open] { padding-bottom: 12px; }
+.fleet-console .fc-history ul { max-height: 320px; overflow: auto; }
+.fleet-console .fc-history li { border-top: 1px solid var(--fc-line); padding: 10px 0; overflow-wrap: anywhere; }
+.fleet-console .fc-history :is(p,li) { font-size: 14px; }
+.fleet-console .fc-history small { display: block; color: var(--fc-secondary); }
+.fleet-console .fc-history button { color: var(--fc-active); min-height: 44px; text-decoration: underline; }
+.fleet-console .fc-closeout h2 { margin: 16px 0 8px; font-size: 17px; font-weight: 700; }
+.fleet-console .fc-savebar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; border-top: 1px solid var(--fc-line); padding-top: 14px; margin-top: 16px; }
+.fleet-console .fc-savebar [role="status"], .fleet-console .fc-save-actions, .fleet-console button.fc-save-command { display: inline-flex; align-items: center; gap: 8px; }
+.fleet-console .fc-savebar [role="status"] { max-width: 100%; font-size: 13px; color: var(--fc-secondary); }
+.fleet-console .fc-savebar [data-state="saved"] { color: #8de4b0; }
+.fleet-console .fc-savebar [data-state="dirty"] { color: var(--fc-active); }
+.fleet-console .fc-savebar :is([data-state="error"],[data-state="conflict"]) { color: #ffaaa5; }
+.fleet-console .fc-save-actions { margin-left: auto; }
+.fleet-console button.fc-save-command { justify-content: center; min-height: 44px; padding: 8px 14px; background: #f5ad32; color: #201909; border-radius: 6px; font-weight: 700; font-size: 14px; }
+.fleet-console button.fc-save-command:disabled { background: #273033; color: #aebaba; cursor: default; opacity: 1; }

@@ -1,8 +1,13 @@
 "use client";
 
 import { DRIVER_NAMES, switchAdminDriver, type AdminLocation, type DriverId } from "@/lib/admin-navigation";
+import type { ReactNode } from "react";
 import { TabSwitch } from "../TabSwitch";
-import { IconChartBar, IconUsers, IconChevronDown } from "../ui/icons";
+import { IconCalendar, IconChartBar, IconUsers, IconChevronDown, IconCheck } from "../ui/icons";
+import { POLSKIE_MIESIACE, ROK } from "@/lib/dates";
+import "./driver-console.css";
+import { DriverAvatar } from "./DriverAvatar";
+import { PapiTransWordmark } from "./PapiTransWordmark";
 
 type Props = { location: AdminLocation; onChange: (location: AdminLocation) => void };
 export function AdminNavigation({ location, onChange }: Props) {
@@ -15,25 +20,46 @@ export function AdminNavigation({ location, onChange }: Props) {
         onClick={() => onChange({ ...location, area, driver: undefined })}
         className={`flex-1 min-h-[44px] rounded-lg border px-2 text-sm font-bold ${location.area === area ? 'border-amber-brand text-amber-brand bg-amber-brand/10' : 'border-line text-dim'}`}>{label}</button>)}
     </nav>
-    {location.area === "firma" && <TabSwitch showHistoria active={location.tab} onChange={tab => onChange({ ...location, tab })} />}
   </>;
+}
+
+export function CompanyFrame({ location, onChange, children, enabled }: Props & { children: ReactNode; enabled: boolean }) {
+  if (!enabled) return <>{children}</>;
+  return <section aria-label="Panel firmy">
+    <div className="fc-title"><h1>Menu główne</h1><DriverPeriod month={location.month} /></div>
+    <div className="fc-company-layout">
+      <TabSwitch showHistoria tiles active={location.tab} onChange={tab => onChange({ ...location, tab })} />
+      <div className="min-w-0 space-y-4">{children}</div>
+    </div>
+  </section>;
 }
 
 export function AdminChoices({ location, onChange }: Props) {
   const root = location.area === "start";
   return <section className="py-4" aria-label={root ? "Wybierz dział" : "Wybierz kierowcę"}>
-    <h1 className="mb-5 text-xl font-bold">{root ? "PapiTrans" : "Kierowcy"}</h1>
+    {root ? <div className="fc-title"><h1><PapiTransWordmark /></h1><DriverPeriod month={location.month} /></div> : <div className="fc-title">
+      <h1 className="fc-directory-title">Kierowcy <span className="fc-count">{Object.keys(DRIVER_NAMES).length}</span></h1>
+      <DriverPeriod month={location.month} />
+    </div>}
     <div className={`grid gap-3 ${root ? 'sm:grid-cols-2' : 'grid-cols-2'}`}>
       {root ? <>
-        <button className="flex min-h-[132px] items-center gap-4 rounded-lg border border-amber-brand/60 bg-surface px-5 py-6 text-left text-xl font-bold" onClick={() => onChange({ ...location, area: "firma", tab: "podsumowanie" })}><IconChartBar size={30} className="shrink-0 text-amber-brand" />Menu główne</button>
-        <button className="flex min-h-[132px] items-center gap-4 rounded-lg border border-green-500/50 bg-surface px-5 py-6 text-left text-xl font-bold" onClick={() => onChange({ ...location, area: "kierowcy", driver: undefined })}><IconUsers size={30} className="shrink-0 text-green-300" />Kierowcy</button>
+        {([["firma", "Menu główne", IconChartBar], ["kierowcy", "Kierowcy", IconUsers]] as const).map(([area, label, Icon]) =>
+          <button key={area} type="button" data-area={area} className="fc-sign fc-entry" onClick={() => onChange({ ...location, area, driver: undefined, ...(area === "firma" ? { tab: "podsumowanie" as const } : {}) })}>
+            <span className="fc-entry-icon"><Icon size={25} aria-hidden="true" /></span><strong>{label}</strong><IconChevronDown size={18} className="-rotate-90" aria-hidden="true" />
+          </button>)}
       </> : (Object.entries(DRIVER_NAMES) as ["zenia" | "rafal", string][]).map(([driver, name]) =>
-        <button key={driver} className="group flex min-h-[144px] min-w-0 flex-col items-start justify-between gap-4 rounded-lg border border-line bg-surface px-4 py-5 text-left font-bold transition-colors hover:border-amber-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-brand" onClick={() => onChange({ ...location, driver, view: "koszty" })}>
-          <IconUsers size={24} aria-hidden="true" className={`shrink-0 ${driver === 'rafal' ? 'text-green-300' : 'text-amber-brand'}`} />
-          <span className="text-base leading-6 break-words">{name}</span>
+        <button key={driver} type="button" className="fc-sign fc-person" data-driver={driver} aria-label={name} onClick={() => onChange({ ...location, driver, view: "koszty" })}>
+          <span aria-hidden="true" className="fc-wanted">WANTED</span>
+          <DriverAvatar driver={driver} />
+          <strong>{name}</strong>
+          <span className="fc-person-action">Otwórz profil <IconChevronDown size={16} className="-rotate-90" aria-hidden="true" /></span>
         </button>)}
     </div>
   </section>;
+}
+
+export function DriverPeriod({ month }: { month: AdminLocation["month"] }) {
+  return <time className="fc-period" dateTime={`${ROK}-${String(month).padStart(2, "0")}`}><IconCalendar size={15} aria-hidden="true" />{POLSKIE_MIESIACE[month]} {ROK}</time>;
 }
 
 export function DriverSwitcher({ location, onChange }: Props) {
@@ -43,8 +69,8 @@ export function DriverSwitcher({ location, onChange }: Props) {
       {(Object.entries(DRIVER_NAMES) as [DriverId, string][]).map(([driver, name]) => <button
         key={driver} type="button" aria-current={location.driver === driver ? "page" : undefined}
         onClick={() => { if (location.driver !== driver) onChange(switchAdminDriver(location, driver)); }}
-        className={`flex min-h-[64px] items-center gap-2 rounded-lg border px-3 py-3 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-brand ${location.driver === driver ? 'border-amber-brand bg-surface text-amber-brand' : 'border-line bg-surface text-dim hover:border-dim hover:text-ink'}`}
-      ><IconUsers size={18} className="shrink-0" /><span className="text-sm font-bold leading-5">{name}</span></button>)}
+        className="fc-sign fc-switch" data-driver={driver}
+      ><DriverAvatar driver={driver} /><span>{name}</span>{location.driver === driver && <IconCheck size={14} aria-hidden="true" />}</button>)}
     </div>
   </nav>;
 }

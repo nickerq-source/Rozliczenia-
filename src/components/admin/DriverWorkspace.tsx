@@ -12,6 +12,8 @@ import { KosztyTab } from "../tabs/KosztyTab";
 import { PreviewDriver } from "../admin-preview/PreviewDriver";
 import { Payroll } from "../admin-preview/FleetPanel";
 import { RafalWorkCalendar } from "./RafalWorkCalendar";
+import { PayrollCloseout, PayrollLine, SaveDaysButton } from "./PayrollCloseout";
+import { DriverPeriod } from "./AdminNavigation";
 import { PodsumowanieTab } from "../tabs/PodsumowanieTab";
 import { logChange } from "@/lib/audit";
 import { IconCalendar, IconCar, IconChartBar, IconGasStation, IconMoneybag, IconNotes, IconPaperclip } from "../ui/icons";
@@ -28,11 +30,12 @@ type Props = {
   updateMonth: (updater: (month: DaneMiesiaca) => DaneMiesiaca) => void;
   updateWorkspace: (updater: (data: WorkspaceData) => WorkspaceData) => void;
   save: (command: FleetCommand) => Promise<boolean>;
+  savePending: () => void;
   moveFuel: (id: string, target: MiesiącId, patch: Partial<WpisTankowania>) => boolean;
   focus?: string | null;
   onCompany: () => void;
 };
-export function DriverWorkspace({ data, month, driver, view, onView, token, userName, status, busy, updateMonth, updateWorkspace, save, moveFuel, focus, onCompany }: Props) {
+export function DriverWorkspace({ data, month, driver, view, onView, token, userName, status, busy, updateMonth, updateWorkspace, save, savePending, moveFuel, focus, onCompany }: Props) {
   const all = data.miesiace[month] ?? domyslneDaneMiesiaca(month);
   const settings = getUstawienia(data);
   const vehicles = driverVehicleHistory(data, driver);
@@ -43,25 +46,26 @@ export function DriverWorkspace({ data, month, driver, view, onView, token, user
   const result = obliczWynikMiesiaca(month, driverMonth(all, driver, data.vehicles), settings);
   const salary = driver === "rafal" ? result.rafal.payout : result.wynagrodzenieDoWyplaty;
   const charges = driver === "rafal" ? result.rafal.charges : result.obciazeniaPracownika;
-  const row = (label: string, value: number) => <div className="flex justify-between gap-4 border-b border-line py-3 text-sm"><span className="text-dim">{label}</span><strong className="shrink-0 tabular-nums">{formatZl(value)}</strong></div>;
+  const saveDisabled = busy || !!all.zamkniety?.locked || (status !== "saving" && status !== "error");
+  const row = (label: string, value: number, total = false) => <div className={total ? "fc-total" : undefined}><dt>{label}</dt><dd>{formatZl(value)}</dd></div>;
   return <section aria-label={`Profil: ${DRIVER_NAMES[driver]}`}>
-    <h1 className="mb-4 text-xl font-bold">{DRIVER_NAMES[driver]}</h1>
-    <nav aria-label="Działy kierowcy" className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-3">
+    <div className="fc-title"><h1>{DRIVER_NAMES[driver]}</h1><DriverPeriod month={month} /></div>
+    <nav aria-label="Działy kierowcy" className="fc-sections">
       {DRIVER_VIEWS.filter(([id]) => driver === "rafal" || id !== "umowa").map(([id, label]) => {
         const Icon = sectionIcons[id];
         return <button key={id} type="button" aria-current={view === id ? "page" : undefined} onClick={() => onView(id)}
-          className={`flex min-h-[72px] min-w-0 items-center gap-2 rounded-lg border px-3 py-3 text-left text-xs font-bold leading-5 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-brand ${view === id ? 'border-amber-brand text-amber-brand bg-surface2' : 'border-line text-ink bg-surface hover:border-dim'}`}>
-          <Icon size={20} aria-hidden="true" className={`shrink-0 ${view === id ? 'text-amber-brand' : 'text-dim'}`} />
+          className="fc-tile">
+          <Icon size={19} aria-hidden="true" />
           <span className="min-w-0 break-words">{label}</span>
         </button>;
       })}
     </nav>
     <fieldset disabled={busy || !!all.zamkniety?.locked}>
-    {view === "koszty" && <div className="bg-surface px-4 py-2">
-      <h2 className="py-3 text-base font-bold">Koszty kierowcy</h2>
+    {view === "koszty" && <div className="fc-ledger">
+      <h2>Koszty kierowcy</h2><dl>
       {row("Wypłata kierowcy", salary)}{row("Podatek i składki pracownika", charges)}
       {row("Paliwo", result.paliwo)}{row("Samochód i działalność", result.inne)}{row("Leasing", result.leasing)}
-      {row("Razem koszt kierowcy", salary + charges + result.paliwo + result.inne + result.leasing)}
+      {row("Razem koszt kierowcy", salary + charges + result.paliwo + result.inne + result.leasing, true)}</dl>
     </div>}
     {(view === "samochod" || view === "tankowanie" || view === "statystyki") && <>
       <div className="mb-4 border-b border-line pb-4">
@@ -81,10 +85,26 @@ export function DriverWorkspace({ data, month, driver, view, onView, token, user
       key={`${driver}-${month}-${view}-${vehicle?.id}`} section={view === "wyplata" ? "wyplata" : view === "samochod" ? "samochod" : view === "statystyki" ? "statystyki" : "tankowanie"}
       miesiac={month} dane={view === "statystyki" ? months[month] ?? scoped : scoped} ustawienia={settings} token={token} userName={userName} saveStatus={status}
       wszystkieMiesiace={months} vehicles={vehicle ? [vehicle] : []} focusZgloszenieId={focus}
-      onUpdate={updater => updateMonth(prev => updateDriverMonth(prev, driver, data.vehicles, updater, vehicle?.id))}
+      payrollAction={view === "wyplata" ? <SaveDaysButton disabled={saveDisabled} onSave={savePending} /> : undefined}
+      onUpdate={view === "wyplata" ? updateMonth : updater => updateMonth(prev => updateDriverMonth(prev, driver, data.vehicles, updater, vehicle?.id))}
       onMoveTankowanie={moveFuel}
     />}
-    {view === "wyplata" && driver === "zenia" && <div className="mt-4"><PodsumowanieTab scope="payroll" miesiac={month} dane={all} ustawienia={settings} token={token} userName={userName} isAdmin onUpdate={updateMonth} /></div>}
+    {view === "wyplata" && driver === "zenia" && <>
+      <details className="fc-disclosure"><summary>Rozliczenie wypłaty, potrącenia i PDF</summary>
+        <PodsumowanieTab scope="payroll" miesiac={month} dane={all} ustawienia={settings} token={token} userName={userName} isAdmin onUpdate={updateMonth} />
+      </details>
+      <div className="admin-preview driver-embedded">
+        <PayrollCloseout person="Żeni" month={month} state={all.zamkniety?.locked ? "locked" : status} onSave={savePending}
+          disabled={saveDisabled}>
+          <PayrollLine label="Zarobione z dni i kursów" value={result.sumaDniowek} />
+          <PayrollLine label="Premia" value={result.premia} />
+          <PayrollLine label="Potrącenia" value={result.potraceniaKierowcy} />
+          <PayrollLine label="Razem do wypłaty" value={salary} total />
+          <PayrollLine label="Podatek i składki pracownika" value={charges} />
+          <PayrollLine label="Łączny koszt z podatkiem i składkami" value={salary + charges} total />
+        </PayrollCloseout>
+      </div>
+    </>}
     {(view === "faktury" || view === "umowa" && driver === "rafal") && <div className="admin-preview driver-embedded">
       {view === "umowa" ? <Payroll month={month} dane={all} save={save} busy={busy} /> : <PreviewDriver embedded
         key={`${driver}-${month}-${view}`} driver={driver} part={view === "faktury" ? "faktury" : "dni"} onPart={() => {}}
@@ -93,7 +113,7 @@ export function DriverWorkspace({ data, month, driver, view, onView, token, user
       />}
     </div>}
     </fieldset>
-    {view === "wyplata" && driver === "rafal" && <div className="admin-preview driver-embedded"><RafalWorkCalendar key={`${token}-${month}`} month={month} dane={all} token={token} save={save} busy={busy} /></div>}
+    {view === "wyplata" && driver === "rafal" && <RafalWorkCalendar key={`${token}-${month}`} month={month} dane={all} token={token} save={save} busy={busy} status={status} />}
   </section>;
 }
 

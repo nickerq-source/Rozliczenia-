@@ -3,6 +3,7 @@
 // Zakładki w headerze — aktywna ma dolną linię bursztynową 2px
 
 import { cn } from "@/lib/utils";
+import { IconAdjustments, IconBell, IconChartBar, IconMoneybag, IconNotes, IconReceipt, IconRoad, IconTrendingUp, IconTruck } from "./ui/icons";
 
 export type TabName =
   | "podsumowanie"
@@ -28,6 +29,8 @@ const TABS: { id: TabName; label: string; short: string }[] = [
 ];
 
 const TYLKO_ADMIN: TabName[] = ["zlecenia", "podatki", "wiadomosci", "legenda", "ustawienia"];
+const icons = { podsumowanie: IconChartBar, zarobek: IconTrendingUp, koszty: IconMoneybag, zlecenia: IconTruck, raport: IconNotes,
+  podatki: IconReceipt, wiadomosci: IconBell, legenda: IconRoad, ustawienia: IconAdjustments } satisfies Record<TabName, typeof IconChartBar>;
 
 interface TabSwitchProps {
   active: TabName;
@@ -35,10 +38,16 @@ interface TabSwitchProps {
   // Wiadomości, Legenda i Ustawienia tylko dla admina
   showHistoria?: boolean;
   className?: string;
+  tiles?: boolean;
 }
 
-export function TabSwitch({ active, onChange, showHistoria = false, className }: TabSwitchProps) {
+export function TabSwitch({ active, onChange, showHistoria = false, className, tiles = false }: TabSwitchProps) {
   const tabs = TABS.filter((t) => !TYLKO_ADMIN.includes(t.id) || showHistoria);
+  if (tiles) return <nav aria-label="Działy firmy" className="fc-company-nav">{tabs.map(tab => {
+    const Icon = icons[tab.id];
+    return <button key={tab.id} type="button" className="fc-tile" aria-current={active === tab.id ? "page" : undefined}
+      onClick={() => onChange(tab.id)}><Icon size={18} aria-hidden="true" /><span>{tab.label}</span></button>;
+  })}</nav>;
   return (
     <nav aria-label="Działy firmy" className={cn("flex w-full flex-wrap gap-1", className)}>
       {tabs.map((tab) => (

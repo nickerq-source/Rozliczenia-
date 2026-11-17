@@ -27,7 +27,8 @@ import { getWeeksOfMonth, POLSKIE_MIESIACE, MIESIACE_ZAKRESU, getDefaultMonth } 
 import { useAppBackLayer, useSwipeNavigation } from "@/lib/mobile-navigation";
 import { getInvoiceWeekIndex } from "@/lib/invoice-weeks";
 import { adminSearch, readAdminLocation, type AdminLocation } from "@/lib/admin-navigation";
-import { AdminChoices, AdminNavigation, DriverSwitcher } from "./admin/AdminNavigation";
+import { AdminChoices, AdminNavigation, CompanyFrame, DriverSwitcher } from "./admin/AdminNavigation";
+import { DriverHistory } from "./admin/DriverHistory";
 import { DriverWorkspace } from "./admin/DriverWorkspace";
 import { CompanyCosts } from "./admin/CompanyCosts";
 
@@ -70,83 +71,6 @@ function LoadingSkeleton() {
         <div className="skeleton h-24 !rounded-2xl" />
         <div className="skeleton h-24 !rounded-2xl" />
       </div>
-    </div>
-  );
-}
-
-function FooterGraphic() {
-  return (
-    <div className="mt-10 mb-6 select-none pointer-events-none" aria-hidden>
-      <svg viewBox="0 0 480 90" xmlns="http://www.w3.org/2000/svg" className="w-full opacity-20">
-        {/* Droga */}
-        <rect x="0" y="62" width="480" height="6" rx="3" fill="#52525b" />
-        {/* Przerywana linia środkowa */}
-        <rect x="20"  y="64" width="30" height="2" rx="1" fill="#a1a1aa" />
-        <rect x="80"  y="64" width="30" height="2" rx="1" fill="#a1a1aa" />
-        <rect x="140" y="64" width="30" height="2" rx="1" fill="#a1a1aa" />
-        <rect x="200" y="64" width="30" height="2" rx="1" fill="#a1a1aa" />
-        <rect x="260" y="64" width="30" height="2" rx="1" fill="#a1a1aa" />
-        <rect x="320" y="64" width="30" height="2" rx="1" fill="#a1a1aa" />
-        <rect x="380" y="64" width="30" height="2" rx="1" fill="#a1a1aa" />
-        <rect x="440" y="64" width="30" height="2" rx="1" fill="#a1a1aa" />
-
-        {/* Ciężarówka — kabina */}
-        <rect x="60" y="36" width="28" height="26" rx="4" fill="#f5a524" />
-        {/* Szyba */}
-        <rect x="63" y="39" width="22" height="12" rx="2" fill="#1c1917" />
-        {/* Reflektor */}
-        <rect x="84" y="56" width="6" height="4" rx="1" fill="#fde68a" />
-        {/* Naczepa */}
-        <rect x="88" y="40" width="80" height="22" rx="3" fill="#3f3f46" />
-        {/* Koła kabiny */}
-        <circle cx="72"  cy="65" r="5" fill="#27272a" />
-        <circle cx="72"  cy="65" r="2" fill="#52525b" />
-        {/* Koła naczepy */}
-        <circle cx="102" cy="65" r="5" fill="#27272a" />
-        <circle cx="102" cy="65" r="2" fill="#52525b" />
-        <circle cx="118" cy="65" r="5" fill="#27272a" />
-        <circle cx="118" cy="65" r="2" fill="#52525b" />
-        <circle cx="156" cy="65" r="5" fill="#27272a" />
-        <circle cx="156" cy="65" r="2" fill="#52525b" />
-
-        {/* Pakiety na naczepie */}
-        <rect x="100" y="43" width="16" height="12" rx="2" fill="#f5a524" opacity="0.4" />
-        <rect x="120" y="44" width="20" height="11" rx="2" fill="#f5a524" opacity="0.3" />
-        <rect x="143" y="45" width="14" height="10" rx="2" fill="#f5a524" opacity="0.35" />
-
-        {/* Budynek / magazyn po lewej */}
-        <rect x="0" y="30" width="44" height="32" rx="2" fill="#3f3f46" />
-        <rect x="0" y="24" width="44" height="8"  rx="2" fill="#52525b" />
-        <rect x="6" y="38" width="10" height="14" rx="1" fill="#1c1917" />
-        <rect x="20" y="38" width="10" height="14" rx="1" fill="#1c1917" />
-        <rect x="34" y="40" width="8" height="12"  rx="1" fill="#f5a524" opacity="0.3" />
-
-        {/* Drzewa po prawej */}
-        <rect x="290" y="42" width="4"  height="20" rx="1" fill="#3f3f46" />
-        <ellipse cx="292" cy="38" rx="10" ry="9" fill="#3f3f46" />
-        <rect x="320" y="46" width="4"  height="16" rx="1" fill="#3f3f46" />
-        <ellipse cx="322" cy="42" rx="8"  ry="7" fill="#3f3f46" />
-
-        {/* Budynek po prawej */}
-        <rect x="370" y="26" width="50" height="36" rx="2" fill="#3f3f46" />
-        <rect x="370" y="20" width="50" height="8"  rx="2" fill="#52525b" />
-        <rect x="376" y="34" width="10" height="10" rx="1" fill="#1c1917" />
-        <rect x="390" y="34" width="10" height="10" rx="1" fill="#f5a524" opacity="0.25" />
-        <rect x="404" y="34" width="10" height="10" rx="1" fill="#1c1917" />
-        <rect x="384" y="46" width="12" height="16" rx="1" fill="#1c1917" />
-
-        {/* Chmurki */}
-        <ellipse cx="240" cy="12" rx="28" ry="8"  fill="#3f3f46" />
-        <ellipse cx="218" cy="15" rx="16" ry="6"  fill="#3f3f46" />
-        <ellipse cx="262" cy="15" rx="16" ry="6"  fill="#3f3f46" />
-        <ellipse cx="350" cy="8"  rx="20" ry="6"  fill="#3f3f46" />
-        <ellipse cx="332" cy="11" rx="12" ry="5"  fill="#3f3f46" />
-        <ellipse cx="368" cy="11" rx="12" ry="5"  fill="#3f3f46" />
-      </svg>
-
-      <p className="text-center text-xs text-dim/50 mt-1 tracking-widest uppercase font-medium">
-        PapiTrans · Flota 2026
-      </p>
     </div>
   );
 }
@@ -201,7 +125,7 @@ interface Props {
 }
 
 export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props) {
-  const { data, loading, saveStatus, saveError, fleetBusy, saveFleet, updateMiesiac, updateWorkspace, updateNotatki, updateUstawienia } = useWorkspace(token);
+  const { data, loading, saveStatus, saveError, fleetBusy, saveFleet, savePending, updateMiesiac, updateWorkspace, updateNotatki, updateUstawienia } = useWorkspace(token);
   const [location, setLocation] = useState<AdminLocation>(() => readAdminLocation(""));
   const [classic, setClassic] = useState(false);
   const useMenu = isAdmin && !classic;
@@ -317,7 +241,6 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
   const lockedMonths = MIESIACE_ZAKRESU.filter(
     (m) => !!data.miesiace[m as MiesiącId]?.zamkniety?.locked
   ) as number[];
-  const lastUndoable = data.fleetHistory?.findLast(entry => !entry.undoneAt)?.id;
 
   function handleUpdateMiesiac(updater: (prev: typeof daneMiesiaca) => typeof daneMiesiaca) {
     // Zamknięty miesiąc = readonly (dodatkowo inputy blokuje <fieldset disabled>)
@@ -454,10 +377,10 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
   }
 
   return (
-    <div className="min-h-screen text-ink">
+    <div className={`flex min-h-dvh flex-col text-ink ${useMenu ? "fleet-console" : ""}`}>
       <Background />
 
-      <div className="relative z-[1]">
+      <div className="relative z-[1] flex-1">
         <AppHeader
           saveStatus={saveStatus}
           aktywnyMiesiac={aktywnyMiesiac}
@@ -475,7 +398,7 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
 
         <main
           {...swipeHandlers}
-          className={`app-swipe-surface mx-auto px-3 sm:px-6 py-4 space-y-4 pb-0 ${useMenu ? location.area === 'kierowcy' && location.driver ? 'max-w-[680px] lg:max-w-[960px]' : 'max-w-[680px]' : 'max-w-[480px]'}`}
+          className={`app-swipe-surface mx-auto px-3 sm:px-6 py-4 space-y-4 pb-0 ${useMenu ? location.area === 'firma' || location.area === 'kierowcy' && location.driver ? 'max-w-[680px] lg:max-w-[960px]' : 'max-w-[680px]' : 'max-w-[480px]'}`}
         >
           {saveError && <div role="alert" className="rounded-lg border border-red-400/40 bg-surface p-3 text-sm text-red-300">{saveError}{saveStatus === "conflict" && <button className="mt-2 block underline" onClick={() => { if (window.confirm("Odświeżyć dane? Niezapisane zmiany pozostaną tylko w lokalnej kopii odzyskiwania.")) window.location.reload(); }}>Odśwież dane</button>}</div>}
           {loading ? (
@@ -487,16 +410,15 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
                 <DriverSwitcher location={location} onChange={choose} />
                 <div className="min-w-0 space-y-4">
                   <DriverWorkspace key={location.driver} data={data} month={aktywnyMiesiac} driver={location.driver} view={location.view} onView={view => choose({ ...location, view })}
-                    token={token} userName={userName ?? ""} status={saveStatus} busy={fleetBusy} save={saveFleet}
+                    token={token} userName={userName ?? ""} status={saveStatus} busy={fleetBusy} save={saveFleet} savePending={savePending}
                     updateMonth={handleUpdateMiesiac} updateWorkspace={updateWorkspace} moveFuel={moveTankowanieDoMiesiaca} focus={focusZgloszenie}
                     onCompany={() => choose({ ...location, area: "firma", tab: "zarobek", driver: undefined })} />
                 {monthLocked && <p className="text-sm text-amber-brand">Miesiąc zamknięty. Odblokowanie jest dostępne w podsumowaniu firmy.</p>}
-                {location.driver === "rafal" && <details className="rounded-lg border border-line bg-surface px-4 text-sm"><summary className="cursor-pointer py-3">Historia zmian i cofanie</summary>
-                  {[...(data.fleetHistory ?? [])].filter(entry => entry.month === aktywnyMiesiac).reverse().map(entry => <div key={entry.id} className="border-t border-line py-3"><p>{entry.description}{entry.undoneAt ? " · cofnięto" : ""}</p><p className="text-xs text-dim">{entry.actor} · {new Date(entry.at).toLocaleString("pl-PL")}</p>{entry.id === lastUndoable && <button className="mt-2 text-amber-brand underline" disabled={fleetBusy || monthLocked} onClick={() => { if (window.confirm(`Cofnąć: ${entry.description}?`)) void saveFleet({ kind: "undo", id: entry.id }); }}>Cofnij zmianę</button>}</div>)}
-                </details>}
+                <DriverHistory key={`${location.driver}-${aktywnyMiesiac}`} driver={location.driver} month={aktywnyMiesiac} token={token}
+                  history={data.fleetHistory} disabled={fleetBusy || monthLocked} onUndo={id => void saveFleet({ kind: "undo", id })} />
                 </div>
               </div>}
-              {companyVisible && <>
+              {companyVisible && <CompanyFrame location={location} onChange={choose} enabled={useMenu}>
               {/* Baner zamkniętego miesiąca */}
               {monthLocked && aktywnaZakladka !== "raport" && aktywnaZakladka !== "wiadomosci" && aktywnaZakladka !== "legenda" && aktywnaZakladka !== "ustawienia" && (
                 <div className="flex items-center gap-2 rounded-xl bg-surface2 border border-line px-4 py-2.5 text-sm text-dim">
@@ -614,13 +536,14 @@ export function WorkspaceView({ token, initialUserName, isAdmin = false }: Props
                   </button>
                 </div>
               )}
-              </>}
+              </CompanyFrame>}
             </>
           )}
-
-          <FooterGraphic />
         </main>
       </div>
+      <footer className="relative px-3 pt-6 pb-[max(1rem,env(safe-area-inset-bottom))] text-center text-xs font-medium text-dim uppercase">
+        PapiTrans · Flota 2026
+      </footer>
     </div>
   );
 }

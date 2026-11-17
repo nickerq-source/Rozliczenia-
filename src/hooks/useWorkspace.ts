@@ -73,6 +73,7 @@ export function useWorkspace(token: string) {
   const initialized = useRef(false);
   const revision = useRef<string | null>(null);
   const lastSaved = useRef("");
+  const ordinaryDirty = useRef(false);
   const saveQueue = useRef(Promise.resolve());
   const conflict = useRef(false);
   const latest = useRef(data);
@@ -118,31 +119,43 @@ export function useWorkspace(token: string) {
     });
   }, [token]);
 
+  // Manual save and debounce share the queue and skip an already confirmed snapshot.
+  const savePending = useCallback(() => {
+    if (loading || fleetInFlight.current || conflict.current) return;
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    const snapshot = latest.current;
+    saveToLocalStorage(token, snapshot);
+    saveQueue.current = saveQueue.current.then(async () => {
+      try {
+        if (JSON.stringify(snapshot) !== lastSaved.current) {
+          setSaveStatus("saving");
+          await persist(snapshot);
+        }
+        ordinaryDirty.current = JSON.stringify(latest.current) !== lastSaved.current;
+        setSaveError("");
+        setSaveStatus(ordinaryDirty.current ? "saving" : "saved");
+      } catch (error) {
+        setSaveError(error instanceof Error ? error.message : "Nie udało się zapisać zmian.");
+        setSaveStatus(conflict.current ? "conflict" : "error");
+      }
+    });
+  }, [loading, token, persist]);
+
   // Autozapis z debounce 500ms po każdej zmianie danych
   useEffect(() => {
-    if (!initialized.current || loading || fleetInFlight.current || JSON.stringify(data) === lastSaved.current) return;
+    if (!initialized.current || loading || fleetInFlight.current || conflict.current) return;
+    if (!ordinaryDirty.current && JSON.stringify(data) === lastSaved.current) return;
+    ordinaryDirty.current = true;
 
     if (saveTimer.current) clearTimeout(saveTimer.current);
     setSaveStatus("saving");
 
-    saveTimer.current = setTimeout(() => {
-      // Local recovery copy; success is shown only after the server confirms it.
-      saveToLocalStorage(token, data);
-
-      saveQueue.current = saveQueue.current.then(async () => { try {
-        await persist(data);
-        setSaveError("");
-        setSaveStatus(JSON.stringify(latest.current) === lastSaved.current ? "saved" : "saving");
-      } catch (error) {
-        setSaveError(error instanceof Error ? error.message : "Nie udało się zapisać zmian.");
-        setSaveStatus(conflict.current ? "conflict" : "error");
-      } });
-    }, DEBOUNCE_MS);
+    saveTimer.current = setTimeout(savePending, DEBOUNCE_MS);
 
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);
     };
-  }, [data, token, loading, persist]);
+  }, [data, loading, savePending]);
 
   // Both write APIs share one revision and queue. Flush ordinary edits before a payroll command.
   const saveFleet = useCallback(async (command: FleetCommand): Promise<boolean> => {
@@ -168,6 +181,7 @@ export function useWorkspace(token: string) {
       revision.current = json.updated_at;
       lastSaved.current = JSON.stringify(confirmed);
       latest.current = confirmed;
+      ordinaryDirty.current = false;
       setData(confirmed); saveToLocalStorage(token, confirmed); setSaveStatus("saved");
       return true;
     } catch (error) {
@@ -224,5 +238,5 @@ export function useWorkspace(token: string) {
     []
   );
 
-  return { data, loading, saveStatus, saveError, fleetBusy, saveFleet, updateMiesiac, updateWorkspace, updateNotatki, updateUstawienia };
+  return { data, loading, saveStatus, saveError, fleetBusy, saveFleet, savePending, updateMiesiac, updateWorkspace, updateNotatki, updateUstawienia };
 }

@@ -38,6 +38,14 @@ export function IconTrendingUp(props: IconProps) {
   );
 }
 
+export function IconAdjustments(props: IconProps) {
+  return <svg {...base(props)}><path d="M4 7h7m4 0h5M4 17h3m4 0h9" /><circle cx="13" cy="7" r="2" /><circle cx="9" cy="17" r="2" /></svg>;
+}
+
+export function IconReceipt(props: IconProps) {
+  return <svg {...base(props)}><path d="M6 3l2 1.5L10 3l2 1.5L14 3l2 1.5L18 3v18l-2-1.5-2 1.5-2-1.5-2 1.5-2-1.5L6 21zM9 9h6m-6 4h6" /></svg>;
+}
+
 export function IconUsers(props: IconProps) {
   return (
     <svg {...base(props)}>

@@ -18,7 +18,7 @@ const runtime = require('next/dist/compiled/webpack/webpack'); runtime.init();
     module: { rules: [{ test: /\.tsx?$/, exclude: /node_modules/, use: path.resolve('tests/helpers/webpack-ts.cjs') }, { test: /\.css$/, type: 'asset/source' }] },
   });
   await new Promise((resolve, reject) => compiler.run((err, stats) => compiler.close(() => err || stats?.hasErrors() ? reject(err || Error(stats.toString({ all: false, errors: true }))) : resolve())));
-  const cssDir = path.resolve('.next/static/css');
+  const cssDir = path.resolve(process.env.WORKSPACE_TEST_CSS_DIR || '.next/static/css');
   const css = fs.readdirSync(cssDir, { recursive: true }).filter(f => f.endsWith('.css')).map(f => fs.readFileSync(path.join(cssDir, f), 'utf8')).join('\n');
   let state, revision, sequence = 0, failNext = false, delaySave = false;
   const writes = [];
@@ -46,7 +46,16 @@ const runtime = require('next/dist/compiled/webpack/webpack'); runtime.init();
     if (req.url.startsWith('/api/')) return json({ error: 'Synthetic API unavailable' }, 503);
     if (req.url === '/bundle.js') { res.setHeader('Content-Type', 'application/javascript'); return res.end(fs.readFileSync(path.join(out, 'bundle.js'))); }
     if (req.url === '/style.css') { res.setHeader('Content-Type', 'text/css'); return res.end(css); }
+    if (req.url === '/fonts/pirata-one/PirataOne-Regular.ttf') {
+      res.setHeader('Content-Type', 'font/ttf');
+      return res.end(fs.readFileSync('public/fonts/pirata-one/PirataOne-Regular.ttf'));
+    }
     if (req.url === '/papitrans-bg.jpg') { res.setHeader('Content-Type', 'image/jpeg'); return res.end(fs.readFileSync('public/papitrans-bg.jpg')); }
+    if (req.url === '/art/dossier-paper.webp') { res.setHeader('Content-Type', 'image/webp'); return res.end(fs.readFileSync('public/art/dossier-paper.webp')); }
+    if (req.url === '/avatars/gilberto-rodriguez.jpg' || req.url === '/avatars/joaquin-guzman.webp') {
+      res.setHeader('Content-Type', req.url.endsWith('.jpg') ? 'image/jpeg' : 'image/webp');
+      return res.end(fs.readFileSync(path.join('public', req.url)));
+    }
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.end('<!doctype html><html lang="pl"><head><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/style.css"></head><body><div id="root"></div><script src="/bundle.js"></script></body></html>');
   });
@@ -72,7 +81,7 @@ const runtime = require('next/dist/compiled/webpack/webpack'); runtime.init();
       const driverView = async label => driver().getByRole('button', { name: label, exact: true }).click();
       const layout = async label => {
         const overflow = await page.evaluate(() => Array.from(document.querySelectorAll('main *')).filter(el => {
-          if (el.closest('.overflow-x-auto,.scrollbar-none')) return false;
+          if (el.closest('.overflow-x-auto,.scrollbar-none') || el.matches('.fc-wordmark image[clip-path]')) return false;
           const r = el.getBoundingClientRect(); return r.width > 0 && (r.left < -1 || r.right > innerWidth + 1);
         }).map(el => `${el.tagName}:${el.textContent.slice(0, 45)}`));
         assert.deepEqual(overflow, [], `${width} ${label}`);
@@ -80,11 +89,33 @@ const runtime = require('next/dist/compiled/webpack/webpack'); runtime.init();
       };
       await page.goto(base); await page.getByRole('region', { name: 'Wybierz dział' }).waitFor();
       assert.equal(await page.getByRole('region', { name: 'Wybierz dział' }).getByRole('button').count(), 2);
+      const startTiles = page.getByRole('region', { name: 'Wybierz dział' });
+      await startTiles.getByRole('heading', { name: 'PapiTrans', exact: true }).waitFor();
+      assert.equal(await startTiles.locator('.fc-wordmark image').getAttribute('href'), '/papitrans-bg.jpg');
+      assert.ok(await startTiles.locator('.fc-wordmark').evaluate(el =>
+        el.getBoundingClientRect().width <= 124 && document.documentElement.scrollWidth <= innerWidth));
+      const edges = await startTiles.getByRole('button').evaluateAll(items => items.map(el => getComputedStyle(el, '::before').clipPath));
+      assert.ok(edges.every(edge => edge.startsWith('polygon(')) && edges[0] !== edges[1]);
+      assert.ok(await startTiles.locator('.fc-entry strong').evaluateAll(async labels => {
+        await document.fonts.ready;
+        return [...document.fonts].some(face => face.family.includes('Pirata One') && face.status === 'loaded') &&
+          labels.length === 2 && labels.every(label => getComputedStyle(label).fontFamily.startsWith('"Pirata One"') &&
+            label.scrollWidth <= label.clientWidth && label.clientHeight <= Math.ceil(parseFloat(getComputedStyle(label).lineHeight)));
+      }), 'local display font loads and both labels fit');
+      await startTiles.screenshot({ path: path.join(out, `${width}-start-signs.png`) });
       assert.equal(await company().count(), 0); await layout('start');
       await page.getByRole('button', { name: 'Menu główne', exact: true }).click();
       await page.getByText(/Rachunek zysków i strat/).waitFor();
+      const menuAccent = await menu().getByRole('button', { name: 'Menu główne' }).evaluate(el => getComputedStyle(el).color);
       assert.equal(await page.getByRole('button', { name: 'Oznacz jako wypłacone', exact: true }).count(), 0);
       await layout('company');
+      assert.equal(await company().getByRole('button').count(), 9);
+      assert.equal(await company().getByRole('button', { name: 'Podsumowanie', exact: true }).getAttribute('aria-current'), 'page');
+      if (width < 640) {
+        const positions = await company().getByRole('button').evaluateAll(items => items.map(item => item.getBoundingClientRect().top));
+        assert.deepEqual([...new Set(positions)].map(y => positions.filter(pos => pos === y).length), [3, 3, 3]);
+      }
+      await page.screenshot({ path: path.join(out, `${width}-company-menu.png`) });
       await company().getByRole('button', { name: 'Koszty', exact: true }).click();
       assert.equal(await page.getByRole('button', { name: '+ Dodaj tankowanie', exact: true }).count(), 0);
       await page.getByRole('heading', { name: 'Koszty firmy', exact: true }).waitFor();
@@ -92,6 +123,50 @@ const runtime = require('next/dist/compiled/webpack/webpack'); runtime.init();
       await menu().getByRole('button', { name: 'Kierowcy', exact: true }).click();
       const choices = page.getByRole('region', { name: 'Wybierz kierowcę' });
       assert.equal(await choices.getByRole('button').count(), 2);
+      const portraits = choices.locator('.driver-avatar img');
+      assert.equal(await portraits.count(), 2);
+      const sources = await portraits.evaluateAll(async images => Promise.all(images.map(async img => {
+        await img.decode(); return img.currentSrc;
+      })));
+      assert.equal(new Set(sources).size, 2);
+      assert.deepEqual(await choices.locator('.fc-wanted[aria-hidden="true"]').allTextContents(), ['WANTED', 'WANTED']);
+      assert.ok(await choices.evaluate(async region => {
+        const paper = new Image(); paper.src = '/art/dossier-paper.webp'; await paper.decode();
+        return paper.naturalWidth === 512 && paper.naturalHeight === 432 &&
+          [...region.querySelectorAll('.fc-person')].every(card => {
+            const stock = getComputedStyle(card, '::after');
+            const photo = card.querySelector('.driver-avatar').getBoundingClientRect();
+            const name = card.querySelector('strong').getBoundingClientRect();
+            const action = card.querySelector('.fc-person-action').getBoundingClientRect();
+            return stock.backgroundImage.includes('dossier-paper.webp') && stock.maskImage !== 'none' &&
+              photo.bottom <= name.top && name.bottom <= action.top;
+          });
+      }), 'printed stock loads and portraits, names and controls do not collide');
+      await page.mouse.move(0, 0);
+      const cards = await choices.getByRole('button').all();
+      const posterEdges = [];
+      for (const card of cards) {
+        const [rim, paper] = await card.evaluate(el => ['::before', '::after'].map(layer => getComputedStyle(el, layer).clipPath));
+        assert.equal(rim, paper, 'paper and rim follow the same tear');
+        assert.ok(rim.startsWith('polygon(') && !edges.includes(rim));
+        posterEdges.push(rim);
+        // Compare against the actual scene under this card, not an assumed background colour.
+        const decode = png => require('sharp')(png).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+        const visible = await decode(await card.screenshot());
+        const backdrop = await decode(await card.screenshot({ style: '.fc-person { opacity: 0 !important; }' }));
+        const { width: w, height: h, channels } = visible.info;
+        const pixel = (image, x, y) => image.data.subarray((y*w+x)*channels, (y*w+x+1)*channels);
+        for (const [x, y] of [[6,5], [w-7,5], [6,h-6], [w-7,h-6]]) {
+          assert.deepEqual(pixel(visible,x,y), pixel(backdrop,x,y), 'each torn corner reveals the underlying image');
+        }
+        assert.notDeepEqual(pixel(visible,12,50), pixel(backdrop,12,50), 'paper remains visible inside the card');
+      }
+      assert.equal(new Set(posterEdges).size, cards.length);
+      const firstDriver = choices.getByRole('button').first();
+      await firstDriver.hover();
+      assert.equal(await firstDriver.evaluate(el => getComputedStyle(el, '::before').backgroundColor), menuAccent);
+      await page.mouse.move(0, 0);
+      await choices.screenshot({ path: path.join(out, `${width}-driver-signs.png`) });
       await layout('driver-choices');
       await page.getByRole('button', { name: 'Rafał Gustab', exact: true }).click();
       assert.equal(await page.getByRole('combobox', { name: 'Dział kierowcy', exact: true }).count(), 0);
@@ -105,6 +180,9 @@ const runtime = require('next/dist/compiled/webpack/webpack'); runtime.init();
       const writesBeforeSwitching = writes.length;
       assert.equal(await switcher().getByRole('button').count(), 2);
       const switcherBox = await switcher().boundingBox();
+      assert.equal(await switcher().locator('[aria-current="page"]').evaluate(el => getComputedStyle(el, '::before').backgroundColor), menuAccent);
+      assert.equal(await switcher().locator('.driver-avatar img').count(), 2);
+      await switcher().locator('.driver-avatar img').evaluateAll(images => Promise.all(images.map(img => img.decode())));
       const profileBox = await page.getByRole('region', { name: 'Profil: Rafał Gustab', exact: true }).boundingBox();
       assert.ok(switcherBox && profileBox);
       if (width >= 1024) assert.ok(switcherBox.x + switcherBox.width < profileBox.x, 'driver switcher stays left of the profile');
@@ -153,6 +231,14 @@ const runtime = require('next/dist/compiled/webpack/webpack'); runtime.init();
       await page.reload(); await page.getByRole('table').getByText('180,00 zł', { exact: true }).waitFor(); await layout('rafal-pay');
       const dayCard = page.getByTestId('rafal-day-2026-11-03');
       await dayCard.screenshot({ path: path.join(out, `${width}-rafal-day.png`) });
+      const columnLayout = card => card.evaluate(row => {
+        const bounds = row.getBoundingClientRect();
+        return ['.rf-date', '.rf-status select', '.rf-courses input', '.rf-amount'].map(selector => {
+          const rect = row.querySelector(selector).getBoundingClientRect();
+          return [Math.round(rect.left - bounds.left), Math.round(rect.width), Math.round(rect.top - bounds.top)];
+        });
+      });
+      const rafalColumns = await columnLayout(dayCard);
       if (width < 640) {
         const courseBox = await dayCard.getByLabel('Kursy 2026-11-03', { exact: true }).boundingBox();
         const statusBox = await dayCard.getByLabel('Status 2026-11-03', { exact: true }).boundingBox();
@@ -190,6 +276,38 @@ const runtime = require('next/dist/compiled/webpack/webpack'); runtime.init();
       await driverView('Samochód i działalność');
       assert.equal(await page.locator('input[value="Serwis Rafała"]').count(), 0);
       await driverView('Dni i wypłata');
+      const zeniaSalary = page.getByRole('region', { name: 'Podsumowanie wypłaty Żeni', exact: true });
+      await zeniaSalary.getByText('Łączny koszt z podatkiem i składkami', { exact: true }).waitFor();
+      const zeniaDay = page.getByTestId('zenia-day-2026-11-03');
+      assert.deepEqual(await columnLayout(zeniaDay), rafalColumns, 'identical date, status, courses and pay columns');
+      assert.equal(await page.getByRole('table', { name: 'Dni pracy kierowcy' }).getByRole('row', { includeHidden: true }).count(), 31);
+      await zeniaDay.screenshot({ path: path.join(out, `${width}-zenia-day.png`) });
+      const zeniaInput = zeniaDay.getByLabel('Kursy 2026-11-03', { exact: true });
+      const unchangedRafal = structuredClone(state.miesiace[11].rafal);
+      const original = await zeniaInput.inputValue();
+      const manual = zeniaSalary.getByRole('button', { name: 'Zapisz dni' });
+      const beforeSave = writes.length;
+      failNext = true;
+      await zeniaInput.fill(original === '3' ? '2' : '3');
+      await zeniaSalary.getByRole('status').filter({ hasText: 'Nie zapisano zmian' }).waitFor();
+      await manual.click();
+      await zeniaSalary.getByRole('status').filter({ hasText: 'Wszystkie zmiany zapisane' }).waitFor();
+      assert.equal(writes.length, beforeSave + 1);
+      assert.deepEqual(state.miesiace[11].rafal, unchangedRafal);
+      await zeniaDay.getByText('300,00 zł', { exact: true }).waitFor();
+      assert.equal(await manual.isDisabled(), true);
+      await zeniaInput.fill(original);
+      await zeniaSalary.getByRole('status').filter({ hasText: 'Wszystkie zmiany zapisane' }).waitFor();
+      assert.equal(writes.length, beforeSave + 2);
+      await zeniaInput.fill(original === '4' ? '5' : '4');
+      await zeniaInput.fill(original);
+      await zeniaSalary.getByRole('status').filter({ hasText: 'Wszystkie zmiany zapisane' }).waitFor();
+      assert.equal(writes.length, beforeSave + 2, 'reverting before autosave needs no write');
+      const zeniaResult = obliczWynikMiesiaca(11, state.miesiace[11], getUstawienia(state));
+      assert.deepEqual(await zeniaSalary.locator('.pv-payroll-total strong').allTextContents(), [formatZl(zeniaResult.wynagrodzenieDoWyplaty), formatZl(zeniaResult.wynagrodzenieDoWyplaty + zeniaResult.obciazeniaPracownika)]);
+      await zeniaSalary.screenshot({ path: path.join(out, `${width}-zenia-closeout.png`) });
+      await page.getByText('Historia zmian', { exact: true }).waitFor();
+      await page.getByText('Rozliczenie wypłaty, potrącenia i PDF', { exact: true }).click();
       await page.getByRole('button', { name: 'Oznacz jako wypłacone', exact: true }).waitFor(); await layout('zenia-pay');
       await menu().getByRole('button', { name: 'Menu główne', exact: true }).click();
       await company().getByRole('button', { name: /Podsum/ }).click();
@@ -240,7 +358,7 @@ const runtime = require('next/dist/compiled/webpack/webpack'); runtime.init();
       await page.getByText('Niezapisane dni: 1', { exact: false }).waitFor();
       assert.equal(await page.getByLabel('Kursy 2026-11-05', { exact: true }).inputValue(), '8');
       await page.getByRole('button', { name: 'Odrzuć niezapisane zmiany', exact: true }).click();
-      await page.getByText('Historia zmian i cofanie', { exact: true }).click();
+      await page.getByText('Historia zmian', { exact: true }).click();
       await page.getByRole('button', { name: 'Cofnij zmianę', exact: true }).click();
       await page.getByText('Rafał: dni miesiąca 11 (1) · cofnięto', { exact: true }).waitFor();
       assert.equal(state.miesiace[11].rafal.days.length, 1);
@@ -293,7 +411,7 @@ const runtime = require('next/dist/compiled/webpack/webpack'); runtime.init();
       await page.getByRole('button', { name: 'Rafał Gustab', exact: true }).click();
       await driverView('Dni i wypłata');
       await page.getByRole('button', { name: 'Gru', exact: true }).click();
-      await page.getByText('Grudzień 2026', { exact: true }).waitFor();
+      await page.getByRole('form', { name: 'Dni i wypłata Rafała' }).getByText('Grudzień 2026', { exact: true }).waitFor();
       assert.equal(await page.getByRole('table').getByRole('row', { includeHidden: true }).count(), 32);
       assert.equal(await salaryRow('Zarobione z dni i kursów').innerText(), '0,00 zł');
       assert.equal(await salaryRow('Łączny koszt z podatkiem i składkami').innerText(), '5790,28 zł');
@@ -303,7 +421,7 @@ const runtime = require('next/dist/compiled/webpack/webpack'); runtime.init();
       assert.equal(new URL(page.url()).searchParams.get('widok'), 'wyplata');
       await page.getByLabel('Kursy 2026-12-31', { exact: true }).fill('3');
       await page.getByRole('button', { name: 'Lis', exact: true }).click();
-      await page.getByText('Listopad 2026', { exact: true }).waitFor();
+      await page.getByRole('form', { name: 'Dni i wypłata Rafała' }).getByText('Listopad 2026', { exact: true }).waitFor();
       assert.equal(await salaryRow('Razem do wypłaty').innerText(), '5140,75 zł');
       await page.getByRole('button', { name: 'Gru', exact: true }).click();
       await page.getByText('Niezapisane dni: 1', { exact: false }).waitFor();
@@ -318,6 +436,13 @@ const runtime = require('next/dist/compiled/webpack/webpack'); runtime.init();
       await switchDriver('Yevhenii Pitianin', 'zenia');
       await switchDriver('Rafał Gustab', 'rafal');
       assert.equal(await page.getByRole('button', { name: 'Zapisz dni', exact: true }).first().isDisabled(), true);
+      await page.getByRole('button', { name: 'Cze', exact: true }).click();
+      await switchDriver('Yevhenii Pitianin', 'zenia');
+      const training = page.getByTestId('zenia-day-2026-06-02');
+      await training.getByLabel('Szkolenie 2026-06-02', { exact: true }).fill('50.37');
+      await training.getByText('250,37 zł', { exact: true }).waitFor();
+      await page.getByRole('region', { name: 'Podsumowanie wypłaty Żeni' }).getByRole('status').filter({ hasText: 'Wszystkie zmiany zapisane' }).waitFor();
+      assert.equal(state.miesiace[6].dni['2026-06-02'].szkolenie, 50.37);
       await page.goto(base + '&uklad=klasyczny');
       await page.getByRole('button', { name: 'Oznacz jako wypłacone', exact: true }).waitFor();
       assert.equal(await menu().count(), 0);

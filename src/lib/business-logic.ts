@@ -54,6 +54,7 @@ export function formatZlCaly(kwota: number): string {
 
 /** Stawka za dzień urlopu (płatny, nie przerywa ciągłości). */
 export const STAWKA_URLOPU = 250;
+export const STAWKA_KOLKA_ZENI = 100;
 
 /**
  * Oblicza dniówkę dla jednego dnia.
@@ -80,7 +81,7 @@ export function obliczDniowke(
 
   // Kółka (trasy) tylko dla P / P+Z
   const kolka = maKolka(dzien.dayType) ? parseNum(dzien.kolka) : 0;
-  const kwotaKolek = kolka * 100;
+  const kwotaKolek = kolka * STAWKA_KOLKA_ZENI;
 
   // Zlecenia (liczba × stawka 50/100/własna) tylko dla P+Z / Z
   const liczbaZlecen = maZlecenia(dzien.dayType) ? parseNum(dzien.zlecenia) : 0;

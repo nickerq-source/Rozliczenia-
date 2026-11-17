@@ -268,7 +268,7 @@ export function DriverView({ name }: { name: string }) {
 
       <div className="relative z-[1]">
         <header
-          className="sticky top-0 z-10 border-b border-line"
+          className="pt-masthead sticky top-0 z-10 border-b border-line"
           style={{ background: "rgba(10, 15, 12, 0.92)", backdropFilter: "blur(12px)" }}
         >
           <div className="max-w-[480px] mx-auto px-3 sm:px-6 pt-2">
@@ -305,7 +305,7 @@ export function DriverView({ name }: { name: string }) {
         <main {...swipeHandlers} className="app-swipe-surface max-w-[480px] mx-auto px-3 sm:px-6 py-4 space-y-3">
           <div className="flex items-center gap-2">
             <IkonaKategorii kategoria={kategoria} size={20} className="text-amber-brand" />
-            <h1 className="text-lg font-bold text-white">
+            <h1 className="pt-display">
               {kategoria === "wyplata" && t.header.title.payout}
               {kategoria === "tankowanie" && t.header.title.fuel}
               {kategoria === "wiadomosci" && t.header.title.messages}

@@ -11,7 +11,7 @@ export function Card({ children, className, accent }: CardProps) {
   return (
     <div
       className={cn(
-        "rounded-2xl border border-line bg-surface p-4 shadow-sm",
+        "pt-stock-panel rounded-lg border border-line bg-surface p-4 shadow-sm",
         accent && "border-amber-brand/40 bg-amber-brand/5",
         className
       )}

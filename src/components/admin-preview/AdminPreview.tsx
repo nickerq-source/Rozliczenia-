@@ -1,5 +1,7 @@
 "use client";
 
+import { DriverAvatar } from "../admin/DriverAvatar";
+
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { DaneMiesiaca, MiesiącId, PDFImportDiagnosticRow, WorkspaceData } from "@/lib/types";
 import { PREVIEW_DRIVERS, preparePreviewSnapshot, previewMonth, previewSearch, readPreviewLocation, type PreviewDay, type PreviewLocation, type PreviewSection } from "@/lib/admin-preview";
@@ -111,7 +113,7 @@ export function AdminPreview({ source, updatedAt, live }: { source: WorkspaceDat
 
   return <div className="admin-preview">
     <div className="pv-mode"><span><IconLock size={14} aria-hidden />{live ? "Panel administratora · zapis do bazy" : "Podgląd · tylko odczyt"}</span><a href={legacyUrl("podsumowanie")}>Wróć do obecnego panelu</a></div>
-    <header className="pv-header">
+    <header className="pv-header pt-masthead">
       <div className="pv-brand"><IconTruck size={22} aria-hidden /><strong>PapiTrans</strong><span>Panel administratora</span></div>
       <nav className="pv-root-nav" aria-label="Główne działy">
         <button aria-current={section !== "kierowcy" ? "page" : undefined} onClick={() => navigate({ section: "menu", driver: null, invoice: null })}><IconChartBar size={18} aria-hidden />Menu główne</button>
@@ -178,7 +180,7 @@ export function AdminPreview({ source, updatedAt, live }: { source: WorkspaceDat
         <PreviewDriver key={`${location.driver}-${month}`} driver={location.driver} part={location.part} onPart={part => navigate({ part })} month={month} dane={dane} available={available} settings={settings} drafts={live ? dane.rafal?.days ?? [] : drafts[month] ?? []} onDrafts={days => setDrafts(prev => ({ ...prev, [month]: days }))} onCompany={target => navigate({ section: target, driver: null, invoice: null })} live={live ? { busy: live.busy, saveDay: day => live.onSaveDay(month, day), payroll: live.payroll(month, dane) } : undefined} />
       </> : <><h1>Kierowcy</h1><div className="pv-driver-list">
         {(["zenia", "rafal"] as const).map(id => <button className="pv-driver-choice" key={id} onClick={() => navigate({ driver: id, part: "podsumowanie" })}>
-          <span className="pv-initials" aria-hidden>{id === "zenia" ? "YP" : "RG"}</span><span><strong>{PREVIEW_DRIVERS[id]}</strong><small>{id === "zenia" ? "Żenia · obecne rozliczenie" : live ? "Dni i kursy · umowa o pracę" : "Umowa o pracę · profil testowy"}</small></span><IconChevronDown className="pv-chevron" size={18} aria-hidden />
+          <DriverAvatar driver={id} /><span><strong>{PREVIEW_DRIVERS[id]}</strong><small>{id === "zenia" ? "Żenia · obecne rozliczenie" : live ? "Dni i kursy · umowa o pracę" : "Umowa o pracę · profil testowy"}</small></span><IconChevronDown className="pv-chevron" size={18} aria-hidden />
         </button>)}
       </div></>)}
       {section === "koszty" && <>

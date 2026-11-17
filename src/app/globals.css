@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: "Pirata One";
+  src: url("/fonts/pirata-one/PirataOne-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* ── Design system PapiTrans ─────────────────────────────────────────────── */
 :root {
   /* Paleta dopasowana do tła: ciemna zieleń dżungli + bursztyn zachodu słońca */
@@ -17,6 +25,8 @@
   --sun-bg: #3a3508;
   --input-bg: #080d0a;
   --emerald: #2e8b62;
+  --brand-display: "Pirata One", Georgia, serif;
+  --engraving: #739684;
 
   --background: var(--bg);
   --foreground: var(--text);
@@ -71,6 +81,19 @@ body * {
 
 h1, h2, h3, h4 {
   font-weight: 700;
+}
+
+/* Enamel pinstripes for the app chrome; worn paper is reserved for portraits. */
+.pt-masthead::after {
+  content: ""; display: block; height: 4px; pointer-events: none;
+  border-block: 1px solid #517060;
+  background: linear-gradient(100deg, transparent 47%, var(--engraving) 47% 49%, transparent 49% 51%, var(--engraving) 51% 53%, transparent 53%) center / 56px 100% no-repeat, #13251d;
+}
+.pt-display { font: 400 24px/1.15 var(--brand-display); color: #e3ede5; }
+.pt-stock-panel {
+  background-image: linear-gradient(var(--engraving), var(--engraving)), linear-gradient(var(--engraving), var(--engraving));
+  background-position: left 10px top 5px, right 10px top 5px;
+  background-size: 18px 1px; background-repeat: no-repeat;
 }
 
 /* ── Pola formularzy ─────────────────────────────────────────────────────── */
