@@ -194,38 +194,37 @@
   background-repeat: no-repeat;
 }
 .fleet-console .fc-switch::after { background-image: none; }
-/* Separate paper silhouettes; fixed-size tears don't grow into the lettering on wide cards. */
-.fleet-console .fc-sign.fc-person {
-  --pinstripe: #b7a98b;
+/* Keep wear attached to the document even if the directory is reordered. */
+.fleet-console .fc-sign.fc-person { --pinstripe: #c0ae8b; }
+.fleet-console .fc-person[data-driver="zenia"] {
   --edge: polygon(
-    36px 0, 40% 0, calc(40% + 4px) 2px, calc(40% + 11px) 0, calc(100% - 21px) 0,
-    calc(100% - 17px) 5px, calc(100% - 13px) 4px, calc(100% - 14px) 8px,
-    calc(100% - 8px) 10px, calc(100% - 7px) 14px, calc(100% - 3px) 13px, 100% 19px,
-    100% 62%, calc(100% - 4px) calc(62% + 4px), 100% calc(62% + 8px), 100% calc(100% - 32px),
-    calc(100% - 7px) calc(100% - 27px), calc(100% - 5px) calc(100% - 23px),
-    calc(100% - 12px) calc(100% - 24px), calc(100% - 13px) calc(100% - 17px),
-    calc(100% - 20px) calc(100% - 13px), calc(100% - 19px) calc(100% - 9px),
-    calc(100% - 26px) calc(100% - 9px), calc(100% - 34px) 100%, 22px 100%,
-    16px calc(100% - 6px), 12px calc(100% - 5px), 12px calc(100% - 10px),
-    6px calc(100% - 9px), 5px calc(100% - 14px), 0 calc(100% - 18px),
-    0 33px, 5px 27px, 9px 28px, 8px 22px, 15px 18px, 13px 14px,
-    21px 15px, 22px 9px, 28px 8px, 27px 5px, 33px 4px
+    23% 0, 36% .5%, 38% .2%, 54% .8%, 68% 0, 87% .4%, 97% 0, 97.5% 1.2%, 100% 1.5%,
+    99.5% 16%, 100% 29%, 99% 34.2%, 97.6% 34.9%, 98.2% 36%, 96.3% 37.8%,
+    97.1% 38.4%, 94.5% 40%, 95% 41.1%, 91.6% 42.3%, 92.5% 43%, 88.8% 45%,
+    92.5% 44.5%, 92% 46%, 96.2% 45.8%, 95.7% 47.4%, 98.3% 47.1%, 100% 49.6%,
+    99.5% 61%, 100% 81%, 99% 94%, 98% 94.8%, 98.5% 96%, 95.2% 97.1%, 96% 98%,
+    92.6% 100%, 75% 99.5%, 59% 100%, 52.5% 98.8%, 52% 99.4%, 46% 99.2%, 29% 100%,
+    14.3% 99.2%, 1.6% 100%, 0 98.4%, .6% 86%, 0 78%, .5% 62%, 0 49%, .7% 35%,
+    0 21%, 1.8% 18.7%, 1.4% 17.5%, 4.7% 15.4%, 4% 14.6%, 7.4% 13.2%, 7% 11.8%,
+    10.2% 10.6%, 9% 9.6%, 13.8% 8.9%, 13% 7.1%, 16.6% 6.7%, 18% 4.1%,
+    17.4% 3.6%, 20.6% 2.9%, 20% 2.1%, 22.4% 1.7%
   );
 }
-.fleet-console .fc-person:nth-child(even) {
+.fleet-console .fc-person[data-driver="rafal"] {
   --edge: polygon(
-    23px 0, 69% 0, calc(69% + 5px) 2px, calc(69% + 9px) 0, calc(100% - 38px) 0,
-    calc(100% - 33px) 6px, calc(100% - 28px) 4px, calc(100% - 30px) 9px,
-    calc(100% - 21px) 11px, calc(100% - 22px) 16px, calc(100% - 15px) 15px,
-    calc(100% - 12px) 22px, calc(100% - 7px) 21px, calc(100% - 8px) 26px, 100% 31px,
-    100% calc(100% - 22px), calc(100% - 6px) calc(100% - 18px),
-    calc(100% - 5px) calc(100% - 13px), calc(100% - 11px) calc(100% - 14px),
-    calc(100% - 13px) calc(100% - 7px), calc(100% - 19px) calc(100% - 6px), calc(100% - 23px) 100%,
-    37px 100%, 31px calc(100% - 4px), 26px calc(100% - 3px), 27px calc(100% - 8px),
-    18px calc(100% - 8px), 19px calc(100% - 14px), 12px calc(100% - 13px),
-    9px calc(100% - 20px), 5px calc(100% - 19px), 0 calc(100% - 26px),
-    0 57%, 3px calc(57% - 5px), 0 calc(57% - 8px), 0 21px,
-    6px 17px, 5px 13px, 12px 13px, 10px 8px, 17px 7px, 17px 3px
+    2.7% .7%, 13% 0, 32% .8%, 46% .3%, 56.5% 0, 58.6% 1.4%, 60% 1%,
+    60.7% 2.5%, 62.1% 2.2%, 63% 4%, 64% 3.7%, 65.5% 7.2%, 64.9% 3.2%,
+    66.1% 3.5%, 66.2% 1.8%, 68% 2.2%, 67.8% .7%, 71% 1%, 73% 0,
+    86% .5%, 96% .3%, 95.6% 1.8%, 97.7% 1.4%, 97.2% 2.6%, 100% 3.3%,
+    99.3% 22%, 100% 31%, 99.3% 49%, 100% 56%, 99.1% 76%, 100% 87%, 99.3% 98.8%,
+    96.4% 100%, 82% 99.3%, 76.2% 99.6%, 74.4% 98.2%, 73% 98.8%, 70.4% 95.6%,
+    69.7% 97.5%, 68.4% 97.1%, 67% 99%, 62% 98.5%, 60.2% 100%, 38% 99.5%, 26% 100%,
+    24% 98.8%, 22% 99%, 21.5% 97.8%, 18% 98.1%, 18.6% 96.6%, 15.3% 97%,
+    13.4% 95.6%, 11.6% 96%, 10.2% 94.5%, 8.4% 95%, 7.8% 93%, 5% 93.8%,
+    5.7% 91.6%, 3.2% 92%, 3.6% 90.3%, 1.8% 90.8%, 0 89%, .7% 77%, 0 68%,
+    .6% 47%, 0 38.6%, 2.4% 37.1%, 1.6% 36%, 5.5% 34.4%, 4.8% 33.3%,
+    7.2% 31.8%, 3.2% 32.3%, 3.8% 31%, 1.4% 30.8%, 1.8% 29.4%, 0 28.3%,
+    .5% 15%, 0 1.8%
   );
 }
 /* Punch the hole in the paper layers only. Text, focus outline and hit area remain intact. */

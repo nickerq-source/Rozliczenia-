@@ -268,7 +268,7 @@ export function DriverView({ name }: { name: string }) {
 
       <div className="relative z-[1]">
         <header
-          className="pt-masthead sticky top-0 z-10 border-b border-line"
+          className="pt-masthead sticky top-0 z-10"
           style={{ background: "rgba(10, 15, 12, 0.92)", backdropFilter: "blur(12px)" }}
         >
           <div className="max-w-[480px] mx-auto px-3 sm:px-6 pt-2">

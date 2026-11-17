@@ -83,11 +83,20 @@ h1, h2, h3, h4 {
   font-weight: 700;
 }
 
-/* Enamel pinstripes for the app chrome; worn paper is reserved for portraits. */
+/* A single dry-ink silhouette, not a pair of stroked borders. */
 .pt-masthead::after {
-  content: ""; display: block; height: 4px; pointer-events: none;
-  border-block: 1px solid #517060;
-  background: linear-gradient(100deg, transparent 47%, var(--engraving) 47% 49%, transparent 49% 51%, var(--engraving) 51% 53%, transparent 53%) center / 56px 100% no-repeat, #13251d;
+  content: ""; display: block; height: 8px; pointer-events: none;
+  background: linear-gradient(96deg, #557261, #aec2a4 31%, #688a77 58%, #9cb096 83%, #4f6e5f);
+  clip-path: polygon(
+    0 3px, 4% 2px, 8.2% 3px, 9% 2px, 14.6% 5px, 15% 4px, 18% 5px, 24% 3px,
+    27% 4px, 32.7% 1px, 33.1% 3px, 35% 2px, 43% 4px, 47% 3px, 48% 4px,
+    52.2% 2px, 54% 3px, 58.8% 1px, 59.5% 2px, 60% 1px, 68% 4px, 72.4% 3px,
+    73% 5px, 76% 4px, 81% 5px, 83% 4px, 90% 2px, 92% 3px, 97% 2px, 100% 3px,
+    97% 4px, 91% 4px, 90% 3px, 81% 7px, 76% 5px, 72.8% 7px, 72% 5px,
+    68% 6px, 59% 3px, 57% 4px, 53% 5px, 52% 4px, 47% 5px, 43.4% 6px,
+    42% 5px, 34% 4px, 32.6% 3px, 27% 6px, 24% 4px, 18.6% 7px, 16% 6px,
+    14.4% 7px, 8.9% 4px, 7% 5px, 4% 3px, 0 4px
+  );
 }
 .pt-display { font: 400 24px/1.15 var(--brand-display); color: #e3ede5; }
 .pt-stock-panel {

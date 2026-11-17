@@ -145,19 +145,38 @@ const runtime = require('next/dist/compiled/webpack/webpack'); runtime.init();
       await page.mouse.move(0, 0);
       const cards = await choices.getByRole('button').all();
       const posterEdges = [];
+      const decode = png => require('sharp')(png).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+      const banner = page.getByRole('banner');
+      assert.equal(await banner.evaluate(el => parseFloat(getComputedStyle(el).borderBottomWidth)), 0);
+      const ink = await decode(await banner.screenshot({ path: path.join(out, `${width}-masthead.png`) }));
+      const bare = await decode(await banner.screenshot({ style: '.pt-masthead::after { opacity: 0; }' }));
+      const { width: bw, height: bh, channels: bc } = ink.info;
+      const heights = [];
+      for (const fraction of [.08,.15,.22,.33,.43,.55,.59,.73,.81,.96]) {
+        const x = Math.floor(bw*fraction), painted = [];
+        for (let y=bh-8; y<bh; y++) {
+          const i = (y*bw+x)*bc;
+          if (Math.abs(ink.data[i+1]-bare.data[i+1])>12) painted.push(y);
+        }
+        assert.ok(painted.length && painted.at(-1)-painted[0]+1 === painted.length, 'one continuous stroke at each sampled column');
+        heights.push(painted[0]);
+      }
+      assert.ok(Math.max(...heights)-Math.min(...heights)>=2, 'the divider wanders vertically');
       for (const card of cards) {
         const [rim, paper] = await card.evaluate(el => ['::before', '::after'].map(layer => getComputedStyle(el, layer).clipPath));
         assert.equal(rim, paper, 'paper and rim follow the same tear');
         assert.ok(rim.startsWith('polygon(') && !edges.includes(rim));
         posterEdges.push(rim);
         // Compare against the actual scene under this card, not an assumed background colour.
-        const decode = png => require('sharp')(png).removeAlpha().raw().toBuffer({ resolveWithObject: true });
         const visible = await decode(await card.screenshot());
         const backdrop = await decode(await card.screenshot({ style: '.fc-person { opacity: 0 !important; }' }));
         const { width: w, height: h, channels } = visible.info;
         const pixel = (image, x, y) => image.data.subarray((y*w+x)*channels, (y*w+x+1)*channels);
-        for (const [x, y] of [[6,5], [w-7,5], [6,h-6], [w-7,h-6]]) {
-          assert.deepEqual(pixel(visible,x,y), pixel(backdrop,x,y), 'each torn corner reveals the underlying image');
+        const zenia = (await card.getAttribute('data-driver')) === 'zenia';
+        for (const [fx,fy,revealsScene] of [[.035,.022,zenia], [.04,.971,!zenia], [.98,.429,zenia], [.65,.031,!zenia]]) {
+          const x=Math.floor(w*fx), y=Math.floor(h*fy);
+          assert.equal(pixel(visible,x,y).equals(pixel(backdrop,x,y)), revealsScene,
+            `tear ${fx},${fy} must expose the photo on only one document`);
         }
         assert.notDeepEqual(pixel(visible,12,50), pixel(backdrop,12,50), 'paper remains visible inside the card');
       }

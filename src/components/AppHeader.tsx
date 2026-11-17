@@ -55,7 +55,7 @@ export function AppHeader({
   return (
     <>
       <header
-        className="pt-masthead sticky top-0 z-10 border-b border-line"
+        className="pt-masthead sticky top-0 z-10"
         style={{
           background: "rgba(10, 15, 12, 0.92)",
           backdropFilter: "blur(12px)",
