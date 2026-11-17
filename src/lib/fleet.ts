@@ -50,9 +50,13 @@ export function rafalMonthCost(month: Pick<DaneMiesiaca, "rafal">) {
   const payroll = month.rafal?.payroll;
   const calculated = sumMoney(days.map(day => fleetDayNet(day) ?? 0));
   const charges = payroll ? sumMoney([payroll.employeeIncomeTax, payroll.employeeHealth, payroll.employeeSocial, payroll.employerContributions, payroll.otherDeductions]) : 0;
-  const payout = payroll?.net ?? calculated;
-  return { calculated, payout, charges, total: sumMoney([payout, charges]),
+  const payrollNet = payroll?.net ?? 0;
+  // Payslip net is part of the accrued payout, not a cap or an extra payment.
+  const additionalPayout = Math.max(0, sumMoney([calculated, -payrollNet]));
+  const payout = sumMoney([payrollNet, additionalPayout]);
+  return { calculated, payrollNet, additionalPayout, payout, charges, total: sumMoney([payout, charges]),
     taxCost: payroll?.deductibleThisMonth ? sumMoney([payroll.gross, payroll.employerContributions]) : 0,
-    incomplete: days.some(day => fleetDayNet(day) === null) || (days.length > 0 && !payroll) || (!!payroll && Math.abs(calculated - payroll.net) > 0.01),
+    incomplete: days.some(day => fleetDayNet(day) === null) || (calculated > 0 && !payroll)
+      || (!!payroll && days.length > 0 && sumMoney([payrollNet, -calculated]) > 0.01),
     active: days.length > 0 || !!payroll, payroll };
 }

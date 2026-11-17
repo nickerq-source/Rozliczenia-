@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import type { DaneMiesiaca, MiesiącId, WorkspaceData } from "@/lib/types";
-import type { RafalPayroll } from "@/lib/fleet";
+import { rafalMonthCost, type RafalPayroll } from "@/lib/fleet";
 import { prepareFleetInvoice, validatePayroll, type FleetCommand } from "@/lib/fleet-commands";
 import { savedInvoicePreview, type InvoicePreview } from "@/lib/invoice-import";
 import { formatZl } from "@/lib/business-logic";
@@ -21,7 +21,8 @@ const payrollFields = [
 
 function Payroll({ month, dane, save, busy }: { month: MiesiącId; dane: DaneMiesiaca; save: Save; busy: boolean }) {
   const [error, setError] = useState("");
-  return <form className="pv-form" key={JSON.stringify(dane.rafal?.payroll)} onSubmit={async e => {
+  const cost = rafalMonthCost(dane);
+  return <><form className="pv-form" key={JSON.stringify(dane.rafal?.payroll)} onSubmit={async e => {
     e.preventDefault(); setError("");
     const form = new FormData(e.currentTarget);
     const payroll = Object.fromEntries(payrollFields.map(([key]) => [key, Number(String(form.get(key)).replace(",", "."))])) as unknown as RafalPayroll;
@@ -34,10 +35,17 @@ function Payroll({ month, dane, save, busy }: { month: MiesiącId; dane: DaneMie
     <div className="pv-fields">{payrollFields.map(([key, label]) => <label key={key}>{label}<input name={key} type="number" inputMode="decimal" min="0" max="10000000" step="0.01" required defaultValue={dane.rafal?.payroll?.[key] ?? ""} /></label>)}</div>
     <label>Numer / opis listy płac<input name="reference" maxLength={200} required defaultValue={dane.rafal?.payroll?.reference ?? ""} /></label>
     <label className="pv-check"><input name="deductible" type="checkbox" defaultChecked={dane.rafal?.payroll?.deductibleThisMonth ?? false} />Koszt podatkowy potwierdzony dla tego miesiąca</label>
-    <p className="pv-muted">Koszt podatkowy: brutto + składki pracodawcy, bez ponownego doliczania potrąceń z brutto. Różnica względem ewidencji dni wymaga uzgodnienia z listą płac.</p>
+    <p className="pv-muted">Koszt podatkowy z listy płac: brutto + składki pracodawcy. Podatek i składki: według wpisanych kwot.</p>
     {error && <p role="alert">{error}</p>}
     <button className="pv-command" disabled={busy || dane.zamkniety?.locked}>Zapisz listę płac</button>
-  </form>;
+  </form>
+    {cost.active && <section aria-label="Zapisane rozliczenie wypłaty">
+      <h2>Zapisane rozliczenie</h2>
+      <div className="pv-row"><span>Netto z listy płac</span><strong>{cost.payroll ? formatZl(cost.payrollNet) : "Brak danych"}</strong></div>
+      <div className="pv-row"><span>Pozostała wypłata</span><strong>{cost.payroll ? formatZl(cost.additionalPayout) : "Brak podziału"}</strong></div>
+      <div className="pv-row"><span>Cała wypłata netto</span><strong>{formatZl(cost.payout)}</strong></div>
+    </section>}
+  </>;
 }
 
 function FleetInvoices({ month, dane, save, busy }: { month: MiesiącId; dane: DaneMiesiaca; save: Save; busy: boolean }) {

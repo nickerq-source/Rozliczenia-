@@ -26,10 +26,17 @@ from the existing admin header. `/admin` and read-only `/admin/podglad` remain.
   employee deductions. Tax cost is gross+employer contributions, never net plus
   gross or employee deductions counted twice. Tax recognition timing is an
   accountant-confirmed input, not inferred by this app.
-- Before payslip entry, daily accrual is an explicitly incomplete cash-cost
-  estimate, not a tax deduction. Once entered, payslip net replaces the estimate
-  (it is not added to it). Differences against days are flagged for reconciliation.
-  No mechanism for concealing wages or treating cash payment as tax-exempt.
+- Before payslip entry, positive daily accrual is an incomplete cash-cost estimate.
+  Payslip net is part of the full payout, not a replacement that can discard the
+  remainder. Full payout = max(daily accrual, payslip net); remaining payout =
+  max(0, daily accrual - payslip net). Total cash cost = full payout + entered
+  payslip charges. A payslip above existing daily accrual or missing day amounts
+  still requires reconciliation. A payslip without any days remains usable.
+- Per the owner's clarification, the remaining payout is under another contract;
+  do not infer its terms or automatically gross it up / calculate extra taxes or
+  contributions. Only entered payslip amounts determine charges and confirmed
+  tax costs. This is a manual-data calculation, not a tax-exemption assessment.
+  No additional contract form or automatic payroll tax engine was requested.
 - Existing company summary, tax details, final cash and report calculations now
   include Rafal separately. Legacy Zenia-only fields keep their original meaning.
   VAT does not change because of payroll. Unassigned vehicle costs remain company
@@ -77,11 +84,20 @@ successful write; a concurrent cron update is skipped rather than overwriting da
 
 ## Verification
 
+Payout correction verified on 2026-11-17: 103 tests passed, TypeScript, lint,
+production build and both browser suites passed. Tests use synthetic data only;
+no production payroll or invoice records were modified.
+
 - `node --experimental-strip-types --test tests/*.test.mjs tests/*.test.cjs`
 - `npx tsc --noEmit`, `npm run lint`, `npm run build`
 - `node scripts/test-fleet-ui.cjs`: real components, synthetic local API;
   320/390/1280px, reload persistence, undo, failure/conflict, shared invoice
   allocation and payslip save. Screenshots: `tmp/invoice-ui/fleet` (untracked).
+- Regression: 4500 PLN day accrual and 3500 PLN payslip net produce 4500 PLN
+  full payout (3500 + 1000 remaining), not 3500 or 8000. With entered charges of
+  2500 PLN, cash cost is 7000 PLN. Confirmed payslip tax cost remains 6000 PLN.
+  Editing days updates company costs and final cash without changing entered
+  charges, company tax calculations or VAT. Undo restores the prior amounts.
 - `node scripts/test-admin-preview-ui.cjs`: old read-only preview, navigation,
   isolation and no application writes.
 - API tests use mocked session/Supabase boundaries: no session, non-admin,

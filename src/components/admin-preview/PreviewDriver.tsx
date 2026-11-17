@@ -43,8 +43,9 @@ export function PreviewDriver({ driver, part, onPart, month, dane, available, se
   const days = getDniMiesiaca(month);
   const trialComplete = drafts.length > 0 && drafts.every(d => previewDayNet(d) !== null);
   const trialNet = trialComplete ? sumMoney(drafts.map(d => previewDayNet(d)!)) : null;
-  const payrollLabel = isTrial ? live ? "Naliczenie z dni · netto" : "Naliczenie testowe" : "Do wypłaty po potrąceniach";
-  const payrollValue = isTrial ? trialNet !== null ? formatZl(trialNet) : drafts.length ? "Niepełne dane" : "Brak wpisów" : available ? formatZl(result.wynagrodzenieDoWyplaty) : "Brak danych";
+  const payrollLabel = isTrial ? live ? "Cała wypłata · netto" : "Naliczenie testowe" : "Do wypłaty po potrąceniach";
+  const accrualValue = trialNet !== null ? formatZl(trialNet) : drafts.length ? "Niepełne dane" : "Brak wpisów";
+  const payrollValue = isTrial ? live && result.rafal.active ? formatZl(result.rafal.payout) : accrualValue : available ? formatZl(result.wynagrodzenieDoWyplaty) : "Brak danych";
   const courses = isTrial ? drafts.filter(d => d.status.startsWith("praca")).reduce((sum, d) => sum + d.courses, 0) : days.reduce((sum, date) => sum + (maKolka(dane.dni[date]?.dayType) ? parseNum(dane.dni[date]?.kolka) : 0), 0);
   const openEditor = (day?: PreviewDay) => {
     setError("");
@@ -73,7 +74,14 @@ export function PreviewDriver({ driver, part, onPart, month, dane, available, se
       <div className="pv-section-heading"><h2>Dni i wypłata</h2>{isTrial && <button className="pv-command" onClick={() => openEditor()}><IconPlus size={16} aria-hidden />Dodaj dzień</button>}</div>
       <div className="pv-payroll-total"><span>{payrollLabel}</span><strong>{payrollValue}</strong></div>
       <details><summary>Rozliczenie wypłaty</summary>{isTrial ? <>
-        {line(live ? "Naliczenie z dni" : "Suma wpisów testowych", payrollValue)}{line("Lista płac · netto", dane.rafal?.payroll ? formatZl(dane.rafal.payroll.net) : "Brak danych")}{line("Koszt zatrudnienia", live ? `${formatZl(result.rafal.total)}${result.rafal.incomplete ? " · niepełny" : ""}` : "Nieustalony")}
+        {line(live ? "Naliczenie z dni" : "Suma wpisów testowych", accrualValue)}
+        {line("Netto z listy płac", dane.rafal?.payroll ? formatZl(result.rafal.payrollNet) : "Brak danych")}
+        {live && <>
+          {line("Pozostała wypłata", result.rafal.payroll ? formatZl(result.rafal.additionalPayout) : "Brak podziału")}
+          {line("Cała wypłata netto", formatZl(result.rafal.payout))}
+          {line("Zobowiązania z listy płac", formatZl(result.rafal.charges))}
+        </>}
+        {line("Koszt zatrudnienia", live ? `${formatZl(result.rafal.total)}${result.rafal.incomplete ? " · niepełny" : ""}` : "Nieustalony")}
       </> : available ? <>
         {line("Suma dniówek", formatZl(salary.sumaDniowek))}{line("Premia", formatZl(salary.premia))}{line("Wynagrodzenie naliczone", formatZl(salary.wynagrodzenie))}{line("Potrącenia", formatZl(result.potraceniaKierowcy))}
         {line("Do wypłaty", formatZl(result.wynagrodzenieDoWyplaty))}{line("Status", dane.wyplata?.status === "wypłacone" ? "Wypłacone" : "Niewypłacone")}

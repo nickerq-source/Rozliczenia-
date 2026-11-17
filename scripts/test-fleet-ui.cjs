@@ -4,6 +4,8 @@ require("../tests/helpers/register-ts.cjs");
 const { previewFixture } = require("../tests/fixtures/admin-preview.ts");
 const { fleetInvoiceFixture } = require("../tests/fixtures/fleet.ts");
 const { applyFleetCommand } = require("../src/lib/fleet-commands.ts");
+const { podatkiMiesiaca } = require("../src/lib/tax.ts");
+const { formatZl } = require("../src/lib/business-logic.ts");
 const webpackRuntime = require("next/dist/compiled/webpack/webpack");
 webpackRuntime.init();
 
@@ -99,6 +101,31 @@ webpackRuntime.init();
       await page.getByText("Zapisano. Zmiana testowa", { exact: true }).waitFor();
       assert.equal(state.miesiace[11].rafal.payroll.gross, 5000);
       await layout(); await page.screenshot({ path: path.join(out, `${width}-payroll.png`), fullPage: true });
+
+      const beforeRemainder = podatkiMiesiaca(state, 11);
+      await openDays();
+      await page.getByRole("button", { name: "Edytuj dzień 2026-11-03", exact: true }).click();
+      await page.getByLabel("Kursy · 90 zł netto").fill("50");
+      await page.getByRole("button", { name: "Zapisz dzień", exact: true }).click();
+      await dayRow().getByText("4500,00 zł", { exact: true }).waitFor();
+      await page.reload();
+      await page.getByText("Rozliczenie wypłaty", { exact: true }).click();
+      const row = label => page.locator(".pv-row").filter({ has: page.getByText(label, { exact: true }) });
+      await row("Netto z listy płac").getByText("3500,00 zł", { exact: true }).waitFor();
+      await row("Pozostała wypłata").getByText("1000,00 zł", { exact: true }).waitFor();
+      await row("Cała wypłata netto").getByText("4500,00 zł", { exact: true }).waitFor();
+      await row("Zobowiązania z listy płac").getByText("2500,00 zł", { exact: true }).waitFor();
+      assert.equal(await page.getByText(/Rafał: rozliczenie wynagrodzenia niepełne/).count(), 0);
+      assert.equal(podatkiMiesiaca(state, 11).cashflowPoPodatkach, beforeRemainder.cashflowPoPodatkach - 1000);
+      await layout(); await page.screenshot({ path: path.join(out, `${width}-full-payout.png`), fullPage: true });
+      await page.goto(base + "&sekcja=start");
+      await page.getByTestId("company-result").getByText(formatZl(beforeRemainder.cashflowPoPodatkach - 1000), { exact: true }).waitFor();
+      await page.getByText("Co składa się na koszty?", { exact: true }).click();
+      await row("Rafał · wynagrodzenie netto").getByText("4500,00 zł", { exact: true }).waitFor();
+      await page.getByText("Historia zmian i cofanie", { exact: true }).click();
+      await page.getByRole("button", { name: /^Cofnij:/ }).click();
+      await page.getByTestId("company-result").getByText(formatZl(beforeRemainder.cashflowPoPodatkach), { exact: true }).waitFor();
+      assert.equal(state.miesiace[11].rafal.days[0].courses, 3);
       await openDays(); revision = new Date(Date.parse(revision) + 1000).toISOString();
       await page.getByRole("button", { name: "Edytuj dzień 2026-11-03", exact: true }).click();
       await page.getByLabel("Kursy · 90 zł netto").fill("5");
@@ -108,6 +135,6 @@ webpackRuntime.init();
       assert.deepEqual(errors, []);
       await page.close();
     }
-    console.log("PASS: 320/390/1280px; persist/reload, undo, save failure, conflict, invoice split, payslip; no overflow/runtime errors.");
+    console.log("PASS: 320/390/1280px; persist/reload, undo, save failure, conflict, invoice split, payslip, full payout and company cash; no overflow/runtime errors.");
   } finally { await browser?.close(); await new Promise(resolve => server.close(resolve)); }
 })().catch(err => { console.error(err); process.exitCode = 1; });
