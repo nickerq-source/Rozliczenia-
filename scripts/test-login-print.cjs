@@ -30,6 +30,13 @@ const sharp = require("sharp");
       });
       const title = page.getByRole("heading", { level: 1 });
       assert.equal(await title.textContent(), "PapiTrans");
+      assert.ok(await title.locator("..").locator('img[alt=""]').evaluate(async img => {
+        await img.decode();
+        const box = img.getBoundingClientRect();
+        const name = img.parentElement.querySelector("h1").getBoundingClientRect();
+        return img.naturalWidth >= box.width * 3 && img.naturalWidth > img.naturalHeight &&
+          box.width >= 88 && box.width <= 120 && box.bottom <= name.top + 1;
+      }), "the transparent high-density truck fits above the wordmark before login");
       assert.ok(await title.evaluate(el => {
         const s = getComputedStyle(el);
         return s.fontWeight === "900" && s.fontStyle === "italic" &&

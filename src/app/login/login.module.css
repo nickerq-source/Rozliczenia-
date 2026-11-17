@@ -15,6 +15,17 @@
   filter: drop-shadow(0 9px 15px rgb(0 0 0 / 42%));
 }
 
+.tractor {
+  display: block;
+  width: 120px;
+  height: auto;
+  margin-bottom: 5px;
+}
+
+@media (max-height: 560px) {
+  .tractor { width: 88px; }
+}
+
 .imprint {
   width: fit-content;
   margin: 0;
@@ -23,7 +34,7 @@
   font-weight: 900;
   font-style: italic;
   letter-spacing: 0;
-  color: #9cca9b;
+  color: #83b18a;
   text-shadow: .6px .8px #476347, 1.6px 2px #15291c;
   transform: rotate(-2deg);
   mask-image: url("./dry-ink.svg");

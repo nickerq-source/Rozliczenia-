@@ -3,10 +3,12 @@
 // Ekran logowania — Supabase Auth (email + hasło, bez publicznej rejestracji)
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import localFont from "next/font/local";
 import styles from "./login.module.css";
+import tractor from "./tractor-engraving.webp";
 import { getBrowserSupabase } from "@/lib/supabase-browser";
-import { IconTruck, IconAlertTriangle, IconLoader } from "@/components/ui/icons";
+import { IconAlertTriangle, IconLoader } from "@/components/ui/icons";
 
 // Logowanie nazwą konta (bez @) — wewnętrznie mapowane na syntetyczny email
 const LOGIN_DOMAIN = "papitrans.local";
@@ -93,7 +95,7 @@ export default function LoginPage() {
       <div className="relative z-[1] w-full max-w-xs">
         {/* Logo */}
         <div className="flex flex-col items-center mb-6">
-          <IconTruck size={36} className="text-amber-brand mb-2" />
+          <Image src={tractor} alt="" className={styles.tractor} unoptimized priority />
           <h1 className={`${imprintFace.className} ${styles.imprint}`}>Papi<span>Trans</span></h1>
           <span className="logo-subtitle text-[11px] mt-1">El Jefe de la Ruta</span>
         </div>
